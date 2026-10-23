@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Benup Modeler</title>
+    <link rel="stylesheet" href="/src/app/styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="toolbar" id="toolbar"></header>
+      <aside class="palette" id="palette" aria-label="Tools"></aside>
+      <main class="viewport" id="viewport"></main>
+      <footer class="statusbar">
+        <span class="status-hint" id="status-hint"></span>
+        <span class="status-hover" id="status-hover"></span>
+        <label class="measurements">
+          <span id="measurements-label">Measurements</span>
+          <input id="measurements" type="text" autocomplete="off" spellcheck="false" disabled />
+        </label>
+      </footer>
+    </div>
+    <script type="module" src="/src/app/main.ts"></script>
+  </body>
+</html>

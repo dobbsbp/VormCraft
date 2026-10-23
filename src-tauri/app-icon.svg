@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Benup app icon: an isometric block with a face being pulled up (our own artwork). -->
+  <rect x="32" y="32" width="960" height="960" rx="200" fill="#2f6fe4"/>
+  <g stroke="#14254d" stroke-width="22" stroke-linejoin="round">
+    <path d="M512 520 812 668 512 816 212 668Z" fill="#dfe8fb"/>
+    <path d="M212 668v86l300 148V816Z" fill="#9fb6e8"/>
+    <path d="M812 668v86L512 902V816Z" fill="#c3d3f4"/>
+    <path d="M512 356 712 455 512 554 312 455Z" fill="#ffffff"/>
+    <path d="M312 455v150l200 99V554Z" fill="#b8cbf2"/>
+    <path d="M712 455v150L512 704V554Z" fill="#d7e2f8"/>
+  </g>
+  <g fill="#ffffff" stroke="#14254d" stroke-width="22" stroke-linejoin="round">
+    <path d="M512 112 622 232H558V330H466V232H402Z"/>
+  </g>
+</svg>
