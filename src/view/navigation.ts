@@ -83,6 +83,23 @@ export class Navigator {
   }
 
   /**
+   * Where the camera must be for `point` to sit in the middle of the screen, keeping the view
+   * direction and the point's depth (a sideways slide, like SketchUp's re-centre).
+   */
+  recenterPosition(point: THREE.Vector3): THREE.Vector3 {
+    const f = this.forward();
+    const depth = point.clone().sub(this.camera.position).dot(f);
+    const onAxis = this.camera.position.clone().addScaledVector(f, depth);
+    return this.camera.position.clone().add(point.clone().sub(onAxis));
+  }
+
+  /** Slide the camera so `point` is in the middle of the screen. */
+  recenterOn(point: THREE.Vector3): void {
+    this.camera.position.copy(this.recenterPosition(point));
+    this.camera.updateMatrixWorld();
+  }
+
+  /**
    * Zoom toward `focus` (the point under the cursor). `steps` > 0 zooms in, < 0 out; each step
    * covers 20% of the remaining distance.
    */

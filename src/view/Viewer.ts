@@ -72,6 +72,9 @@ export class Viewer {
 
   private drag: { mode: DragMode; x: number; y: number; pivot: THREE.Vector3; depth: number; pointerId: number } | null = null;
   private leftDown = false;
+  /** Last right-button press, to detect a double right-click (re-centre). */
+  private lastOrbitPress: { time: number; x: number; y: number } | null = null;
+  private recenterAnimation = 0;
   private renderQueued = false;
   private readonly resizeObserver: ResizeObserver;
 
@@ -157,6 +160,24 @@ export class Viewer {
     this.backEdges.visible = !this.backEdges.visible;
     this.requestRender();
     return this.backEdges.visible;
+  }
+
+  /** Smoothly slide the camera so `point` ends up in the middle of the screen. */
+  recenterOn(point: THREE.Vector3): void {
+    const from = this.camera.position.clone();
+    const to = this.nav.recenterPosition(point);
+    const start = performance.now();
+    const id = ++this.recenterAnimation;
+    const step = () => {
+      if (id !== this.recenterAnimation) return; // a newer re-centre took over
+      const t = Math.min(1, (performance.now() - start) / 180);
+      const ease = 1 - Math.pow(1 - t, 3);
+      this.camera.position.lerpVectors(from, to, ease);
+      this.camera.updateMatrixWorld();
+      this.requestRender();
+      if (t < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
   }
 
   setView(view: StandardView): void {
@@ -391,26 +412,34 @@ export class Viewer {
     return [e.clientX - rect.left, e.clientY - rect.top];
   }
 
-  /** Pick at a viewport position and package it for the tools. */
-  sample(screen: [number, number], e: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean }, down: boolean): PointerSample {
+  /** Face and edge under a viewport position (model ids and hit points). */
+  private hitsAt(screen: [number, number]) {
+    if (!this.data) return { face: null, edge: null };
     const viewport = this.viewport();
-    const ray = screenRay(this.camera, screen, viewport);
-    let face: PointerSample['faceHit'] = null;
-    let edge: HalfEdgeId | null = null;
-    if (this.data) {
-      const ndc = new THREE.Vector2((screen[0] / viewport.width) * 2 - 1, -(screen[1] / viewport.height) * 2 + 1);
-      const hits = pickHits({ camera: this.camera, ndc, viewport, faceObjects: [this.frontMesh, this.backMesh], data: this.data });
-      if (hits.face) face = { face: hits.face.face, point: hits.face.point, distance: hits.face.distance };
-      if (hits.edge) edge = hits.edge.edge;
-    }
-    return { screen, ray, faceHit: face, edge, shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey, down };
+    const ndc = new THREE.Vector2((screen[0] / viewport.width) * 2 - 1, -(screen[1] / viewport.height) * 2 + 1);
+    return pickHits({ camera: this.camera, ndc, viewport, faceObjects: [this.frontMesh, this.backMesh], data: this.data });
   }
 
-  /** The point under the cursor: model hit, else the ground plane, else a point at the scene's depth. */
+  /** Pick at a viewport position and package it for the tools. */
+  sample(screen: [number, number], e: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean }, down: boolean): PointerSample {
+    const ray = screenRay(this.camera, screen, this.viewport());
+    const hits = this.hitsAt(screen);
+    const face: PointerSample['faceHit'] = hits.face ? { face: hits.face.face, point: hits.face.point, distance: hits.face.distance } : null;
+    return { screen, ray, faceHit: face, edge: hits.edge?.edge ?? null, shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey, down };
+  }
+
+  /**
+   * The point under the cursor for navigation (orbit pivot, zoom and re-centre target): the edge
+   * under the cursor if there is one in front (so corners and silhouettes count, where the ray
+   * just misses the faces), else the face hit, else the ground plane, else a point at the
+   * scene's depth.
+   */
   private focusPoint(screen: [number, number]): THREE.Vector3 {
-    const s = this.sample(screen, { shiftKey: false, ctrlKey: false, metaKey: false }, false);
-    if (s.faceHit) return new THREE.Vector3(...s.faceHit.point);
-    const ray = new THREE.Ray(new THREE.Vector3(...s.ray.origin), new THREE.Vector3(...s.ray.dir));
+    const hits = this.hitsAt(screen);
+    if (hits.edge && (!hits.face || hits.edge.distance <= hits.face.distance * (1 + 1e-3))) return new THREE.Vector3(...hits.edge.point);
+    if (hits.face) return new THREE.Vector3(...hits.face.point);
+    const r = screenRay(this.camera, screen, this.viewport());
+    const ray = new THREE.Ray(new THREE.Vector3(...r.origin), new THREE.Vector3(...r.dir));
     const ground = ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 0, 1), 0), new THREE.Vector3());
     const sphere = this.sceneSphere();
     const sceneDepth = Math.max(this.camera.position.distanceTo(sphere.center), sphere.radius);
@@ -429,6 +458,19 @@ export class Viewer {
         capturePointer(el, e.pointerId, true);
         this.onPointer('down', this.sample(screen, e, true));
         return;
+      }
+      // Double-click with the orbit (right) button: re-centre on the point under the cursor.
+      // Browsers only report dblclick for the left button, so detect two quick presses here.
+      if (e.button === 2) {
+        const now = performance.now();
+        const last = this.lastOrbitPress;
+        this.lastOrbitPress = { time: now, x: e.clientX, y: e.clientY };
+        if (last && now - last.time < 500 && Math.hypot(e.clientX - last.x, e.clientY - last.y) < 6) {
+          e.preventDefault();
+          this.lastOrbitPress = null;
+          this.recenterOn(this.focusPoint(screen));
+          return;
+        }
       }
       const mode = dragModeFor(e.button, this.leftDragNavigation);
       if (!mode) return;

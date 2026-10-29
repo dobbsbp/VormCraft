@@ -12,7 +12,7 @@ import type { Command } from './commands';
 import { bindingFor, KEY_BINDINGS, withShortcut } from './keymap';
 import { SearchBox } from './searchBox';
 
-const NAV_HINT = 'Orbit: right-drag · Pan: middle-drag · Zoom: wheel · Lock axis: arrow keys';
+const NAV_HINT = 'Orbit: right-drag · Re-centre: double right-click · Pan: middle-drag · Zoom: wheel · Lock axis: arrow keys';
 
 /** Palette order (pairs per row, like the reference layout). Shortcuts come from the keymap. */
 const TOOLS: { id: ToolId; icon: string; label: string }[] = [

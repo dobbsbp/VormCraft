@@ -233,6 +233,19 @@ describe('navigation', () => {
     expect(y1 - y0).toBeCloseTo(-25, 6);
   });
 
+  it('re-centring slides the camera so the point is mid-screen, same angle and depth', () => {
+    const { camera, nav } = cameraAt([100, -200, 150], [0, 0, 0]);
+    const q = camera.quaternion.clone();
+    const point = new THREE.Vector3(60, 40, 10);
+    const depthBefore = point.clone().sub(camera.position).dot(nav.forward());
+    nav.recenterOn(point);
+    const ndc = point.clone().project(camera);
+    expect(ndc.x).toBeCloseTo(0, 9);
+    expect(ndc.y).toBeCloseTo(0, 9);
+    expect(camera.quaternion.angleTo(q)).toBeLessThan(1e-12);
+    expect(point.clone().sub(camera.position).dot(nav.forward())).toBeCloseTo(depthBefore, 9);
+  });
+
   it('zoom extents fits the whole sphere on screen', () => {
     const { camera, nav } = cameraAt([3, -5, 4], [0, 0, 0]);
     const sphere = new THREE.Sphere(new THREE.Vector3(100, 50, 20), 80);
