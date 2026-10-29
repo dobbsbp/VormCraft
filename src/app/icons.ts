@@ -16,6 +16,7 @@ export const ICONS = {
   back: svg('<path d="M12 3 20 7.5v9L12 21l-8-4.5v-9Z" stroke-dasharray="2 2"/><path d="M4 7.5 12 3l8 4.5M12 3v9" />' + face('M12 3 20 7.5v9L12 12Z')),
   left: svg('<path d="M12 3 20 7.5v9L12 21l-8-4.5v-9Z" stroke-dasharray="2 2"/><path d="M4 7.5 12 3v9M12 12l-8 4.5"/>' + face('M4 7.5 12 3v9l-8 4.5Z')),
 
+  lasso: svg('<path d="M8 14c-4-1-5-4-3-7s8-4 12-2 4 6 0 8-7 2-9 1"/><path d="M8 14c0 3 2 5 4 6" /><circle cx="8" cy="14" r="1.4" fill="currentColor"/>'),
   select: svg('<path d="M6 3v15l4-4 3 7 2.5-1-3-7h5.5Z" fill="currentColor" fill-opacity="0.15"/>'),
   rectangle: svg('<rect x="4" y="6" width="16" height="12"/><circle cx="4" cy="6" r="1.6" fill="currentColor"/><circle cx="20" cy="18" r="1.6" fill="currentColor"/>'),
   circle: svg('<circle cx="12" cy="12" r="8"/><path d="M12 12h8" stroke-dasharray="2 1.5"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/>'),

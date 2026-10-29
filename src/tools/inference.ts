@@ -60,7 +60,9 @@ export function infer(input: InferenceInput): Snap | null {
   const occluderPlane = faceHit ? model.facePlane(faceHit.face) : null;
   const towardCamera = occluderPlane && dot(occluderPlane.normal, ray.dir) > 0 ? -1 : 1;
   const visible = (p: Vec3) => {
-    if (dot(sub(p, ray.origin), ray.dir) <= occluder * (1 + 1e-3) + 1e-6) return true;
+    // No depth slack: anything on the face is kept by the plane test below, and slack would let
+    // points just behind the face (an axis running inside a solid, say) through.
+    if (dot(sub(p, ray.origin), ray.dir) <= occluder) return true;
     return !!occluderPlane && towardCamera * signedDistance(occluderPlane, p) >= -TOL;
   };
   const px = (p: Vec3) => {

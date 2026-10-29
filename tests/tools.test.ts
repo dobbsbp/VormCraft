@@ -315,16 +315,14 @@ describe('Push/Pull tool', () => {
     expect(volume(model)).toBeCloseTo(2 * 700);
   });
 
-  it('a failing push reports the error and leaves the model untouched', () => {
+  it('a failing operation reports the error and leaves the model exactly as it was', () => {
     const { doc, model, controller } = harness();
-    // Two faces sharing an edge on the ground: an open surface (not supported yet).
-    const host = drawRectangle(model, GROUND_PLANE, [0, 0, 0], 20, 10).inner!;
-    drawRectangle(model, GROUND_PLANE, [0, 0, 0], 10, 10, host);
+    pushPull(model, drawRectangle(model, GROUND_PLANE, [0, 0, 0], 10, 10).inner!, 10);
     const before = model.clone();
-    controller.setTool('pushpull');
-    controller.tools.pushpull.pointerDown(ev(doc, [5, 5, 0]));
-    controller.typed('10');
-    expect(controller.error).toMatch(/open surface/);
+    use(controller, 'offset');
+    controller.tools.offset.pointerDown(ev(doc, [5, 5, 10]));
+    controller.typed('50'); // larger than the face
+    expect(controller.error).toMatch(/too large/);
     expect(model.faces.size).toBe(before.faces.size);
     expect(model.vertices.size).toBe(before.vertices.size);
     model.validate();

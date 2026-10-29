@@ -125,6 +125,17 @@ describe('inference snapping', () => {
     expect(s!.point[2]).toBeCloseTo(0, 6);
   });
 
+  it('a model axis running inside a solid does not snap through the face in front of it (regression)', () => {
+    const m = new Model();
+    pushPull(m, drawRectangle(m, GROUND_PLANE, [-50, -50, 0], 100, 100).inner!, 150);
+    // Cursor on the top face around where the blue axis comes out. Whatever wins (the face, or
+    // the axis where it sticks out above), the point must never be inside the box.
+    for (const nudge of [[3, 0], [-3, 0], [0, 3], [0, -3], [2, 2], [-2, -2], [2, -2], [-2, 2]] as [number, number][]) {
+      const s = inferAt(m, cam(), [0, 0, 150], { nudge });
+      expect(s!.point[2]).toBeGreaterThanOrEqual(150 - 1e-6);
+    }
+  });
+
   it('falls back to the ground plane in empty space', () => {
     const s = inferAt(box(), cam(), [300, -200, 0], { faceHit: false });
     expect(s?.kind).toBe('ground');

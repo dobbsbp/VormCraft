@@ -327,3 +327,56 @@ describe('model', () => {
     m.validate();
   });
 });
+
+describe('push/pull on an open surface (bump / dent)', () => {
+  it('one half of a split ground rectangle pulls up into a bump joined to the other half', () => {
+    const m = new Model();
+    const host = drawRectangle(m, GROUND_PLANE, [0, 0, 0], 20, 10).inner!;
+    const half = drawRectangle(m, GROUND_PLANE, [0, 0, 0], 10, 10, host).inner!;
+    const r = pushPull(m, half, 5);
+    m.validate();
+    expect(r.face).toBe(half);
+    expect(m.faces.size).toBe(1 + 4 + 1); // other half, four walls, the moved face
+    expect(findFace(m, [0, 0, 1], 5)).toBe(half);
+    expect(faceArea(m, half)).toBeCloseTo(100);
+    // Open where the face used to be: not a closed solid.
+    expect(checkWatertight(m).watertight).toBe(false);
+  });
+
+  it('a rectangle inside a bigger face pushes down into a dent; the ring keeps its hole', () => {
+    const m = new Model();
+    const host = drawRectangle(m, GROUND_PLANE, [0, 0, 0], 100, 100).inner!;
+    const inner = drawRectangle(m, GROUND_PLANE, [40, 40, 0], 20, 20, host).inner!;
+    pushPull(m, inner, -8);
+    m.validate();
+    expect(findFace(m, [0, 0, 1], -8)).toBe(inner);
+    const ring = findFace(m, [0, 0, 1], 0);
+    expect(m.face(ring).holes).toHaveLength(1);
+    expect(m.faces.size).toBe(1 + 4 + 1);
+  });
+
+  it('pushing the floor of an open box down makes the box deeper (walls merge into the sides)', () => {
+    const m = new Model();
+    const f = drawRectangle(m, GROUND_PLANE, [0, 0, 0], 10, 10).inner!;
+    pushPull(m, f, 10);
+    m.removeFace(findFace(m, [0, 0, 1], 10)); // open the top
+    const floor = findFace(m, [0, 0, -1], 0);
+    pushPull(m, floor, 5); // outward = down
+    m.validate();
+    expect(m.faces.size).toBe(5);
+    expect(m.vertices.size).toBe(8);
+    expect(findFace(m, [0, 0, -1], 5)).toBe(floor);
+  });
+
+  it('a circle on a face pulls up into a boss on the surface, keeping its true radius', () => {
+    const m = new Model();
+    const host = drawRectangle(m, GROUND_PLANE, [0, 0, 0], 100, 100).inner!;
+    const disc = drawCircle(m, GROUND_PLANE, [50, 50, 0], 10, 24, host).inner!;
+    pushPull(m, disc, 20);
+    m.validate();
+    const tops = [...m.curves.values()].filter((c) => c.center[2] === 20);
+    expect(tops).toHaveLength(1);
+    expect(tops[0].radius).toBe(10);
+  });
+});
+

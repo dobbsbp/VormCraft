@@ -2,9 +2,11 @@ import type { FaceId, HalfEdgeId } from '../core/model/Model';
 import { erase } from '../core/ops/erase';
 import type { Document, DocumentSnapshot } from '../doc/Document';
 import { History } from '../doc/History';
+import { facesWithCurveEdges, smoothSurface } from '../core/model/surfaces';
 import type { LabelId } from '../doc/Labels';
 import { ArcTool } from './ArcTool';
 import { CircleTool } from './CircleTool';
+import { LassoTool } from './LassoTool';
 import { LineTool } from './LineTool';
 import { MoveTool } from './MoveTool';
 import { RotateTool } from './RotateTool';
@@ -85,6 +87,7 @@ export class ToolController {
       offset: new OffsetTool(this.ctx),
       tape: new TapeMeasureTool(this.ctx),
       eraser: new EraserTool(this.ctx),
+      lasso: new LassoTool(this.ctx),
       line: new LineTool(this.ctx),
       arc2: new ArcTool(this.ctx, 'arc2'),
       arc3: new ArcTool(this.ctx, 'arc3'),
@@ -326,6 +329,11 @@ export class ToolController {
     this.onUpdate();
   }
 
+  /** Select every face and edge. */
+  selectAll(): void {
+    this.selection.set(this.doc.model.faces.keys(), this.doc.model.edges());
+  }
+
   deleteSelection(): void {
     if (this.selection.size === 0) return;
     const { faces, edges, labels } = this.selection;
@@ -364,9 +372,22 @@ export class ToolController {
     if (this.error) return this.error;
     if (this.notice) return this.notice;
     const { faces, edges } = this.selection;
-    if (this.tool.id === 'select' && this.selection.size > 0) {
+    if ((this.tool.id === 'select' || this.tool.id === 'lasso') && this.selection.size > 0) {
       const part = (n: number, word: string) => (n ? `${n} ${word}${n === 1 ? '' : 's'}` : '');
-      return `Selected: ${[part(faces.size, 'face'), part(edges.size, 'edge'), part(this.selection.labels.size, 'label')].filter(Boolean).join(', ')}. Delete erases, Esc clears.`;
+      // Facets of a curved surface count as one surface, as they select and highlight as one.
+      const curved = facesWithCurveEdges(this.doc.model);
+      const seen = new Set<FaceId>();
+      let surfaces = 0;
+      let flat = 0;
+      for (const f of faces) {
+        if (seen.has(f) || !this.doc.model.faces.has(f)) continue;
+        const group = smoothSurface(this.doc.model, f, curved).filter((g) => faces.has(g));
+        group.forEach((g) => seen.add(g));
+        if (group.length > 1) surfaces++;
+        else flat++;
+      }
+      const items = [part(surfaces, 'curved surface'), part(flat, 'face'), part(edges.size, 'edge'), part(this.selection.labels.size, 'label')];
+      return `Selected: ${items.filter(Boolean).join(', ')}. Delete erases, Esc clears.`;
     }
     return this.tool.hint();
   }

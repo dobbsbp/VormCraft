@@ -172,6 +172,65 @@ body {
   background: #f8f8f7;
 }
 
+.search-box {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(420px, calc(100% - 32px));
+  background: #fff;
+  border: 1px solid var(--chrome-border);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.16);
+  z-index: 10;
+  overflow: hidden;
+}
+
+.search-box input {
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid var(--chrome-border);
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+}
+
+.search-box ul {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.search-box li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.search-box li[aria-selected='true'] {
+  background: var(--accent-soft);
+}
+
+.search-box li.empty {
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.search-box kbd {
+  font: inherit;
+  font-size: 11px;
+  color: var(--text-muted);
+  border: 1px solid var(--chrome-border);
+  border-radius: 3px;
+  padding: 0 4px;
+}
+
 .status-hint.is-error {
   color: #b3261e;
 }
@@ -237,6 +296,17 @@ body {
 
 .snap-parallel {
   fill: #c026d3;
+}
+
+.viewport-overlay .lasso {
+  fill: rgba(47, 111, 228, 0.08);
+  stroke: var(--accent);
+  stroke-width: 1;
+}
+
+.viewport-overlay .lasso.crossing {
+  fill: rgba(47, 160, 90, 0.08);
+  stroke-dasharray: 4 3;
 }
 
 .snap-label {

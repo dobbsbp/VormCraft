@@ -8,13 +8,16 @@ import { Viewer } from '../view/Viewer';
 import { FileCommands } from './fileCommands';
 import { createFileHost, isTauri } from './files';
 import { ICONS } from './icons';
-import { bindingFor, withShortcut } from './keymap';
+import type { Command } from './commands';
+import { bindingFor, KEY_BINDINGS, withShortcut } from './keymap';
+import { SearchBox } from './searchBox';
 
 const NAV_HINT = 'Orbit: right-drag · Pan: middle-drag · Zoom: wheel · Lock axis: arrow keys';
 
 /** Palette order (pairs per row, like the reference layout). Shortcuts come from the keymap. */
 const TOOLS: { id: ToolId; icon: string; label: string }[] = [
   { id: 'select', icon: ICONS.select, label: 'Select' },
+  { id: 'lasso', icon: ICONS.lasso, label: 'Lasso Select' },
   { id: 'eraser', icon: ICONS.eraser, label: 'Eraser' },
   { id: 'line', icon: ICONS.line, label: 'Line' },
   { id: 'rectangle', icon: ICONS.rectangle, label: 'Rectangle' },
@@ -91,7 +94,7 @@ async function start(): Promise<void> {
       selectedEdges: controller.selection.edges,
       selectedLabels: controller.selection.labels,
       preview: controller.preview(),
-      snap: tool.id === 'select' ? null : controller.snap,
+      snap: tool.id === 'select' || tool.id === 'lasso' ? null : controller.snap,
     });
   };
   controller.onUpdate = update;
@@ -114,6 +117,7 @@ async function start(): Promise<void> {
   };
 
   buildPalette(toolButtons, setTool);
+  const search = new SearchBox(document.getElementById('viewport')!, () => commandList(viewer, controller, files, setTool));
   ({ undoButton, redoButton } = buildToolbar(viewer, controller, files));
 
   const submitTyped = () => {
@@ -203,6 +207,7 @@ async function start(): Promise<void> {
     if (action.type === 'tool') setTool(action.tool);
     else if (action.type === 'zoomExtents') viewer.zoomExtents();
     else if (action.type === 'backEdges') controller.notify(viewer.toggleBackEdges() ? 'Back edges shown (K to hide)' : 'Back edges hidden');
+    else if (action.type === 'search') search.open();
     else if (action.type === 'lock') controller.toggleLock(action.lock);
     else controller.notify(`${action.name} (${binding.label}) is ${action.reason}.`);
   });
@@ -228,6 +233,42 @@ async function guardUnsavedChanges(controller: ToolController, files: FileComman
   await win.onCloseRequested(async (event) => {
     if (!(await files.confirmDiscard())) event.preventDefault();
   });
+}
+
+/** Everything the Search box can run: all tools, then file, edit, view and guide actions. */
+function commandList(viewer: Viewer, controller: ToolController, files: FileCommands, setTool: (id: ToolId) => void): Command[] {
+  const keyOf = (pred: (b: (typeof KEY_BINDINGS)[number]) => boolean) => KEY_BINDINGS.find(pred)?.label;
+  const tools: Command[] = TOOLS.map((t) => ({
+    id: `tool:${t.id}`,
+    name: t.label,
+    keywords: ['tool'],
+    shortcut: keyOf((b) => b.action.type === 'tool' && b.action.tool === t.id),
+    run: () => setTool(t.id),
+  }));
+  const views = (['iso', 'top', 'front', 'right', 'back', 'left'] as const).map((v) => ({
+    id: `view:${v}`,
+    name: `${v[0].toUpperCase()}${v.slice(1)} View`,
+    keywords: ['camera', 'standard view'],
+    run: () => viewer.setView(v),
+  }));
+  return [
+    ...tools,
+    { id: 'file:new', name: 'New', keywords: ['file', 'document'], shortcut: 'Ctrl+N', run: () => void files.newDocument() },
+    { id: 'file:open', name: 'Open…', keywords: ['file', 'load'], shortcut: 'Ctrl+O', run: () => void files.open() },
+    { id: 'file:save', name: 'Save', keywords: ['file'], shortcut: 'Ctrl+S', run: () => void files.save() },
+    { id: 'file:saveas', name: 'Save As…', keywords: ['file'], shortcut: 'Ctrl+Shift+S', run: () => void files.save(true) },
+    { id: 'file:stl', name: 'Export STL…', keywords: ['export', '3d print', 'mesh'], run: () => void files.exportStl() },
+    { id: 'file:obj', name: 'Export OBJ…', keywords: ['export', 'mesh'], run: () => void files.exportObj() },
+    { id: 'edit:undo', name: 'Undo', keywords: ['edit'], shortcut: 'Ctrl+Z', run: () => controller.undo() },
+    { id: 'edit:redo', name: 'Redo', keywords: ['edit'], shortcut: 'Ctrl+Y', run: () => controller.redo() },
+    { id: 'edit:selectall', name: 'Select All', keywords: ['edit', 'selection'], run: () => controller.selectAll() },
+    { id: 'edit:delete', name: 'Delete Selection', keywords: ['edit', 'erase', 'remove'], shortcut: 'Delete', run: () => controller.deleteSelection() },
+    { id: 'view:extents', name: 'Zoom Extents', keywords: ['camera', 'fit'], shortcut: 'Shift+Z', run: () => viewer.zoomExtents() },
+    ...views,
+    { id: 'view:backedges', name: 'Back Edges', keywords: ['hidden', 'x-ray', 'view'], shortcut: 'K', run: () => controller.notify(viewer.toggleBackEdges() ? 'Back edges shown (K to hide)' : 'Back edges hidden') },
+    { id: 'guides:toggle', name: 'Show/Hide Guides', keywords: ['guide', 'construction'], run: () => controller.toggleGuides() },
+    { id: 'guides:delete', name: 'Delete All Guides', keywords: ['guide', 'construction'], run: () => controller.deleteGuides() },
+  ];
 }
 
 function buildPalette(buttons: Map<ToolId, HTMLButtonElement>, setTool: (id: ToolId) => void): void {

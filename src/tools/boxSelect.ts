@@ -17,7 +17,26 @@ export function boxSelect(model: Model, projector: Projector, rect: ScreenRect, 
   const x1 = Math.max(rect.from[0], rect.to[0]);
   const y0 = Math.min(rect.from[1], rect.to[1]);
   const y1 = Math.max(rect.from[1], rect.to[1]);
-  const inside = (p: P2 | null) => !!p && p[0] >= x0 && p[0] <= x1 && p[1] >= y0 && p[1] <= y1;
+  return polygonSelect(
+    model,
+    projector,
+    [
+      [x0, y0],
+      [x1, y0],
+      [x1, y1],
+      [x0, y1],
+    ],
+    crossing,
+  );
+}
+
+/**
+ * Selection by a screen polygon (box or lasso). Window mode takes entities whose projected
+ * vertices are all inside; crossing mode also takes anything the outline touches, and a face the
+ * whole polygon sits inside.
+ */
+export function polygonSelect(model: Model, projector: Projector, polygon: P2[], crossing: boolean): { faces: FaceId[]; edges: HalfEdgeId[] } {
+  const inside = (p: P2 | null) => !!p && pointInScreenPolygon(p, polygon);
   const screen = new Map<number, P2 | null>();
   const at = (v: number) => {
     if (!screen.has(v)) screen.set(v, projector.toScreen(model.pos(v)));
@@ -26,13 +45,7 @@ export function boxSelect(model: Model, projector: Projector, rect: ScreenRect, 
   const segmentTouches = (a: P2 | null, b: P2 | null) => {
     if (!a || !b) return false;
     if (inside(a) || inside(b)) return true;
-    const corners: P2[] = [
-      [x0, y0],
-      [x1, y0],
-      [x1, y1],
-      [x0, y1],
-    ];
-    return corners.some((c, i) => segmentsCross(a, b, c, corners[(i + 1) % 4]));
+    return polygon.some((c, i) => segmentsCross(a, b, c, polygon[(i + 1) % polygon.length]));
   };
 
   const edges: HalfEdgeId[] = [];
@@ -51,11 +64,22 @@ export function boxSelect(model: Model, projector: Projector, rect: ScreenRect, 
     }
     const touches =
       rings.some((r) => r.some((v, i) => segmentTouches(at(v), at(r[(i + 1) % r.length])))) ||
-      // The box can sit entirely inside a large face.
-      pointInScreenPolygon([(x0 + x1) / 2, (y0 + y1) / 2], rings[0].map(at));
+      // The whole selection outline can sit inside a large face.
+      pointInScreenPolygon(polygon[0], rings[0].map(at));
     if (touches) faces.push(f);
   }
   return { faces, edges };
+}
+
+/** Signed area of a screen polygon (y down): positive when drawn clockwise on screen. */
+export function screenArea(poly: readonly P2[]): number {
+  let a = 0;
+  for (let i = 0; i < poly.length; i++) {
+    const p = poly[i];
+    const q = poly[(i + 1) % poly.length];
+    a += p[0] * q[1] - q[0] * p[1];
+  }
+  return a / 2;
 }
 
 function segmentsCross(a: P2, b: P2, c: P2, d: P2): boolean {

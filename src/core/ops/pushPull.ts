@@ -23,6 +23,7 @@ const OVERSHOOT = 0.01;
 /**
  * Push or pull a face along its normal by `distance` (positive = outward).
  * - A face on its own becomes a solid (the original face stays as the base).
+ * - A face that is part of an open surface moves out with side walls, bumping the surface.
  * - On a closed solid, pulling out adds material and pushing in removes it. If a push lands exactly
  *   on an opposite face of the solid, both faces are removed and the side walls kept (a through-hole);
  *   otherwise Manifold computes the boolean, so cuts follow whatever the solid looks like.
@@ -43,9 +44,7 @@ export function pushPull(model: Model, faceId: FaceId, distance: number): PushPu
  * which keeps the face id. A negative distance extrudes behind the face.
  */
 export function extrudeOpenFace(model: Model, faceId: FaceId, distance: number): PushPullResult {
-  if (model.adjacentFaces(faceId).size > 0) {
-    throw new Error('Push/pull of a face that is part of an open surface is not supported yet');
-  }
+  if (model.adjacentFaces(faceId).size > 0) return extrudeAttachedFace(model, faceId, distance);
   if (distance < 0) {
     model.flipFace(faceId);
     distance = -distance;
@@ -63,6 +62,31 @@ export function extrudeOpenFace(model: Model, faceId: FaceId, distance: number):
   const cap = model.addFace(lift(rings[0]), rings.slice(1).map(lift), { normal: n, id: faceId });
   tagOffsetCurves(model, edgeCurves, top, n, distance);
   return { mode: 'extrude', face: cap, faces: [base, ...walls, cap] };
+}
+
+/**
+ * Push/pull a face that is joined to other faces of an open surface (one half of a split sheet,
+ * a rectangle drawn inside a bigger face, the floor of an open box), as SketchUp does: the face
+ * moves and side walls join it to where it was, with no new face left behind, so the surface
+ * gets a bump (or a dent). Walls that line up with neighbouring faces merge into them.
+ */
+function extrudeAttachedFace(model: Model, faceId: FaceId, distance: number): PushPullResult {
+  const n = model.face(faceId).normal;
+  const rings = model.faceVertexLoops(faceId);
+  const edgeCurves = ringEdgeCurves(model, rings);
+  const top = new Map<VertexId, VertexId>();
+  for (const v of rings.flat()) top.set(v, model.addVertex(add(model.pos(v), scale(n, distance))));
+  const lift = (r: VertexId[]) => r.map((v) => top.get(v)!);
+
+  model.removeFace(faceId);
+  // Each wall takes over the directed edge the face used, so it joins the neighbour across it.
+  const walls = buildWalls(model, rings, top);
+  const cap = model.addFace(lift(rings[0]), rings.slice(1).map(lift), { normal: n, id: faceId });
+  tagOffsetCurves(model, edgeCurves, top, n, distance);
+  const touched = new Set<VertexId>();
+  mergeCoplanarFaces(model, walls, touched);
+  removeCollinearVertices(model, touched);
+  return { mode: 'extrude', face: cap, faces: [...walls.filter((w) => model.faces.has(w)), cap] };
 }
 
 function buildWalls(model: Model, rings: VertexId[][], top: Map<VertexId, VertexId>): FaceId[] {

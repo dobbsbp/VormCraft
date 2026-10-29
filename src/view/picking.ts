@@ -77,7 +77,7 @@ function pickEdge(input: PickInput, ray: THREE.Ray, occluderDistance: number, oc
     const distance = onRay.distanceTo(ray.origin);
     // Hidden only when deeper than the hit face and behind its plane (edges on the face stay
     // pickable at grazing angles, where the hit point is well in front of them along the ray).
-    if (distance > occluderDistance * (1 + 1e-3) + 1e-6 && (!occluder || occluder.distanceToPoint(onSeg) < -1e-3)) continue;
+    if (distance > occluderDistance && (!occluder || occluder.distanceToPoint(onSeg) < -1e-3)) continue;
     bestPx = distToSegment2(cursor, pa, pb);
     best = { kind: 'edge', edge: data.segmentEdges[i], point: [onSeg.x, onSeg.y, onSeg.z], distance };
   }

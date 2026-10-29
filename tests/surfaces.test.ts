@@ -81,3 +81,43 @@ describe('Select tool on curved surfaces', () => {
     expect(H.controller.selection.edges.size).toBe(48);
   });
 });
+
+describe('Lasso Select', () => {
+  /** Drive the lasso with a closed loop of screen points (top-down projector: screen = (x, -y)). */
+  function lasso(H: ReturnType<typeof harness>, loop: [number, number][]) {
+    const t = use(H.controller, 'lasso');
+    const at = (p: [number, number], down: boolean) => ev(H.doc, [p[0], -p[1], 0], { face: null, down });
+    t.pointerDown(at(loop[0], true));
+    for (const p of [...loop.slice(1), loop[0]]) t.pointerMove(at(p, true));
+    // The loop closes where it started: the controller would call this a click (not dragged).
+    t.pointerUp!(at(loop[0], false), false);
+  }
+
+  it('a clockwise loop that ends where it started selects what is fully inside (regression)', () => {
+    const H = harness();
+    drawRectangle(H.model, GROUND_PLANE, [0, 0, 0], 10, 10);
+    drawRectangle(H.model, GROUND_PLANE, [100, 0, 0], 10, 10);
+    // Screen y is down: (x, -y). Clockwise on screen around the first square.
+    lasso(H, [
+      [-5, -15],
+      [15, -15],
+      [15, 5],
+      [-5, 5],
+    ]);
+    expect(H.controller.selection.faces.size).toBe(1);
+    expect(H.controller.selection.edges.size).toBe(4);
+  });
+
+  it('a counter-clockwise loop also takes what it touches', () => {
+    const H = harness();
+    drawRectangle(H.model, GROUND_PLANE, [0, 0, 0], 10, 10);
+    drawRectangle(H.model, GROUND_PLANE, [100, 0, 0], 10, 10);
+    lasso(H, [
+      [-5, 5],
+      [105, 5],
+      [105, -5],
+      [-5, -5],
+    ]);
+    expect(H.controller.selection.faces.size).toBe(2);
+  });
+});

@@ -102,6 +102,8 @@ export interface Preview {
   edges?: HalfEdgeId[];
   /** Screen-space selection rectangle (Select tool box drag). */
   box?: { from: [number, number]; to: [number, number]; crossing: boolean };
+  /** Screen-space lasso path (Lasso Select). */
+  lasso?: { points: [number, number][]; crossing: boolean };
 }
 
 export interface ToolContext {
@@ -118,6 +120,7 @@ export interface ToolContext {
 
 export type ToolId =
   | 'select'
+  | 'lasso'
   | 'line'
   | 'arc2'
   | 'arc3'

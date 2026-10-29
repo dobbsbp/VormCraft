@@ -5,6 +5,7 @@ export type KeyAction =
   | { type: 'tool'; tool: ToolId }
   | { type: 'zoomExtents' }
   | { type: 'backEdges' }
+  | { type: 'search' }
   | { type: 'lock'; lock: AxisLock }
   | { type: 'unavailable'; name: string; reason: string };
 
@@ -43,9 +44,9 @@ export const KEY_BINDINGS: readonly KeyBinding[] = [
   tool('T', 't', 'Tape Measure', 'tape'),
   // Selection & editing
   tool('Space', ' ', 'Select', 'select'),
-  missing('Shift+Space', ' ', true, 'Lasso Select'),
+  bind('Shift+Space', ' ', true, 'Lasso Select', { type: 'tool', tool: 'lasso' }),
   missing('G', 'g', false, 'Make Component', OUT_OF_SCOPE),
-  missing('Shift+S', 's', true, 'Search'),
+  bind('Shift+S', 's', true, 'Search', { type: 'search' }),
   // View & navigation
   tool('O', 'o', 'Orbit', 'orbit'),
   tool('H', 'h', 'Pan', 'pan'),

@@ -325,6 +325,11 @@ export class Viewer {
       }
     }
     parts.push(...this.drawLabels(proj));
+    const lasso = this.overlay.preview.lasso;
+    if (lasso) {
+      const pts = lasso.points.map((p) => p.join(',')).join(' ');
+      parts.push(`<polygon points="${pts}" class="lasso${lasso.crossing ? ' crossing' : ''}"/>`);
+    }
     this.svg.innerHTML = parts.join('');
   }
 
