@@ -22,6 +22,24 @@ export interface InferenceInput {
   lineTolerancePx?: number;
 }
 
+/**
+ * Whether a point near the cursor is visible, given the face under the cursor. A point is hidden
+ * only if it is behind that face: deeper along the ray than the hit AND behind the face's plane.
+ * The plane test keeps everything lying on the face (its edges, corners, guides drawn on it)
+ * visible even at grazing angles, where a few pixels of cursor offset put the hit point well in
+ * front of them along the ray. There is no depth slack: it would let points just behind the
+ * face (an axis running inside a solid, say) through.
+ */
+export function visibilityTest(model: Model, ray: Ray, faceHit: InferenceInput['faceHit']): (p: Vec3) => boolean {
+  const occluder = faceHit?.distance ?? Infinity;
+  const occluderPlane = faceHit ? model.facePlane(faceHit.face) : null;
+  const towardCamera = occluderPlane && dot(occluderPlane.normal, ray.dir) > 0 ? -1 : 1;
+  return (p: Vec3) => {
+    if (dot(sub(p, ray.origin), ray.dir) <= occluder) return true;
+    return !!occluderPlane && towardCamera * signedDistance(occluderPlane, p) >= -TOL;
+  };
+}
+
 /** Snap kinds in priority order: the first kind with any candidate wins. */
 export const SNAP_PRIORITY: readonly SnapKind[] = [
   'endpoint',
@@ -52,19 +70,7 @@ export function infer(input: InferenceInput): Snap | null {
   const { model, guides, projector, cursor, ray, faceHit } = input;
   const pointTol = input.pointTolerancePx ?? 10;
   const lineTol = input.lineTolerancePx ?? 7;
-  // A candidate is hidden only if it is behind the face under the cursor: deeper along the ray
-  // than the hit AND behind that face's plane. The plane test keeps everything lying on the face
-  // (its edges, corners, guides drawn on it) visible even at grazing angles, where a few pixels
-  // of cursor offset put the hit point well in front of them along the ray.
-  const occluder = faceHit?.distance ?? Infinity;
-  const occluderPlane = faceHit ? model.facePlane(faceHit.face) : null;
-  const towardCamera = occluderPlane && dot(occluderPlane.normal, ray.dir) > 0 ? -1 : 1;
-  const visible = (p: Vec3) => {
-    // No depth slack: anything on the face is kept by the plane test below, and slack would let
-    // points just behind the face (an axis running inside a solid, say) through.
-    if (dot(sub(p, ray.origin), ray.dir) <= occluder) return true;
-    return !!occluderPlane && towardCamera * signedDistance(occluderPlane, p) >= -TOL;
-  };
+  const visible = visibilityTest(model, ray, faceHit);
   const px = (p: Vec3) => {
     const s = projector.toScreen(p);
     return s ? Math.hypot(s[0] - cursor[0], s[1] - cursor[1]) : Infinity;

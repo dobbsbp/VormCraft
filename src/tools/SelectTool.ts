@@ -1,4 +1,5 @@
 import type { FaceId, HalfEdgeId } from '../core/model/Model';
+import type { GuideId } from '../doc/Guides';
 import { smoothSurface, surfaceOutline } from '../core/model/surfaces';
 import { boxSelect } from './boxSelect';
 import { edgeId } from './Selection';
@@ -17,12 +18,13 @@ export class SelectTool implements Tool {
   private box: { from: [number, number]; to: [number, number] } | null = null;
   private hoverFace: FaceId | null = null;
   private hoverEdge: HalfEdgeId | null = null;
+  private hoverGuide: GuideId | null = null;
   private lastDouble: { time: number; screen: [number, number] } | null = null;
 
   constructor(private readonly ctx: ToolContext) {}
 
   hint(): string {
-    return 'Click or drag to select. Shift = add/remove. Double-click a face: face and its edges. Delete erases.';
+    return 'Click or drag to select (faces, edges, guides). Shift = add/remove. Double-click a face: face and its edges. Delete erases.';
   }
 
   vcbLabel(): string {
@@ -38,8 +40,9 @@ export class SelectTool implements Tool {
   }
 
   pointerMove(e: ToolEvent): void {
-    this.hoverEdge = e.edge === null ? null : edgeId(this.ctx.doc.model, e.edge);
-    this.hoverFace = this.hoverEdge === null ? e.face : null;
+    this.hoverGuide = guideFirst(e);
+    this.hoverEdge = this.hoverGuide === null && e.edge !== null ? edgeId(this.ctx.doc.model, e.edge) : null;
+    this.hoverFace = this.hoverGuide === null && this.hoverEdge === null ? e.face : null;
     if (this.press && e.down) {
       const [x, y] = this.press.screen;
       if (this.box || Math.hypot(e.screen[0] - x, e.screen[1] - y) > 4) this.box = { from: this.press.screen, to: e.screen };
@@ -55,12 +58,16 @@ export class SelectTool implements Tool {
     const { selection, doc } = this.ctx;
     if (this.box) {
       const crossing = this.box.to[0] < this.box.from[0];
-      const hit = boxSelect(doc.model, this.ctx.projector(), this.box, crossing);
-      if (e.shift) selection.toggle(hit.faces, hit.edges);
-      else selection.set(hit.faces, hit.edges);
+      const hit = boxSelect(doc.model, this.ctx.projector(), this.box, crossing, doc.guides);
+      if (e.shift) selection.toggle(hit.faces, hit.edges, hit.guides);
+      else selection.set(hit.faces, hit.edges, hit.guides);
     } else if (this.press) {
       // A click right after a double-click at the same spot is a triple-click.
-      if (this.lastDouble && performanceNow() - this.lastDouble.time < 400 && near(this.lastDouble.screen, e.screen)) {
+      const guide = guideFirst(e);
+      if (guide !== null) {
+        if (e.shift) selection.toggle([], [], [guide]);
+        else selection.set([], [], [guide]);
+      } else if (this.lastDouble && performanceNow() - this.lastDouble.time < 400 && near(this.lastDouble.screen, e.screen)) {
         this.selectConnected(e);
       } else {
         // A face of a curved surface stands for the whole surface (all facets of a cylinder wall).
@@ -87,6 +94,7 @@ export class SelectTool implements Tool {
     const model = doc.model;
     let faces: FaceId[] = [];
     let edges: HalfEdgeId[] = [];
+    if (guideFirst(e) !== null) return; // the click already selected the guide
     if (e.edge !== null) {
       edges = [edgeId(model, e.edge)];
       faces = [model.faceOf(e.edge), model.faceOf(model.he(e.edge).twin)].filter((f): f is FaceId => f !== null);
@@ -127,10 +135,20 @@ export class SelectTool implements Tool {
   preview(): Preview {
     const p: Preview = {};
     if (this.box) p.box = { from: this.box.from, to: this.box.to, crossing: this.box.to[0] < this.box.from[0] };
+    else if (this.hoverGuide !== null) p.guides = [this.hoverGuide];
     else if (this.hoverEdge !== null) p.edges = [this.hoverEdge];
     else if (this.hoverFace !== null && this.ctx.doc.model.faces.has(this.hoverFace)) p.faces = smoothSurface(this.ctx.doc.model, this.hoverFace);
     return p;
   }
+}
+
+/**
+ * The guide to act on for a click, if any: a guide point always wins; a guide line wins unless an
+ * edge is under the cursor too (geometry comes first).
+ */
+export function guideFirst(e: ToolEvent): GuideId | null {
+  if (!e.guide) return null;
+  return e.guide.kind === 'point' || e.edge === null ? e.guide.id : null;
 }
 
 const performanceNow = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());

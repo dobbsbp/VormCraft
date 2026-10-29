@@ -43,6 +43,17 @@ export class Guides {
     this.items.delete(id);
   }
 
+  /** Put a guide in a new place (Move/Rotate). Line directions are re-normalised. */
+  update(guide: Guide): void {
+    if (!this.items.has(guide.id)) throw new Error('That guide no longer exists');
+    this.items.set(guide.id, guide.kind === 'line' ? { ...guide, dir: normalize(guide.dir) } : guide);
+  }
+
+  /** Add a copy of a guide with new coordinates; returns the new id. */
+  addLike(guide: Guide): GuideId {
+    return guide.kind === 'line' ? this.addLine(guide.point, guide.dir) : this.addPoint(guide.pos);
+  }
+
   clear(): void {
     this.items.clear();
   }

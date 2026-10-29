@@ -93,6 +93,7 @@ async function start(): Promise<void> {
       selectedFaces: controller.selection.faces,
       selectedEdges: controller.selection.edges,
       selectedLabels: controller.selection.labels,
+      selectedGuides: controller.selection.guides,
       preview: controller.preview(),
       snap: tool.id === 'select' || tool.id === 'lasso' ? null : controller.snap,
     });

@@ -1,4 +1,6 @@
+import { add, scale, type Vec3 } from '../core/math/vec3';
 import type { FaceId, HalfEdgeId, Model } from '../core/model/Model';
+import type { GuideId, Guides } from '../doc/Guides';
 import type { Projector } from './types';
 
 type P2 = [number, number];
@@ -8,11 +10,17 @@ export interface ScreenRect {
   to: P2;
 }
 
+export interface PolygonHit {
+  faces: FaceId[];
+  edges: HalfEdgeId[];
+  guides: GuideId[];
+}
+
 /**
  * Box selection in screen space. Window mode (drag left → right) takes entities entirely inside
  * the box; crossing mode (right → left) also takes anything the box touches.
  */
-export function boxSelect(model: Model, projector: Projector, rect: ScreenRect, crossing: boolean): { faces: FaceId[]; edges: HalfEdgeId[] } {
+export function boxSelect(model: Model, projector: Projector, rect: ScreenRect, crossing: boolean, guides?: Guides): PolygonHit {
   const x0 = Math.min(rect.from[0], rect.to[0]);
   const x1 = Math.max(rect.from[0], rect.to[0]);
   const y0 = Math.min(rect.from[1], rect.to[1]);
@@ -27,15 +35,17 @@ export function boxSelect(model: Model, projector: Projector, rect: ScreenRect, 
       [x0, y1],
     ],
     crossing,
+    guides,
   );
 }
 
 /**
  * Selection by a screen polygon (box or lasso). Window mode takes entities whose projected
  * vertices are all inside; crossing mode also takes anything the outline touches, and a face the
- * whole polygon sits inside.
+ * whole polygon sits inside. Guide points count when inside; guide lines (infinite) only in
+ * crossing mode, when the outline crosses them.
  */
-export function polygonSelect(model: Model, projector: Projector, polygon: P2[], crossing: boolean): { faces: FaceId[]; edges: HalfEdgeId[] } {
+export function polygonSelect(model: Model, projector: Projector, polygon: P2[], crossing: boolean, guides?: Guides): PolygonHit {
   const inside = (p: P2 | null) => !!p && pointInScreenPolygon(p, polygon);
   const screen = new Map<number, P2 | null>();
   const at = (v: number) => {
@@ -68,7 +78,28 @@ export function polygonSelect(model: Model, projector: Projector, polygon: P2[],
       pointInScreenPolygon(polygon[0], rings[0].map(at));
     if (touches) faces.push(f);
   }
-  return { faces, edges };
+  const guideIds: GuideId[] = [];
+  if (guides?.visible) {
+    for (const g of guides.points()) if (inside(projector.toScreen(g.pos))) guideIds.push(g.id);
+    if (crossing) {
+      for (const g of guides.lines()) {
+        const screenLine = guideScreenPolyline(projector, g.point, g.dir);
+        if (screenLine.some((p, i) => i > 0 && segmentTouches(screenLine[i - 1], p))) guideIds.push(g.id);
+      }
+    }
+  }
+  return { faces, edges, guides: guideIds };
+}
+
+/** An (infinite) guide line on screen, as a polyline through points sampled far along it. */
+function guideScreenPolyline(projector: Projector, point: Vec3, dir: Vec3): P2[] {
+  const ts = [0, ...[1, 10, 100, 1e3, 1e4, 1e5, 1e6].flatMap((t) => [t, -t])].sort((a, b) => a - b);
+  const out: P2[] = [];
+  for (const t of ts) {
+    const s = projector.toScreen(add(point, scale(dir, t)));
+    if (s) out.push(s);
+  }
+  return out;
 }
 
 /** Signed area of a screen polygon (y down): positive when drawn clockwise on screen. */

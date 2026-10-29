@@ -1,5 +1,7 @@
 import type { HalfEdgeId } from '../core/model/Model';
 import { erase } from '../core/ops/erase';
+import type { GuideId } from '../doc/Guides';
+import { guideFirst } from './SelectTool';
 import { edgeId } from './Selection';
 import type { Preview, Tool, ToolContext, ToolEvent } from './types';
 
@@ -11,13 +13,15 @@ export class EraserTool implements Tool {
   readonly id = 'eraser';
   readonly name = 'Eraser';
   private hover: HalfEdgeId | null = null;
+  private hoverGuide: GuideId | null = null;
   private marked = new Set<HalfEdgeId>();
+  private markedGuides = new Set<GuideId>();
   private marking = false;
 
   constructor(private readonly ctx: ToolContext) {}
 
   hint(): string {
-    return 'Click an edge to erase it (and the faces it bounds), or drag across several edges.';
+    return 'Click an edge or guide to erase it (an edge takes the faces it bounds with it), or drag across several.';
   }
 
   vcbLabel(): string {
@@ -33,21 +37,30 @@ export class EraserTool implements Tool {
   }
 
   pointerMove(e: ToolEvent): void {
-    this.hover = e.edge === null ? null : edgeId(this.ctx.doc.model, e.edge);
+    this.hoverGuide = guideFirst(e);
+    this.hover = this.hoverGuide === null && e.edge !== null ? edgeId(this.ctx.doc.model, e.edge) : null;
     if (this.marking && this.hover !== null) this.marked.add(this.hover);
+    if (this.marking && this.hoverGuide !== null) this.markedGuides.add(this.hoverGuide);
   }
 
   pointerDown(e: ToolEvent): void {
     this.pointerMove(e);
     this.marking = true;
     this.marked = new Set(this.hover === null ? [] : [this.hover]);
+    this.markedGuides = new Set(this.hoverGuide === null ? [] : [this.hoverGuide]);
   }
 
   pointerUp(): void {
     this.marking = false;
     const edges = [...this.marked];
+    const guides = [...this.markedGuides];
     this.marked.clear();
-    if (edges.length) this.ctx.apply(() => erase(this.ctx.doc.model, [], edges));
+    this.markedGuides.clear();
+    if (!edges.length && !guides.length) return;
+    this.ctx.apply(() => {
+      erase(this.ctx.doc.model, [], edges);
+      for (const g of guides) this.ctx.doc.guides.delete(g);
+    });
   }
 
   typed(): void {
@@ -57,6 +70,7 @@ export class EraserTool implements Tool {
   cancel(): void {
     this.marking = false;
     this.marked.clear();
+    this.markedGuides.clear();
   }
 
   reset(): void {
@@ -66,6 +80,7 @@ export class EraserTool implements Tool {
   preview(): Preview {
     const model = this.ctx.doc.model;
     const edges = [...this.marked, ...(this.hover !== null ? [this.hover] : [])].filter((e) => model.halfEdges.has(e));
-    return edges.length ? { edges } : {};
+    const guides = [...this.markedGuides, ...(this.hoverGuide !== null ? [this.hoverGuide] : [])];
+    return { ...(edges.length ? { edges } : {}), ...(guides.length ? { guides } : {}) };
   }
 }

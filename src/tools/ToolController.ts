@@ -6,6 +6,7 @@ import { facesWithCurveEdges, smoothSurface } from '../core/model/surfaces';
 import type { LabelId } from '../doc/Labels';
 import { ArcTool } from './ArcTool';
 import { CircleTool } from './CircleTool';
+import { guideAt } from './guidePick';
 import { LassoTool } from './LassoTool';
 import { LineTool } from './LineTool';
 import { MoveTool } from './MoveTool';
@@ -140,7 +141,7 @@ export class ToolController {
   }
 
   private afterDocumentChange(): void {
-    this.selection.prune(this.doc.model, this.doc.labels);
+    this.selection.prune(this.doc.model, this.doc.labels, this.doc.guides);
     this.onModelChanged();
     this.onUpdate();
   }
@@ -251,8 +252,10 @@ export class ToolController {
       const b = this.doc.model.pos(this.doc.model.dest(edge));
       if (distance(a, b) > 0) this.lastEdgeDir = normalize(sub(b, a));
     }
+    const guide = guideAt({ model: this.doc.model, guides: this.doc.guides, projector: this.projector(), cursor: s.screen, ray: s.ray, faceHit: s.faceHit });
     return {
       snap: this.snap,
+      guide,
       face: s.faceHit?.face ?? null,
       facePoint: s.faceHit?.point ?? null,
       edge: s.edge,
@@ -336,12 +339,13 @@ export class ToolController {
 
   deleteSelection(): void {
     if (this.selection.size === 0) return;
-    const { faces, edges, labels } = this.selection;
+    const { faces, edges, labels, guides } = this.selection;
     this.run(() =>
       this.apply(
         () => {
           erase(this.doc.model, [...faces], [...edges]);
           for (const l of labels) this.doc.labels.delete(l);
+          for (const g of guides) this.doc.guides.delete(g);
         },
         undefined,
         null,
@@ -386,7 +390,7 @@ export class ToolController {
         if (group.length > 1) surfaces++;
         else flat++;
       }
-      const items = [part(surfaces, 'curved surface'), part(flat, 'face'), part(edges.size, 'edge'), part(this.selection.labels.size, 'label')];
+      const items = [part(surfaces, 'curved surface'), part(flat, 'face'), part(edges.size, 'edge'), part(this.selection.guides.size, 'guide'), part(this.selection.labels.size, 'label')];
       return `Selected: ${items.filter(Boolean).join(', ')}. Delete erases, Esc clears.`;
     }
     return this.tool.hint();

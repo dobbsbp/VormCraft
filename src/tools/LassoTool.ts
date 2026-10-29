@@ -1,5 +1,6 @@
 import { smoothSurface } from '../core/model/surfaces';
 import { polygonSelect, screenArea } from './boxSelect';
+import { guideFirst } from './SelectTool';
 import { edgeId } from './Selection';
 import type { Preview, Tool, ToolContext, ToolEvent } from './types';
 
@@ -53,17 +54,19 @@ export class LassoTool implements Tool {
     const span = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
     if (path.length < 3 || span <= 6) {
       // A click: select what is under the cursor.
-      const faces = e.edge === null && e.face !== null ? smoothSurface(doc.model, e.face) : [];
-      const edges = e.edge !== null ? [edgeId(doc.model, e.edge)] : [];
-      if (e.shift) selection.toggle(faces, edges);
-      else if (faces.length || edges.length) selection.set(faces, edges);
+      const guide = guideFirst(e);
+      const faces = guide === null && e.edge === null && e.face !== null ? smoothSurface(doc.model, e.face) : [];
+      const edges = guide === null && e.edge !== null ? [edgeId(doc.model, e.edge)] : [];
+      const guides = guide === null ? [] : [guide];
+      if (e.shift) selection.toggle(faces, edges, guides);
+      else if (faces.length || edges.length || guides.length) selection.set(faces, edges, guides);
       else selection.clear();
       return;
     }
     const crossing = screenArea(path) < 0;
-    const hit = polygonSelect(doc.model, this.ctx.projector(), path, crossing);
-    if (e.shift) selection.toggle(hit.faces, hit.edges);
-    else selection.set(hit.faces, hit.edges);
+    const hit = polygonSelect(doc.model, this.ctx.projector(), path, crossing, doc.guides);
+    if (e.shift) selection.toggle(hit.faces, hit.edges, hit.guides);
+    else selection.set(hit.faces, hit.edges, hit.guides);
   }
 
   typed(): void {

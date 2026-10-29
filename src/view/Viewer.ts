@@ -4,7 +4,7 @@ import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
 import type { Vec3 } from '../core/math/vec3';
 import type { FaceId, HalfEdgeId, Model } from '../core/model/Model';
-import type { Guides } from '../doc/Guides';
+import type { Guide, GuideId, Guides } from '../doc/Guides';
 import type { LabelId, Labels } from '../doc/Labels';
 import type { PointerSample } from '../tools/ToolController';
 import type { Preview, PreviewColor, PreviewLines, Projector, Snap } from '../tools/types';
@@ -22,6 +22,7 @@ export interface Overlay {
   selectedFaces: Iterable<FaceId>;
   selectedEdges: Iterable<HalfEdgeId>;
   selectedLabels: Iterable<LabelId>;
+  selectedGuides: Iterable<GuideId>;
   preview: Preview;
   snap: Snap | null;
 }
@@ -65,7 +66,7 @@ export class Viewer {
   private readonly lineMaterials: LineMaterial[] = [];
   private readonly svg: SVGSVGElement;
   private readonly boxEl: HTMLDivElement;
-  private overlay: Overlay = { selectedFaces: [], selectedEdges: [], selectedLabels: [], preview: {}, snap: null };
+  private overlay: Overlay = { selectedFaces: [], selectedEdges: [], selectedLabels: [], selectedGuides: [], preview: {}, snap: null };
   private readonly labelLayer: HTMLDivElement;
   private readonly labelEls = new Map<LabelId, HTMLDivElement>();
   private readonly headlight = new THREE.DirectionalLight(0xffffff, 1.6);
@@ -289,6 +290,21 @@ export class Viewer {
     const hoverLines = [...surfaceOutline(m, hoverFaces), ...(preview.edges ?? []).filter((e) => m.halfEdges.has(e))].map((e) => edgeSegment(m, e));
     if (hoverLines.length) add(this.lines(concat(hoverLines), this.lineMaterial(THEME.hover, 2.5), 2));
 
+    // Selected and hovered guide lines, drawn over the normal dashed guides.
+    const selectedGuides = new Set(this.overlay.selectedGuides);
+    const hoveredGuides = new Set(preview.guides ?? []);
+    for (const [ids, color, width] of [
+      [selectedGuides, THEME.select, 2.5],
+      [hoveredGuides, THEME.hover, 2],
+    ] as const) {
+      const pts: number[] = [];
+      for (const id of ids) {
+        const g = this.guides.items.get(id);
+        if (g?.kind === 'line') pts.push(...this.guideSpan(g));
+      }
+      if (pts.length) add(this.lines(pts, this.lineMaterial(color, width, { dashed: true }), 2));
+    }
+
     const previewLines: PreviewLines[] = [...(preview.lines ?? [])];
     if ((snap?.kind === 'axis' || snap?.kind === 'parallel' || snap?.kind === 'perpendicular') && snap.from) {
       const color = snap.kind === 'axis' ? (['axisX', 'axisY', 'axisZ'] as const)[snap.axis ?? 0] : 'parallel';
@@ -313,16 +329,17 @@ export class Viewer {
   private rebuildGuides(): void {
     this.clearGroup(this.guideGroup);
     if (!this.guides.visible) return;
+    const pts = this.guides.lines().flatMap((g) => this.guideSpan(g));
+    if (pts.length) this.guideGroup.add(this.lines(pts, this.lineMaterial(THEME.guide, 1.2, { dashed: true }), 0));
+  }
+
+  /** A long stretch of an (infinite) guide line, centred near the model, as flat xyz pairs. */
+  private guideSpan(g: Extract<Guide, { kind: 'line' }>): number[] {
     const sphere = this.sceneSphere();
     const span = Math.max(sphere.radius, 1000) * 4;
     const c: Vec3 = [sphere.center.x, sphere.center.y, sphere.center.z];
-    const pts: number[] = [];
-    for (const g of this.guides.lines()) {
-      // Draw a long stretch of the (infinite) guide centred near the model.
-      const t = (c[0] - g.point[0]) * g.dir[0] + (c[1] - g.point[1]) * g.dir[1] + (c[2] - g.point[2]) * g.dir[2];
-      for (const s of [t - span, t + span]) pts.push(g.point[0] + g.dir[0] * s, g.point[1] + g.dir[1] * s, g.point[2] + g.dir[2] * s);
-    }
-    if (pts.length) this.guideGroup.add(this.lines(pts, this.lineMaterial(THEME.guide, 1.2, { dashed: true }), 0));
+    const t = (c[0] - g.point[0]) * g.dir[0] + (c[1] - g.point[1]) * g.dir[1] + (c[2] - g.point[2]) * g.dir[2];
+    return [t - span, t + span].flatMap((s) => [g.point[0] + g.dir[0] * s, g.point[1] + g.dir[1] * s, g.point[2] + g.dir[2] * s]);
   }
 
   /** Screen-space parts of the overlay (snap cue, guide points), re-projected every frame. */
@@ -330,9 +347,13 @@ export class Viewer {
     const proj = this.projector();
     const parts: string[] = [];
     if (this.guides.visible) {
+      const selected = new Set(this.overlay.selectedGuides);
+      const hovered = new Set(this.overlay.preview.guides ?? []);
       for (const g of this.guides.points()) {
         const s = proj.toScreen(g.pos);
-        if (s) parts.push(cross(s, 5, '#3c4048'));
+        if (!s) continue;
+        const color = selected.has(g.id) ? '#1f5fd6' : hovered.has(g.id) ? '#2f6fe4' : '#3c4048';
+        parts.push(cross(s, selected.has(g.id) || hovered.has(g.id) ? 6.5 : 5, color));
       }
     }
     const snap = this.overlay.snap;

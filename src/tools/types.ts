@@ -55,6 +55,8 @@ export interface ToolEvent {
   facePoint: Vec3 | null;
   /** Edge under the cursor (within the pick tolerance), if any. */
   edge: HalfEdgeId | null;
+  /** Guide under the cursor (guide points win over guide lines), if any. */
+  guide: { id: GuideId; kind: 'line' | 'point' } | null;
   ray: Ray;
   screen: [number, number];
   shift: boolean;
@@ -100,6 +102,8 @@ export interface Preview {
   /** Faces to tint (e.g. the face under the Push/Pull cursor). */
   faces?: FaceId[];
   edges?: HalfEdgeId[];
+  /** Guides to highlight (e.g. the one under the Select cursor). */
+  guides?: GuideId[];
   /** Screen-space selection rectangle (Select tool box drag). */
   box?: { from: [number, number]; to: [number, number]; crossing: boolean };
   /** Screen-space lasso path (Lasso Select). */

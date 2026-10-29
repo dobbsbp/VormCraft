@@ -17,6 +17,8 @@ export interface EventOptions {
   face?: FaceId | null;
   edge?: HalfEdgeId | null;
   ray?: Ray;
+  /** A guide under the cursor. */
+  guide?: { id: number; kind: 'line' | 'point' } | null;
   shift?: boolean;
   down?: boolean;
   /** Snap point if different from the cursor point. */
@@ -34,6 +36,7 @@ export function ev(doc: Document, p: Vec3, o: EventOptions = {}): ToolEvent {
     o.snap === null ? null : { kind: o.kind ?? (face !== null ? 'onFace' : 'ground'), point: p, ...(face !== null ? { face } : {}), ...(o.snap ?? {}) };
   return {
     snap,
+    guide: o.guide ?? null,
     face,
     facePoint: face !== null ? p : null,
     edge: o.edge ?? null,
