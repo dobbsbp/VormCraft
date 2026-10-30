@@ -20,3 +20,4 @@ export { arcAroundCenter, arcFromBulge, arcPoints, arcThroughPoints, drawArc, dr
 export { connectedVertices, scalePieces } from './ops/scale';
 export { applyAffine, BendError, duplicateVertices, rotation, scaling, selectionVertices, transformVertices, translation, type Affine } from './ops/transform';
 export { facesWithCurveEdges, isSoftEdge, smoothSurface, surfaceOutline } from './model/surfaces';
+export { followMe, type FollowMeMode, type FollowMeResult } from './ops/followMe';

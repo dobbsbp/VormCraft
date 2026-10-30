@@ -31,6 +31,7 @@ const TOOLS: { id: ToolId; icon: string; label: string }[] = [
   { id: 'pie', icon: ICONS.pie, label: 'Pie' },
   { id: 'pushpull', icon: ICONS.pushpull, label: 'Push/Pull' },
   { id: 'offset', icon: ICONS.offset, label: 'Offset' },
+  { id: 'followMe', icon: ICONS.followMe, label: 'Follow Me' },
   { id: 'move', icon: ICONS.move, label: 'Move' },
   { id: 'rotate', icon: ICONS.rotate, label: 'Rotate' },
   { id: 'scale', icon: ICONS.scale, label: 'Scale' },

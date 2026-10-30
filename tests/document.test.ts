@@ -148,6 +148,23 @@ describe('file format', () => {
     expect([...back.model.edges()]).toHaveLength(1);
   });
 
+  it('keeps edge smoothing (soft, always shown, automatic), and still opens version 1 files', () => {
+    const doc = new Document();
+    const [a, b, c, d] = ([[0, 0, 0], [10, 0, 0], [20, 0, 0], [30, 0, 0]] as const).map((p) => doc.model.addVertex([...p]));
+    doc.model.addEdge(a, b);
+    doc.model.addEdge(b, c);
+    doc.model.addEdge(c, d);
+    doc.model.setEdgeSoft(a, b, true);
+    doc.model.setEdgeSoft(b, c, false);
+    const text = serializeDocument(doc);
+    expect(JSON.parse(text).version).toBe(2);
+    const back = parseDocument(text).model;
+    const soft = (p: number, q: number) => back.he(back.halfEdgeBetween(p, q)!).soft;
+    expect([soft(a, b), soft(b, c), soft(c, d)]).toEqual([true, false, undefined]);
+    const v1 = { format: 'benup', version: 1, units: 'mm', vertices: [[1, 0, 0, 0], [2, 5, 0, 0]], curves: [], faces: [], edges: [[1, 2, null]], guides: { visible: true, lines: [], points: [] } };
+    expect([...parseDocument(JSON.stringify(v1)).model.edges()]).toHaveLength(1);
+  });
+
   it('rejects files that are not ours, newer, or damaged with clear messages', () => {
     expect(() => parseDocument('not json')).toThrow(FileFormatError);
     expect(() => parseDocument('{"format":"other"}')).toThrow(/not a Benup file/);

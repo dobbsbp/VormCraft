@@ -44,6 +44,7 @@ export const KEY_BINDINGS: readonly KeyBinding[] = [
   tool('Q', 'q', 'Rotate', 'rotate'),
   tool('S', 's', 'Scale', 'scale'),
   tool('F', 'f', 'Offset', 'offset'),
+  shiftTool('p', 'Follow Me', 'followMe'),
   tool('E', 'e', 'Eraser', 'eraser'),
   missing('B', 'b', false, 'Paint Bucket', OUT_OF_SCOPE),
   tool('T', 't', 'Tape Measure', 'tape'),

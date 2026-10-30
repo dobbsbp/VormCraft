@@ -26,6 +26,11 @@ export interface HalfEdge {
   loop: LoopId | null;
   /** The true curve this edge approximates (e.g. a circle), kept for STEP export. */
   curve: CurveId | null;
+  /**
+   * Smoothing, set on both halves: true for a soft seam (hidden, and the faces it joins act as one
+   * surface), false for an edge that must always show; unset leaves it to the automatic rule.
+   */
+  soft?: boolean;
 }
 
 export interface Loop {
@@ -205,6 +210,16 @@ export class Model {
     this.he(this.he(id).twin).curve = curve;
   }
 
+  /** Mark the edge a–b soft (true), always shown (false), or automatic (undefined). */
+  setEdgeSoft(a: VertexId, b: VertexId, soft: boolean | undefined): void {
+    const id = this.halfEdgeBetween(a, b);
+    if (id === undefined) throw new Error(`No edge ${a}-${b}`);
+    for (const h of [this.he(id), this.he(this.he(id).twin)]) {
+      if (soft === undefined) delete h.soft;
+      else h.soft = soft;
+    }
+  }
+
   /** Remove every edge whose two sides are free, then every vertex left without edges. */
   purgeFree(candidates?: Iterable<HalfEdgeId>): void {
     const touched = new Set<VertexId>();
@@ -229,12 +244,17 @@ export class Model {
     const a = h1.origin;
     const b = h2.origin;
     const curve = h1.curve;
+    const soft = h1.soft;
     const sides = [h1, h2].map((h) => ({ loop: h.loop, prev: h.prev, next: h.next, wasFirst: h.loop !== null && this.loop(h.loop).first === h.id }));
     this.detach(h1);
     this.detach(h2);
     this.removeEdge(h1.id);
     const am = this.addEdge(a, m, curve);
     const mb = this.addEdge(m, b, curve);
+    if (soft !== undefined) {
+      this.setEdgeSoft(a, m, soft);
+      this.setEdgeSoft(m, b, soft);
+    }
     const bm = this.he(mb).twin;
     const ma = this.he(am).twin;
     this.relink(sides[0], am, mb);

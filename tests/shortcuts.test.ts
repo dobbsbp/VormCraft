@@ -38,6 +38,7 @@ describe('keyboard map', () => {
     ['a', true, 'Pie', 'tool:pie'],
     ['w', true, 'Zoom Window', 'tool:zoomWindow'],
     ['v', true, 'Previous View', 'previousView'],
+    ['p', true, 'Follow Me', 'tool:followMe'],
     ['i', false, 'Photo Matching', 'unavailable'],
     ['ArrowRight', false, 'Lock to red axis', 'lock:x'],
     ['ArrowLeft', false, 'Lock to green axis', 'lock:y'],

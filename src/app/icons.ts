@@ -26,6 +26,7 @@ export const ICONS = {
   previousView: svg('<path d="M9 6 4 11l5 5"/><path d="M4 11h9a6 6 0 0 1 6 6v2"/><rect x="14" y="3" width="7" height="5" rx="1"/>'),
   circle: svg('<circle cx="12" cy="12" r="8"/><path d="M12 12h8" stroke-dasharray="2 1.5"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/>'),
   pushpull: svg('<path d="M3 16 9 19l12-5-6-3Z"/><path d="M12 14V4M8.5 7.5 12 4l3.5 3.5"/>'),
+  followMe: svg('<path d="M3 21V13h5v3h3" fill="currentColor" fill-opacity="0.25"/><path d="M8 16h6a5 5 0 0 0 5-5V4" stroke-dasharray="2 1.5"/><path d="m16.5 6.5 2.5-2.5 2.5 2.5"/>'),
   offset: svg('<rect x="3" y="3" width="18" height="18" rx="1"/><rect x="8" y="8" width="8" height="8" stroke-dasharray="2 1.5"/><path d="M3 3l5 5"/>'),
   tape: svg('<circle cx="9" cy="13" r="6"/><circle cx="9" cy="13" r="2"/><path d="M15 13h6v3h-6M18 13v1.5"/>'),
   line: svg('<path d="M4 20 20 4"/><circle cx="4" cy="20" r="1.6" fill="currentColor"/><circle cx="20" cy="4" r="1.6" fill="currentColor"/>'),

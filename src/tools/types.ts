@@ -142,6 +142,7 @@ export type ToolId =
   | 'pie'
   | 'pushpull'
   | 'offset'
+  | 'followMe'
   | 'scale'
   | 'move'
   | 'rotate'

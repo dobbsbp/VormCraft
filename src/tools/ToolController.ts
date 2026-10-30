@@ -17,6 +17,7 @@ import { EraserTool } from './EraserTool';
 import { NavigationTool } from './NavigationTool';
 import { infer } from './inference';
 import { OffsetTool } from './OffsetTool';
+import { FollowMeTool } from './FollowMeTool';
 import { PushPullTool } from './PushPullTool';
 import { RectangleTool } from './RectangleTool';
 import { RotatedRectangleTool } from './RotatedRectangleTool';
@@ -100,6 +101,7 @@ export class ToolController {
       pie: new ArcTool(this.ctx, 'pie'),
       pushpull: new PushPullTool(this.ctx),
       offset: new OffsetTool(this.ctx),
+      followMe: new FollowMeTool(this.ctx),
       tape: new TapeMeasureTool(this.ctx),
       eraser: new EraserTool(this.ctx),
       lasso: new LassoTool(this.ctx),

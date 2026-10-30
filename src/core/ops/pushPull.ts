@@ -283,14 +283,14 @@ function renameFace(model: Model, from: FaceId, to: FaceId): void {
   model.addFace(rings[0], rings.slice(1), { normal, id: to });
 }
 
-type CurveCandidate = { id: CurveId; center: Vec3; normal: Vec3; radius: number; segments: number; kind: 'circle'; scratch?: true };
+export type CurveCandidate = { id: CurveId; center: Vec3; normal: Vec3; radius: number; segments: number; kind: 'circle'; scratch?: true };
 
 /**
  * After a boolean, put true-curve tags back on edges that are segments of a known circle
  * (both ends on the circle and the chord length of one segment). Circles that came from the
  * scratch prism are added to the model the first time an edge matches them.
  */
-function retagCurves(model: Model, faces: Set<FaceId>, candidates: CurveCandidate[]): void {
+export function retagCurves(model: Model, faces: Set<FaceId>, candidates: CurveCandidate[]): void {
   const adopted = new Map<CurveCandidate, CurveId>();
   for (const f of faces) {
     for (const h of model.faceHalfEdges(f)) {
