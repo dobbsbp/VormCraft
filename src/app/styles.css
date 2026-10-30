@@ -666,3 +666,28 @@ body {
 .panel-button.danger {
   color: var(--danger);
 }
+
+/* Shown while a group is open for editing; clicking it closes the group. */
+.context-badge {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  padding: 4px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.context-badge[hidden] {
+  display: none;
+}
+
+.context-badge:hover {
+  background: var(--chrome);
+}

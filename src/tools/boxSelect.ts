@@ -21,22 +21,7 @@ export interface PolygonHit {
  * the box; crossing mode (right → left) also takes anything the box touches.
  */
 export function boxSelect(model: Model, projector: Projector, rect: ScreenRect, crossing: boolean, guides?: Guides): PolygonHit {
-  const x0 = Math.min(rect.from[0], rect.to[0]);
-  const x1 = Math.max(rect.from[0], rect.to[0]);
-  const y0 = Math.min(rect.from[1], rect.to[1]);
-  const y1 = Math.max(rect.from[1], rect.to[1]);
-  return polygonSelect(
-    model,
-    projector,
-    [
-      [x0, y0],
-      [x1, y0],
-      [x1, y1],
-      [x0, y1],
-    ],
-    crossing,
-    guides,
-  );
+  return polygonSelect(model, projector, rectPolygon(rect), crossing, guides);
 }
 
 /**
@@ -127,4 +112,41 @@ function pointInScreenPolygon(p: P2, poly: (P2 | null)[]): boolean {
     if (a[1] > p[1] !== b[1] > p[1] && p[0] < ((b[0] - a[0]) * (p[1] - a[1])) / (b[1] - a[1]) + a[0]) inside = !inside;
   }
   return inside;
+}
+
+/**
+ * Groups taken by a screen polygon: in window mode every vertex of the group (and the groups inside
+ * it) must be inside; in crossing mode anything of it touching the outline is enough.
+ */
+export function polygonSelectGroups<G>(groups: readonly { id: G; models: readonly Model[] }[], projector: Projector, polygon: P2[], crossing: boolean): G[] {
+  const out: G[] = [];
+  for (const g of groups) {
+    const models = g.models.filter((m) => m.vertices.size > 0);
+    if (!models.length) continue;
+    const hit = crossing
+      ? models.some((m) => {
+          const h = polygonSelect(m, projector, polygon, true);
+          return h.faces.length > 0 || h.edges.length > 0;
+        })
+      : models.every((m) => [...m.vertices.values()].every((v) => {
+          const p = projector.toScreen(v.pos);
+          return !!p && pointInScreenPolygon(p, polygon);
+        }));
+    if (hit) out.push(g.id);
+  }
+  return out;
+}
+
+/** The box as a screen polygon. */
+export function rectPolygon(rect: ScreenRect): P2[] {
+  const x0 = Math.min(rect.from[0], rect.to[0]);
+  const x1 = Math.max(rect.from[0], rect.to[0]);
+  const y0 = Math.min(rect.from[1], rect.to[1]);
+  const y1 = Math.max(rect.from[1], rect.to[1]);
+  return [
+    [x0, y0],
+    [x1, y0],
+    [x1, y1],
+    [x0, y1],
+  ];
 }

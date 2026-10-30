@@ -3,12 +3,15 @@ import { add, distance, dot, normalize, scale, sub, type Vec3 } from '../core/ma
 import type { VertexId } from '../core/model/Model';
 import { connectedVertices, scalePieces } from '../core/ops/scale';
 import type { DocumentSnapshot } from '../doc/Document';
+import type { GroupId } from '../doc/Groups';
+import { scaleModel } from '../core/ops/group';
+import { groupModels } from './groupModels';
 import { parseLength, parseLengths } from './units';
 import type { InferenceHints, Preview, Tool, ToolContext, ToolEvent } from './types';
 
 /**
  * Scale: works on the selection (or, with nothing selected, on the object you click), always on
- * whole connected objects. Click the base point (it stays put), click a reference point, then move
+ * whole connected objects (and whole groups). Click the base point (it stays put), click a reference point, then move
  * and click: the object grows by how far you moved along that direction. Or type a factor ("1.5"),
  * per-axis factors ("2,1,1" for red, green, blue), or a length ("300mm") for the new size of the
  * reference distance. Negative factors mirror. Typing after finishing changes the last scale.
@@ -17,11 +20,11 @@ export class ScaleTool implements Tool {
   readonly id = 'scale';
   readonly name = 'Scale';
   readonly dragIsClick = true;
-  private targets: Set<VertexId> | null = null;
+  private targets: { vertices: Set<VertexId>; groups: GroupId[] } | null = null;
   private base: Vec3 | null = null;
   private ref: Vec3 | null = null;
   private factor = 1;
-  private last: { snapshot: DocumentSnapshot; targets: Set<VertexId>; base: Vec3; refLength: number; factors: Vec3 } | null = null;
+  private last: { snapshot: DocumentSnapshot; targets: { vertices: Set<VertexId>; groups: GroupId[] }; base: Vec3; refLength: number; factors: Vec3 } | null = null;
 
   constructor(private readonly ctx: ToolContext) {}
 
@@ -56,10 +59,11 @@ export class ScaleTool implements Tool {
     if (!p) return;
     if (!this.base) {
       const { selection, doc } = this.ctx;
-      let targets: Set<VertexId>;
-      if (selection.faces.size || selection.edges.size) targets = connectedVertices(doc.model, selection.faces, selection.edges);
-      else if (e.face !== null) targets = connectedVertices(doc.model, [e.face], []);
-      else if (e.edge !== null) targets = connectedVertices(doc.model, [], [e.edge]);
+      let targets: { vertices: Set<VertexId>; groups: GroupId[] };
+      if (selection.faces.size || selection.edges.size || selection.groups.size) targets = { vertices: connectedVertices(doc.model, selection.faces, selection.edges), groups: [...selection.groups] };
+      else if (e.edge !== null) targets = { vertices: connectedVertices(doc.model, [], [e.edge]), groups: [] };
+      else if (e.group !== null) targets = { vertices: new Set(), groups: [e.group] };
+      else if (e.face !== null) targets = { vertices: connectedVertices(doc.model, [e.face], []), groups: [] };
       else throw new Error('Select something to scale, or click on the object to scale');
       this.targets = targets;
       this.base = p;
@@ -81,7 +85,10 @@ export class ScaleTool implements Tool {
     const basePoint = base ? this.last!.base : this.base!;
     const refLength = base ? this.last!.refLength : this.ref ? distance(this.ref, this.base!) : 0;
     this.targets = this.base = this.ref = null;
-    const snapshot = this.ctx.apply(() => scalePieces(this.ctx.doc.model, targets, basePoint, factors), base);
+    const snapshot = this.ctx.apply(() => {
+      if (targets.vertices.size) scalePieces(this.ctx.doc.model, targets.vertices, basePoint, factors);
+      for (const id of targets.groups) for (const m of groupModels(this.ctx.doc, id)) scaleModel(m, basePoint, factors);
+    }, base);
     this.last = { snapshot, targets, base: basePoint, refLength, factors };
   }
 
@@ -127,7 +134,10 @@ export class ScaleTool implements Tool {
     for (const e of model.edges()) {
       const a = model.he(e).origin;
       const b = model.dest(e);
-      if (this.targets.has(a) && this.targets.has(b)) pts.push(at(model.pos(a)), at(model.pos(b)));
+      if (this.targets.vertices.has(a) && this.targets.vertices.has(b)) pts.push(at(model.pos(a)), at(model.pos(b)));
+    }
+    for (const id of this.targets.groups) {
+      for (const m of groupModels(this.ctx.doc, id)) for (const e of m.edges()) pts.push(at(m.pos(m.he(e).origin)), at(m.pos(m.dest(e))));
     }
     const lines: Preview['lines'] = [{ points: pts, color: 'select', width: 1.5 }];
     if (this.ref) lines.push({ points: [this.base, this.ref], color: 'preview', dashed: true });

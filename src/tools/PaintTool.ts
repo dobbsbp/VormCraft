@@ -1,4 +1,5 @@
 import type { FaceId, MaterialId } from '../core/model/Model';
+import type { GroupId } from '../doc/Groups';
 import { smoothSurface } from '../core/model/surfaces';
 import { paintFaces } from '../core/ops/materials';
 import type { Preview, Tool, ToolContext, ToolEvent } from './types';
@@ -7,11 +8,13 @@ import type { Preview, Tool, ToolContext, ToolEvent } from './types';
  * Paint Bucket: click a face to paint it with the current material (a whole curved surface at
  * once; all the selected faces when the clicked face is selected). Shift paints every face that
  * has the clicked face's paint, Ctrl the connected ones; Alt picks up the clicked face's paint.
+ * Clicking a group paints the group: its faces without paint of their own show the group's paint.
  */
 export class PaintTool implements Tool {
   readonly id = 'paint';
   readonly name = 'Paint Bucket';
   private hover: FaceId[] = [];
+  private hoverGroup: GroupId | null = null;
 
   constructor(
     private readonly ctx: ToolContext,
@@ -48,9 +51,29 @@ export class PaintTool implements Tool {
 
   pointerMove(e: ToolEvent): void {
     this.hover = e.face !== null && this.ctx.doc.model.faces.has(e.face) ? this.targets(e.face, e) : [];
+    this.hoverGroup = e.group;
   }
 
   pointerDown(e: ToolEvent): void {
+    if (e.group !== null) {
+      const group = this.ctx.doc.groups.get(e.group);
+      if (!group) return;
+      if (e.alt) {
+        this.pickUp(group.material);
+        return;
+      }
+      const material = this.current();
+      if (material !== undefined && !this.ctx.doc.materials.get(material)) throw new Error('That material no longer exists: pick another');
+      this.ctx.apply(
+        () => {
+          if (material === undefined) delete group.material;
+          else group.material = material;
+        },
+        undefined,
+        'Paint',
+      );
+      return;
+    }
     if (e.face === null || !this.ctx.doc.model.faces.has(e.face)) return;
     if (e.alt) {
       this.pickUp(this.ctx.doc.model.face(e.face).material);
@@ -71,6 +94,6 @@ export class PaintTool implements Tool {
   reset(): void {}
 
   preview(): Preview {
-    return { faces: this.hover.filter((f) => this.ctx.doc.model.faces.has(f)) };
+    return { faces: this.hover.filter((f) => this.ctx.doc.model.faces.has(f)), ...(this.hoverGroup !== null ? { groups: [this.hoverGroup] } : {}) };
   }
 }

@@ -4,6 +4,9 @@ import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
 import type { Vec3 } from '../core/math/vec3';
 import type { FaceId, HalfEdgeId, MaterialId, Model } from '../core/model/Model';
+import { modelBounds } from '../core/ops/group';
+import type { Document } from '../doc/Document';
+import type { GroupId } from '../doc/Groups';
 import type { Guide, GuideId, Guides } from '../doc/Guides';
 import type { LabelId, Labels } from '../doc/Labels';
 import type { Material, Materials } from '../doc/Materials';
@@ -24,6 +27,7 @@ export interface Overlay {
   selectedEdges: Iterable<HalfEdgeId>;
   selectedLabels: Iterable<LabelId>;
   selectedGuides: Iterable<GuideId>;
+  selectedGroups: Iterable<GroupId>;
   preview: Preview;
   snap: Snap | null;
 }
@@ -37,6 +41,15 @@ const PREVIEW_COLORS: Record<PreviewColor, number> = {
   guide: THEME.guide,
   select: THEME.select,
 };
+
+/** Drawn geometry of one model other than the one being edited. */
+interface Layer {
+  owner: GroupId | null;
+  data: DisplayData;
+  front: THREE.Mesh;
+  back: THREE.Mesh;
+  edges: THREE.LineSegments;
+}
 
 /**
  * The 3D viewport. It draws a display copy of the model (rebuilt by `refresh()` after every model
@@ -66,12 +79,21 @@ export class Viewer {
   private readonly edges: THREE.LineSegments;
   /** The same edges drawn through faces, dashed (Back Edges view, K). */
   private readonly backEdges: THREE.LineSegments;
+  /** Geometry other than the model being edited: groups, and the rest of the model while a group is open. */
+  private readonly layerGroup = new THREE.Group();
+  private layers: Layer[] = [];
+  /** How the rest of the model looks while a group is open. */
+  private readonly fadedFace = new THREE.MeshBasicMaterial({ color: THEME.faceFront, transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+  private readonly fadedEdge = new THREE.LineBasicMaterial({ color: THEME.edge, transparent: true, opacity: 0.18 });
+  private readonly layerEdge = new THREE.LineBasicMaterial({ color: THEME.edge });
+  /** Bounds of everything drawn. */
+  private sphere: THREE.Sphere | null = null;
   private readonly overlayGroup = new THREE.Group();
   private readonly guideGroup = new THREE.Group();
   private readonly lineMaterials: LineMaterial[] = [];
   private readonly svg: SVGSVGElement;
   private readonly boxEl: HTMLDivElement;
-  private overlay: Overlay = { selectedFaces: [], selectedEdges: [], selectedLabels: [], selectedGuides: [], preview: {}, snap: null };
+  private overlay: Overlay = { selectedFaces: [], selectedEdges: [], selectedLabels: [], selectedGuides: [], selectedGroups: [], preview: {}, snap: null };
   private readonly labelLayer: HTMLDivElement;
   private readonly labelEls = new Map<LabelId, HTMLDivElement>();
   private readonly headlight = new THREE.DirectionalLight(0xffffff, 1.6);
@@ -90,10 +112,7 @@ export class Viewer {
 
   constructor(
     private readonly container: HTMLElement,
-    private model: Model,
-    private guides: Guides,
-    private labels: Labels,
-    private materials: Materials,
+    private readonly doc: Document,
   ) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(window.devicePixelRatio);
@@ -118,7 +137,7 @@ export class Viewer {
     );
     this.backEdges.visible = false;
     this.backEdges.renderOrder = -1;
-    this.scene.add(this.frontMesh, this.backMesh, this.edges, this.backEdges, buildAxes(), this.guideGroup, this.overlayGroup);
+    this.scene.add(this.frontMesh, this.backMesh, this.edges, this.backEdges, this.layerGroup, buildAxes(), this.guideGroup, this.overlayGroup);
 
     this.svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     this.svg.classList.add('viewport-overlay');
@@ -136,16 +155,37 @@ export class Viewer {
     this.nav.setView('iso', this.sceneSphere()); // the starting view: nothing to go back to
   }
 
+  /** The model being edited (the tools' model). */
+  private get model(): Model {
+    return this.doc.model;
+  }
+
+  private get guides(): Guides {
+    return this.doc.guides;
+  }
+
+  private get labels(): Labels {
+    return this.doc.labels;
+  }
+
+  private get materials(): Materials {
+    return this.doc.materials;
+  }
+
   /** Rebuild the display copy from the model and guides. Call after every model change. */
   refresh(): void {
-    const data = buildDisplayData(this.model);
+    const editing = this.doc.editing;
+    const data = buildDisplayData(this.model, editing === null ? undefined : this.doc.groups.inheritedMaterial(editing));
     this.data = data;
     const g = this.frontMesh.geometry;
     g.setAttribute('position', new THREE.BufferAttribute(data.positions, 3));
     g.setAttribute('uv', new THREE.BufferAttribute(data.uvs, 2));
     g.setIndex(new THREE.BufferAttribute(data.indices, 1));
     g.computeBoundingSphere();
-    this.applyPaints(data);
+    this.applyPaints(g, data, this.frontMesh, this.backMesh);
+    this.rebuildLayers();
+    this.freeUnusedPaints();
+    this.sphere = this.computeSphere();
     const eg = this.edges.geometry;
     eg.setAttribute('position', new THREE.BufferAttribute(data.edgePositions, 3));
     eg.computeBoundingSphere();
@@ -157,8 +197,7 @@ export class Viewer {
   }
 
   /** One draw group per material; painted faces show their material on both sides. */
-  private applyPaints(data: DisplayData): void {
-    const g = this.frontMesh.geometry;
+  private applyPaints(g: THREE.BufferGeometry, data: DisplayData, frontMesh: THREE.Mesh, backMesh: THREE.Mesh): void {
     g.clearGroups();
     const front: THREE.Material[] = [this.defaultFront];
     const back: THREE.Material[] = [this.defaultBack];
@@ -172,9 +211,12 @@ export class Viewer {
       }
       g.addGroup(group.start, group.count, paint ? slot.get(group.material!)! : 0);
     }
-    this.frontMesh.material = front;
-    this.backMesh.material = back;
-    // Free materials that were deleted or replaced by an edit.
+    frontMesh.material = front;
+    backMesh.material = back;
+  }
+
+  /** Free display materials whose document material was deleted or replaced by an edit. */
+  private freeUnusedPaints(): void {
     for (const [id, p] of this.paints) {
       if (this.materials.get(id) === p.def) continue;
       this.disposePaint(p);
@@ -221,9 +263,53 @@ export class Viewer {
 
   /** Bounding sphere of the model, or a default working area around the origin when empty. */
   sceneSphere(): THREE.Sphere {
-    const s = this.frontMesh.geometry.boundingSphere;
-    if (!s || this.data?.indices.length === 0 || !Number.isFinite(s.radius)) return new THREE.Sphere(new THREE.Vector3(0, 0, 0), 1000);
-    return s.clone();
+    return this.sphere?.clone() ?? new THREE.Sphere(new THREE.Vector3(0, 0, 0), 1000);
+  }
+
+  /** Bounds of every model in the document, or null when there is no geometry. */
+  private computeSphere(): THREE.Sphere | null {
+    const b = modelBounds(this.doc.allModels());
+    if (!b) return null;
+    const box = new THREE.Box3(new THREE.Vector3(...b.min), new THREE.Vector3(...b.max));
+    const s = box.getBoundingSphere(new THREE.Sphere());
+    return Number.isFinite(s.radius) ? s : null;
+  }
+
+  /**
+   * Draw the geometry outside the model being edited: groups (inside the open group, drawn
+   * normally) and, while a group is open, the rest of the model (faded).
+   */
+  private rebuildLayers(): void {
+    for (const l of this.layers) {
+      l.front.geometry.dispose();
+      l.edges.geometry.dispose();
+    }
+    this.layerGroup.clear();
+    this.layers = [];
+    const editing = this.doc.editing;
+    const owners: (GroupId | null)[] = [null, ...this.doc.groups.items.keys()];
+    for (const owner of owners) {
+      if (owner === editing) continue;
+      const model = this.doc.modelOf(owner);
+      if (model.faces.size === 0 && model.halfEdges.size === 0) continue;
+      const faded = editing !== null && (owner === null || !this.doc.groups.isWithin(owner, editing));
+      const data = buildDisplayData(model, owner === null ? undefined : this.doc.groups.inheritedMaterial(owner));
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(data.positions, 3));
+      geo.setAttribute('uv', new THREE.BufferAttribute(data.uvs, 2));
+      geo.setIndex(new THREE.BufferAttribute(data.indices, 1));
+      geo.computeBoundingSphere();
+      const front = new THREE.Mesh(geo, faded ? this.fadedFace : [this.defaultFront]);
+      const back = new THREE.Mesh(geo, faded ? this.fadedFace : [this.defaultBack]);
+      if (!faded) this.applyPaints(geo, data, front, back);
+      else back.visible = false;
+      const edgeGeo = new THREE.BufferGeometry();
+      edgeGeo.setAttribute('position', new THREE.BufferAttribute(data.edgePositions, 3));
+      const edges = new THREE.LineSegments(edgeGeo, faded ? this.fadedEdge : this.layerEdge);
+      if (faded) front.renderOrder = edges.renderOrder = 2;
+      this.layerGroup.add(front, back, edges);
+      this.layers.push({ owner, data, front, back, edges });
+    }
   }
 
   /** Show edges hidden behind faces as dashed lines. Returns the new state. */
@@ -383,6 +469,17 @@ export class Viewer {
     const selectedEdges = [...this.overlay.selectedEdges].filter((e) => m.halfEdges.has(e));
     if (selectedEdges.length) add(this.lines(concat(selectedEdges.map((e) => edgeSegment(m, e))), this.lineMaterial(THEME.select, 3), 2));
 
+    // Groups: a box around each selected or hovered one, and a dashed one around the open group.
+    const boxLines = (ids: Iterable<GroupId>) => concat([...ids].filter((g) => this.doc.groups.has(g)).map((g) => this.groupBox(g)));
+    const selectedBoxes = boxLines(this.overlay.selectedGroups);
+    if (selectedBoxes.length) add(this.lines(selectedBoxes, this.lineMaterial(THEME.select, 2.5), 2));
+    const hoverBoxes = boxLines(preview.groups ?? []);
+    if (hoverBoxes.length) add(this.lines(hoverBoxes, this.lineMaterial(THEME.hover, 2), 2));
+    if (this.doc.editing !== null) {
+      const open = this.groupBox(this.doc.editing);
+      if (open.length) add(this.lines(open, this.lineMaterial(THEME.edge, 1.2, { dashed: true }), 2));
+    }
+
     const hoverFaces = (preview.faces ?? []).filter((f) => m.faces.has(f));
     add(this.tint(hoverFaces, THEME.hover, 0.22));
     // Outline only the visible edges, so a curved surface is not striped with its hidden seams.
@@ -423,6 +520,18 @@ export class Viewer {
       this.boxEl.classList.toggle('crossing', box.crossing);
     } else this.boxEl.style.display = 'none';
     this.requestRender();
+  }
+
+  /** The 12 edges of a group's bounding box (slightly enlarged), as flat xyz pairs. */
+  private groupBox(id: GroupId): Float32Array {
+    const b = modelBounds(this.doc.groups.subtree(id).map((g) => g.model));
+    if (!b) return new Float32Array();
+    const pad = Math.max(...b.max.map((x, i) => x - b.min[i])) * 0.01 + 0.5;
+    const lo = b.min.map((x) => x - pad);
+    const hi = b.max.map((x) => x + pad);
+    const corner = (i: number): number[] => [i & 1 ? hi[0] : lo[0], i & 2 ? hi[1] : lo[1], i & 4 ? hi[2] : lo[2]];
+    const pairs = [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]];
+    return Float32Array.from(pairs.flatMap(([a, c]) => [...corner(a), ...corner(c)]));
   }
 
   private rebuildGuides(): void {
@@ -532,12 +641,26 @@ export class Viewer {
     return [e.clientX - rect.left, e.clientY - rect.top];
   }
 
-  /** Face and edge under a viewport position (model ids and hit points). */
+  /**
+   * Face and edge under a viewport position in the model being edited (model ids and hit points),
+   * and the nearest face of other geometry (a group, or the rest of the model) if it is in front.
+   * Things of the edited model behind that are hidden.
+   */
   private hitsAt(screen: [number, number]) {
-    if (!this.data) return { face: null, edge: null };
+    if (!this.data) return { face: null, edge: null, other: null };
     const viewport = this.viewport();
     const ndc = new THREE.Vector2((screen[0] / viewport.width) * 2 - 1, -(screen[1] / viewport.height) * 2 + 1);
-    return pickHits({ camera: this.camera, ndc, viewport, faceObjects: [this.frontMesh, this.backMesh], data: this.data });
+    const hits = pickHits({ camera: this.camera, ndc, viewport, faceObjects: [this.frontMesh, this.backMesh], data: this.data });
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(ndc, this.camera);
+    const meshes = this.layers.flatMap((l) => [l.front, l.back]);
+    const hit = raycaster.intersectObjects(meshes, false).find((h) => h.faceIndex !== undefined && h.faceIndex !== null);
+    const layer = hit && this.layers.find((l) => l.front === hit.object || l.back === hit.object);
+    if (!hit || !layer || (hits.face && hits.face.distance <= hit.distance)) return { ...hits, other: null };
+    const other = { owner: layer.owner, face: layer.data.triangleFaces[hit.faceIndex!], point: [hit.point.x, hit.point.y, hit.point.z] as Vec3, distance: hit.distance };
+    // An edge of the edited model behind the other geometry is hidden by it.
+    const edge = hits.edge && hits.edge.distance <= hit.distance * (1 + 1e-3) ? hits.edge : null;
+    return { face: null, edge, other };
   }
 
   /** Pick at a viewport position and package it for the tools. */
@@ -545,7 +668,7 @@ export class Viewer {
     const ray = screenRay(this.camera, screen, this.viewport());
     const hits = this.hitsAt(screen);
     const face: PointerSample['faceHit'] = hits.face ? { face: hits.face.face, point: hits.face.point, distance: hits.face.distance } : null;
-    return { screen, ray, faceHit: face, edge: hits.edge?.edge ?? null, shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey, alt: !!e.altKey, down };
+    return { screen, ray, faceHit: face, edge: hits.edge?.edge ?? null, otherHit: hits.other, shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey, alt: !!e.altKey, down };
   }
 
   /**
@@ -558,6 +681,7 @@ export class Viewer {
     const hits = this.hitsAt(screen);
     if (hits.edge && (!hits.face || hits.edge.distance <= hits.face.distance * (1 + 1e-3))) return new THREE.Vector3(...hits.edge.point);
     if (hits.face) return new THREE.Vector3(...hits.face.point);
+    if (hits.other) return new THREE.Vector3(...hits.other.point);
     const r = screenRay(this.camera, screen, this.viewport());
     const ray = new THREE.Ray(new THREE.Vector3(...r.origin), new THREE.Vector3(...r.dir));
     const ground = ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 0, 1), 0), new THREE.Vector3());

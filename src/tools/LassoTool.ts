@@ -1,5 +1,6 @@
 import { smoothSurface } from '../core/model/surfaces';
-import { polygonSelect, screenArea } from './boxSelect';
+import { polygonSelect, polygonSelectGroups, screenArea } from './boxSelect';
+import { contextGroups } from './groupModels';
 import { guideFirst } from './SelectTool';
 import { edgeId } from './Selection';
 import type { Preview, Tool, ToolContext, ToolEvent } from './types';
@@ -58,15 +59,17 @@ export class LassoTool implements Tool {
       const faces = guide === null && e.edge === null && e.face !== null ? smoothSurface(doc.model, e.face) : [];
       const edges = guide === null && e.edge !== null ? [edgeId(doc.model, e.edge)] : [];
       const guides = guide === null ? [] : [guide];
-      if (e.shift) selection.toggle(faces, edges, guides);
-      else if (faces.length || edges.length || guides.length) selection.set(faces, edges, guides);
+      const groups = guide === null && e.edge === null && e.group !== null ? [e.group] : [];
+      if (e.shift) selection.toggle(faces, edges, guides, groups);
+      else if (faces.length || edges.length || guides.length || groups.length) selection.set(faces, edges, guides, groups);
       else selection.clear();
       return;
     }
     const crossing = screenArea(path) < 0;
     const hit = polygonSelect(doc.model, this.ctx.projector(), path, crossing, doc.guides);
-    if (e.shift) selection.toggle(hit.faces, hit.edges, hit.guides);
-    else selection.set(hit.faces, hit.edges, hit.guides);
+    const groups = polygonSelectGroups(contextGroups(doc), this.ctx.projector(), path, crossing);
+    if (e.shift) selection.toggle(hit.faces, hit.edges, hit.guides, groups);
+    else selection.set(hit.faces, hit.edges, hit.guides, groups);
   }
 
   typed(): void {

@@ -2,6 +2,8 @@ import type { FaceId, HalfEdgeId, MaterialId } from '../core/model/Model';
 import { erase } from '../core/ops/erase';
 import { inheritMaterials, unpaintMaterial } from '../core/ops/materials';
 import type { Document, DocumentSnapshot } from '../doc/Document';
+import type { GroupId } from '../doc/Groups';
+import { extractGeometry, mergeGeometry } from '../core/ops/group';
 import { History } from '../doc/History';
 import { facesWithCurveEdges, smoothSurface } from '../core/model/surfaces';
 import type { LabelId } from '../doc/Labels';
@@ -35,8 +37,14 @@ import type { AxisLock, InferenceHints, Preview, Projector, Ray, Snap, Tool, Too
 export interface PointerSample {
   screen: [number, number];
   ray: Ray;
+  /** The face hit in the model being edited, unless other geometry is in front of it. */
   faceHit: { face: FaceId; point: Vec3; distance: number } | null;
   edge: HalfEdgeId | null;
+  /**
+   * The nearest face hit in other geometry (a group, or the rest of the model while a group is
+   * open) when it is in front: `owner` is the group it belongs to (null: the top level).
+   */
+  otherHit?: { owner: GroupId | null; face: FaceId; point: Vec3; distance: number } | null;
   shift: boolean;
   ctrl: boolean;
   alt?: boolean;
@@ -94,6 +102,8 @@ export class ToolController {
         else if (answer !== false) void answer.then((ok) => ok && this.run(action));
       },
       projector,
+      enterGroup: (id) => this.enterGroup(id),
+      exitGroup: () => this.exitGroup(),
     };
     this.tools = {
       select: new SelectTool(this.ctx),
@@ -150,7 +160,8 @@ export class ToolController {
       if (base) this.doc.restore(base);
       change();
       // New faces cut from painted faces keep their paint.
-      inheritMaterials((base ?? before).model, this.doc.model);
+      const was = this.doc.editing === null ? (base ?? before).model : (base ?? before).groups.get(this.doc.editing)?.model;
+      if (was) inheritMaterials(was, this.doc.model);
       this.doc.model.validate();
     } catch (err) {
       this.doc.restore(before);
@@ -168,7 +179,7 @@ export class ToolController {
   }
 
   private afterDocumentChange(): void {
-    this.selection.prune(this.doc.model, this.doc.labels, this.doc.guides);
+    this.selection.prune(this.doc.model, this.doc.labels, this.doc.guides, (g) => this.doc.groups.get(g)?.parent === this.doc.editing);
     this.onModelChanged();
     this.onUpdate();
   }
@@ -214,7 +225,8 @@ export class ToolController {
   /** Delete a material: faces painted with it go back to the default material. */
   deleteMaterial(id: MaterialId): void {
     this.editDocument('Delete material', () => {
-      unpaintMaterial(this.doc.model, id);
+      for (const m of this.doc.allModels()) unpaintMaterial(m, id);
+      for (const g of this.doc.groups.items.values()) if (g.material === id) delete g.material;
       this.doc.materials.delete(id);
     });
     if (this.paintMaterial === id) this.setPaintMaterial(undefined);
@@ -223,7 +235,8 @@ export class ToolController {
   /** Replace the whole document (New / Open). Clears history and selection. */
   replaceDocument(next: Document): void {
     for (const t of Object.values(this.tools)) t.reset();
-    this.doc.restore(next);
+    this.doc.editing = null;
+    this.doc.restore(next.snapshot());
     this.history.clear();
     this.selection.clear();
     this.dirty = false;
@@ -287,13 +300,18 @@ export class ToolController {
   }
 
   private event(s: PointerSample): ToolEvent {
+    const other = s.otherHit ?? null;
+    const otherModel = other ? this.doc.modelOf(other.owner) : null;
+    // The face in front, whichever geometry it belongs to (it hides what is behind it).
+    const faceHit = other && otherModel && (!s.faceHit || other.distance < s.faceHit.distance) ? { face: other.face, point: other.point, distance: other.distance, model: otherModel } : s.faceHit;
     this.snap = infer({
       model: this.doc.model,
       guides: this.doc.guides,
       projector: this.projector(),
       cursor: s.screen,
       ray: s.ray,
-      faceHit: s.faceHit,
+      faceHit,
+      others: this.doc.allModels().filter((m) => m !== this.doc.model),
       hints: this.hints(),
     });
     const edge = s.edge ?? this.snap?.edge;
@@ -302,12 +320,16 @@ export class ToolController {
       const b = this.doc.model.pos(this.doc.model.dest(edge));
       if (distance(a, b) > 0) this.lastEdgeDir = normalize(sub(b, a));
     }
-    const guide = guideAt({ model: this.doc.model, guides: this.doc.guides, projector: this.projector(), cursor: s.screen, ray: s.ray, faceHit: s.faceHit });
+    const guide = guideAt({ model: this.doc.model, guides: this.doc.guides, projector: this.projector(), cursor: s.screen, ray: s.ray, faceHit });
+    const inFront = faceHit !== s.faceHit;
+    const group = inFront && other && other.owner !== null ? this.doc.groups.childOf(this.doc.editing, other.owner) : null;
     return {
       snap: this.snap,
       guide,
-      face: s.faceHit?.face ?? null,
-      facePoint: s.faceHit?.point ?? null,
+      group,
+      outside: inFront && group === null,
+      face: inFront ? null : (s.faceHit?.face ?? null),
+      facePoint: inFront ? null : (s.faceHit?.point ?? null),
       edge: s.edge,
       ray: s.ray,
       screen: s.screen,
@@ -370,7 +392,11 @@ export class ToolController {
     this.error = null;
     this.lock = null;
     this.tool.cancel();
-    if (this.tool.id === 'select') this.selection.clear();
+    if (this.tool.id === 'select') {
+      // Esc clears the selection; with nothing selected it closes the open group.
+      if (this.selection.size === 0 && this.doc.editing !== null) this.exitGroup();
+      else this.selection.clear();
+    }
     this.onUpdate();
   }
 
@@ -385,16 +411,17 @@ export class ToolController {
 
   /** Select every face and edge. */
   selectAll(): void {
-    this.selection.set(this.doc.model.faces.keys(), this.doc.model.edges());
+    this.selection.set(this.doc.model.faces.keys(), this.doc.model.edges(), [], this.doc.groups.children(this.doc.editing).map((g) => g.id));
   }
 
   deleteSelection(): void {
     if (this.selection.size === 0) return;
-    const { faces, edges, labels, guides } = this.selection;
+    const { faces, edges, labels, guides, groups } = this.selection;
     this.run(() =>
       this.apply(
         () => {
           erase(this.doc.model, [...faces], [...edges]);
+          for (const g of groups) this.doc.groups.delete(g);
           for (const l of labels) this.doc.labels.delete(l);
           for (const g of guides) this.doc.guides.delete(g);
         },
@@ -415,6 +442,102 @@ export class ToolController {
   deleteGuides(): void {
     if (this.doc.guides.items.size === 0) return;
     this.run(() => this.apply(() => this.doc.guides.clear(), undefined, null, 'Delete guides'));
+  }
+
+  /** The open group's name, or null at the top level. */
+  get editingName(): string | null {
+    return this.doc.editing === null ? null : (this.doc.groups.get(this.doc.editing)?.name ?? null);
+  }
+
+  /** Open a group (one inside the group being edited) to edit its contents. */
+  enterGroup(id: GroupId): void {
+    const g = this.doc.groups.get(id);
+    if (!g || g.parent !== this.doc.editing) return;
+    this.switchContext(id);
+    this.notice = `Editing ${g.name}. Esc (with nothing selected) or a click outside it closes the group.`;
+    this.onUpdate();
+  }
+
+  /** Close the open group: editing goes back to the group around it (or the top level), with the closed group selected. */
+  exitGroup(): void {
+    const closing = this.doc.editing;
+    if (closing === null) return;
+    this.switchContext(this.doc.groups.get(closing)?.parent ?? null);
+    if (this.doc.groups.has(closing)) this.selection.set([], [], [], [closing]);
+    this.onUpdate();
+  }
+
+  private switchContext(id: GroupId | null): void {
+    this.tool.cancel();
+    for (const t of Object.values(this.tools)) t.reset();
+    this.selection.clear();
+    this.doc.editing = id;
+    this.snap = null;
+    this.error = null;
+    this.notice = null;
+    this.onModelChanged();
+  }
+
+  /**
+   * Make a group of the selection (Ctrl+G): its faces and edges move into a group of their own,
+   * selected groups go inside it. The new group is selected.
+   */
+  makeGroup(): void {
+    const { faces, edges, groups } = this.selection;
+    if (faces.size === 0 && edges.size === 0 && groups.size === 0) {
+      this.error = 'Select what to group first (faces, edges or groups), then press Ctrl+G';
+      this.onUpdate();
+      return;
+    }
+    let id: GroupId | null = null;
+    this.run(() =>
+      this.apply(
+        () => {
+          const model = extractGeometry(this.doc.model, faces, edges);
+          id = this.doc.groups.add(model, this.doc.editing);
+          for (const g of groups) {
+            const child = this.doc.groups.get(g);
+            if (child) child.parent = id;
+          }
+        },
+        undefined,
+        null,
+        'Make group',
+      ),
+    );
+    if (id !== null) this.selection.set([], [], [], [id]);
+  }
+
+  /**
+   * Explode the selected groups: their geometry joins the geometry around it (sticking to what it
+   * touches) and groups inside them come out a level. Group paint is baked into unpainted faces.
+   */
+  explodeSelection(): void {
+    const groups = [...this.selection.groups];
+    if (!groups.length) {
+      this.error = 'Select a group to explode';
+      this.onUpdate();
+      return;
+    }
+    this.run(() =>
+      this.apply(
+        () => {
+          for (const id of groups) {
+            const g = this.doc.groups.get(id);
+            if (!g) continue;
+            mergeGeometry(this.doc.model, g.model, g.material);
+            for (const c of this.doc.groups.children(id)) {
+              c.parent = g.parent;
+              if (c.material === undefined && g.material !== undefined) c.material = g.material;
+            }
+            this.doc.groups.items.delete(id);
+          }
+        },
+        undefined,
+        null,
+        'Explode',
+      ),
+    );
   }
 
   /** Show a message in the status bar until the next action. */
@@ -441,7 +564,7 @@ export class ToolController {
         if (group.length > 1) surfaces++;
         else flat++;
       }
-      const items = [part(surfaces, 'curved surface'), part(flat, 'face'), part(edges.size, 'edge'), part(this.selection.guides.size, 'guide'), part(this.selection.labels.size, 'label')];
+      const items = [part(this.selection.groups.size, 'group'), part(surfaces, 'curved surface'), part(flat, 'face'), part(edges.size, 'edge'), part(this.selection.guides.size, 'guide'), part(this.selection.labels.size, 'label')];
       return `Selected: ${items.filter(Boolean).join(', ')}. Delete erases, Esc clears.`;
     }
     return this.tool.hint();

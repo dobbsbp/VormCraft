@@ -11,7 +11,7 @@
 ## Layout
 - `src/core` — geometry kernel (half-edge model, ops, booleans, checks). Pure TypeScript.
 - `src/view` — Three.js display. `displayData.ts` derives buffers from the model (one face id per triangle, one edge id per line segment); `picking.ts` maps hits back to model ids; `navigation.ts` is pure camera math; `Viewer.ts` is the only DOM/WebGL code. Call `viewer.refresh()` after every model change.
-- `src/doc` — `Document` (model + guides) with snapshots; what gets saved.
+- `src/doc` — `Document` (top-level model, groups, guides, labels, materials) with snapshots; what gets saved. `doc.model` is the model being edited (the open group's, else `doc.root`); tools only ever touch `doc.model`. Whole-document work (save, export, bounds, rescale) must use `doc.root` / `doc.allModels()`, not `doc.model`.
 - `src/tools` — the tools as plain state machines (`Tool` in `types.ts`), the inference/snapping engine, and `ToolController` (event routing, Measurements box input, atomic commits with rollback). No DOM or Three.js here: tools receive `ToolEvent`s (snapped point, hit face/edge, pick ray) and return a `Preview`.
 - `src/io` — export and file format. `tessellate.ts` triangulates for export and re-divides curved surfaces from the stored true radii (`maxDeviation`); `export.ts` writes binary STL (refuses non-watertight models unless `allowOpen`) and OBJ; `fileFormat.ts` is the versioned `.vorm` JSON format (bump `FORMAT_VERSION` and keep reading old versions when it changes; `.benup` files from before the rename must keep opening).
 - `src/doc/History.ts` — undo/redo as document snapshots, recorded by `ToolController.apply`.

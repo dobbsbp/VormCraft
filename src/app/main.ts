@@ -48,7 +48,7 @@ const TOOLS: { id: ToolId; icon: string; label: string }[] = [
 async function start(): Promise<void> {
   await initBooleanKernel({ wasmUrl });
   const doc = new Document();
-  const viewer = new Viewer(document.getElementById('viewport')!, doc.model, doc.guides, doc.labels, doc.materials);
+  const viewer = new Viewer(document.getElementById('viewport')!, doc);
   const controller = new ToolController(doc, () => viewer.projector());
   const files = new FileCommands(await createFileHost(), controller);
   const materials = new MaterialsPanel(document.getElementById('materials-panel')!, controller, () => setTool('paint'));
@@ -58,6 +58,8 @@ async function start(): Promise<void> {
   const nav = document.getElementById('status-hover')!;
   const vcb = document.getElementById('measurements') as HTMLInputElement;
   const vcbLabel = document.getElementById('measurements-label')!;
+  const contextBadge = document.getElementById('context-badge')!;
+  contextBadge.addEventListener('click', () => controller.exitGroup());
   nav.textContent = NAV_HINT;
 
   /** Text being typed into the Measurements box, or null when it shows the tool's value. */
@@ -86,6 +88,9 @@ async function start(): Promise<void> {
     if (typing === null) vcb.value = tool.vcbValue();
     for (const [id, b] of toolButtons) b.setAttribute('aria-pressed', String(id === tool.id));
     materials.render();
+    const editing = controller.editingName;
+    contextBadge.hidden = editing === null;
+    if (editing !== null) contextBadge.textContent = `Editing ${editing} · Close`;
     materialsButton?.setAttribute('aria-pressed', String(materials.isOpen));
     viewer.leftDragNavigation = tool.id === 'orbit' || tool.id === 'pan' || tool.id === 'zoom' ? tool.id : null;
     const { undoLabel, redoLabel } = controller.history;
@@ -106,6 +111,7 @@ async function start(): Promise<void> {
       selectedEdges: controller.selection.edges,
       selectedLabels: controller.selection.labels,
       selectedGuides: controller.selection.guides,
+      selectedGroups: controller.selection.groups,
       preview: controller.preview(),
       snap: ['select', 'lasso', 'zoomWindow', 'paint', 'followMe'].includes(tool.id) ? null : controller.snap,
     });
@@ -180,6 +186,7 @@ async function start(): Promise<void> {
         s: () => void files.save(e.shiftKey),
         o: () => void files.open(),
         n: () => void files.newDocument(),
+        g: () => controller.makeGroup(),
       };
       if (command[lower]) {
         e.preventDefault();
@@ -256,6 +263,13 @@ async function guardUnsavedChanges(controller: ToolController, files: FileComman
   });
 }
 
+/** Open the selected group for editing (the same as double-clicking it). */
+function editSelectedGroup(controller: ToolController): void {
+  const [id] = controller.selection.groups;
+  if (id === undefined) controller.notify('Select a group to edit (or double-click it)');
+  else controller.enterGroup(id);
+}
+
 /** Back to the view before the last orbit, pan, zoom or standard view. */
 function previousView(viewer: Viewer, controller: ToolController): void {
   if (!viewer.previousView()) controller.notify('No previous view');
@@ -289,6 +303,10 @@ function commandList(viewer: Viewer, controller: ToolController, files: FileComm
     { id: 'edit:redo', name: 'Redo', keywords: ['edit'], shortcut: 'Ctrl+Y', run: () => controller.redo() },
     { id: 'edit:selectall', name: 'Select All', keywords: ['edit', 'selection'], run: () => controller.selectAll() },
     { id: 'edit:delete', name: 'Delete Selection', keywords: ['edit', 'erase', 'remove'], shortcut: 'Delete', run: () => controller.deleteSelection() },
+    { id: 'group:make', name: 'Make Group', keywords: ['group', 'combine'], shortcut: 'Ctrl+G', run: () => controller.makeGroup() },
+    { id: 'group:explode', name: 'Explode Group', keywords: ['group', 'ungroup', 'explode'], run: () => controller.explodeSelection() },
+    { id: 'group:edit', name: 'Edit Group', keywords: ['group', 'open', 'enter'], run: () => editSelectedGroup(controller) },
+    { id: 'group:close', name: 'Close Group', keywords: ['group', 'exit', 'leave'], run: () => controller.exitGroup() },
     { id: 'view:extents', name: 'Zoom Extents', keywords: ['camera', 'fit'], shortcut: 'Shift+Z', run: () => viewer.zoomExtents() },
     { id: 'view:previous', name: 'Previous View', keywords: ['camera', 'back', 'undo view'], shortcut: 'Shift+V', run: () => previousView(viewer, controller) },
     ...views,

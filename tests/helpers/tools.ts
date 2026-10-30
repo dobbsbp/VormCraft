@@ -19,6 +19,8 @@ export interface EventOptions {
   ray?: Ray;
   /** A guide under the cursor. */
   guide?: { id: number; kind: 'line' | 'point' } | null;
+  /** A group under the cursor (in front of `face`). */
+  group?: number | null;
   shift?: boolean;
   down?: boolean;
   /** Snap point if different from the cursor point. */
@@ -37,6 +39,8 @@ export function ev(doc: Document, p: Vec3, o: EventOptions = {}): ToolEvent {
   return {
     snap,
     guide: o.guide ?? null,
+    group: o.group ?? null,
+    outside: false,
     face,
     facePoint: face !== null ? p : null,
     edge: o.edge ?? null,

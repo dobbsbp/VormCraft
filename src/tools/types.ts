@@ -2,6 +2,7 @@ import type { Plane } from '../core/math/plane';
 import type { Vec3 } from '../core/math/vec3';
 import type { FaceId, HalfEdgeId } from '../core/model/Model';
 import type { Document, DocumentSnapshot } from '../doc/Document';
+import type { GroupId } from '../doc/Groups';
 import type { GuideId } from '../doc/Guides';
 import type { Selection } from './Selection';
 
@@ -32,6 +33,11 @@ export interface Snap {
   from?: Vec3;
   /** Set when the point is held on a line by an arrow-key lock. */
   locked?: boolean;
+  /**
+   * Normal of the surface the point lies on when that surface is not in the model being edited
+   * (a group's face): drawing there uses its plane.
+   */
+  normal?: Vec3;
 }
 
 export type Vec3Pair = [Vec3, Vec3];
@@ -55,6 +61,10 @@ export interface ToolEvent {
   facePoint: Vec3 | null;
   /** Edge under the cursor (within the pick tolerance), if any. */
   edge: HalfEdgeId | null;
+  /** Group under the cursor (one directly inside the group being edited), if any. */
+  group: GroupId | null;
+  /** The cursor is over geometry outside the group being edited (clicking it closes the group). */
+  outside: boolean;
   /** Guide under the cursor (guide points win over guide lines), if any. */
   guide: { id: GuideId; kind: 'line' | 'point' } | null;
   ray: Ray;
@@ -104,6 +114,8 @@ export interface Preview {
   /** Faces to tint (e.g. the face under the Push/Pull cursor). */
   faces?: FaceId[];
   edges?: HalfEdgeId[];
+  /** Groups to highlight (e.g. the one under the Select cursor). */
+  groups?: GroupId[];
   /** Guides to highlight (e.g. the one under the Select cursor). */
   guides?: GuideId[];
   /** Screen-space selection rectangle (Select tool box drag). */
@@ -128,6 +140,10 @@ export interface ToolContext {
    */
   confirm(message: string, action: () => void): void;
   projector(): Projector;
+  /** Open a group (inside the one being edited) to edit its contents. */
+  enterGroup(id: GroupId): void;
+  /** Close the group being edited (back to the group around it, or the top level). */
+  exitGroup(): void;
 }
 
 export type ToolId =

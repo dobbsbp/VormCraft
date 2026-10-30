@@ -1,6 +1,5 @@
-import { checkWatertight } from '../core/check/watertight';
 import { Document } from '../doc/Document';
-import { exportObj, exportStl } from '../io/export';
+import { checkWatertightAll, exportObj, exportStl } from '../io/export';
 import { FILE_EXTENSION, OLD_FILE_EXTENSIONS, parseDocument, serializeDocument } from '../io/fileFormat';
 import type { ToolController } from '../tools/ToolController';
 import { confirmDialog, showExportDialog } from './dialogs';
@@ -72,8 +71,9 @@ export class FileCommands {
   }
 
   async exportStl(): Promise<void> {
-    const model = this.controller.doc.model;
-    const choice = await showExportDialog('STL', checkWatertight(model));
+    // The whole model (every group too), wherever editing is.
+    const model = this.controller.doc.allModels();
+    const choice = await showExportDialog('STL', checkWatertightAll(model));
     if (!choice) return;
     await this.guard(async () => {
       const { data, triangles } = exportStl(model, choice);
@@ -83,8 +83,8 @@ export class FileCommands {
   }
 
   async exportObj(): Promise<void> {
-    const model = this.controller.doc.model;
-    const choice = await showExportDialog('OBJ', checkWatertight(model));
+    const model = this.controller.doc.allModels();
+    const choice = await showExportDialog('OBJ', checkWatertightAll(model));
     if (!choice) return;
     await this.guard(async () => {
       const text = exportObj(model, choice, this.name);

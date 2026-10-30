@@ -157,7 +157,7 @@ describe('file format', () => {
     doc.model.setEdgeSoft(a, b, true);
     doc.model.setEdgeSoft(b, c, false);
     const text = serializeDocument(doc);
-    expect(JSON.parse(text).version).toBe(2);
+    expect(JSON.parse(text).version).toBe(3);
     const back = parseDocument(text).model;
     const soft = (p: number, q: number) => back.he(back.halfEdgeBetween(p, q)!).soft;
     expect([soft(a, b), soft(b, c), soft(c, d)]).toEqual([true, false, undefined]);

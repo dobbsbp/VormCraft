@@ -28,6 +28,12 @@ VormCraft is a push/pull 3D modeling program for woodworking, architecture sketc
 - **Eraser**, **Tape Measure** (measure, place guides, rescale the model) and **Text** labels.
 - Curves keep their true radius, so circles and arcs export smoothly at any resolution.
 
+### Groups
+- Select geometry and press **Ctrl+G** to make a group. A group keeps its geometry to itself, so it never sticks to or merges with anything it touches, and groups can hold other groups.
+- A group selects, moves, rotates, scales, copies and paints as one piece.
+- Double-click a group to edit what's inside it; the rest of the model fades while you work. Press Esc (or click outside it) to close it.
+- **Explode Group** (in the Search box, Shift+S) turns a group back into loose geometry.
+
 ### Inference snapping
 - Snaps to endpoints, midpoints, edges, faces, guide intersections and the red, green and blue axes, with a visual cue for each.
 - Arrow keys lock to an axis (→ red, ← green, ↑ blue, ↓ parallel or perpendicular to the last edge).
@@ -73,7 +79,8 @@ Standard views (top, front, iso, …), Zoom Window, Previous View and back-edge 
 | T | Tape Measure | B | Paint Bucket |
 | O / H / Z | Orbit / Pan / Zoom | Shift+W | Zoom Window |
 | Shift+V | Previous View | K | Back Edges |
-| Shift+S | Search commands | Ctrl+Z / Ctrl+Y | Undo / Redo |
+| Shift+S | Search commands | Ctrl+G | Make Group |
+| Ctrl+Z / Ctrl+Y | Undo / Redo | | |
 | Ctrl+N / O / S | New / Open / Save | Ctrl+Shift+S | Save As |
 
 ---
@@ -133,7 +140,7 @@ Features are added as real use calls for them. Ideas on the list:
 
 - Windows 11 installer on the Releases page
 - Dimensions, Section Planes
-- Groups and components
+- Components (reusable, linked copies)
 - STEP export (true curves, through OpenCascade)
 - Exporting materials with OBJ
 

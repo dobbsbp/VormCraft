@@ -13,8 +13,16 @@ export interface InferenceInput {
   /** Cursor in CSS pixels. */
   cursor: [number, number];
   ray: Ray;
-  /** The face hit by the pick ray (not considering edges). Things behind it are hidden. */
-  faceHit: { face: FaceId; point: Vec3; distance: number } | null;
+  /**
+   * The face hit by the pick ray (not considering edges). Things behind it are hidden. `model` is
+   * set when the face belongs to other geometry than `model` (a group's face).
+   */
+  faceHit: { face: FaceId; point: Vec3; distance: number; model?: Model } | null;
+  /**
+   * Geometry outside `model` that can still be snapped to (groups, and the rest of the model while
+   * a group is open). Its points snap; its ids are not reported.
+   */
+  others?: readonly Model[];
   hints?: InferenceHints;
   /** Pixel radius for point snaps (endpoints, midpoints, guide points). */
   pointTolerancePx?: number;
@@ -32,7 +40,7 @@ export interface InferenceInput {
  */
 export function visibilityTest(model: Model, ray: Ray, faceHit: InferenceInput['faceHit']): (p: Vec3) => boolean {
   const occluder = faceHit?.distance ?? Infinity;
-  const occluderPlane = faceHit ? model.facePlane(faceHit.face) : null;
+  const occluderPlane = faceHit ? (faceHit.model ?? model).facePlane(faceHit.face) : null;
   const towardCamera = occluderPlane && dot(occluderPlane.normal, ray.dir) > 0 ? -1 : 1;
   return (p: Vec3) => {
     if (dot(sub(p, ray.origin), ray.dir) <= occluder) return true;
@@ -84,15 +92,18 @@ export function infer(input: InferenceInput): Snap | null {
     if (!prev || d < prev.px) found.set(snap.kind, { snap, px: d });
   };
 
-  for (const v of model.vertices.values()) {
-    if (model.outgoing(v.id).size > 0) offer({ kind: 'endpoint', point: v.pos }, pointTol);
-  }
-  for (const e of model.edges()) {
-    const a = model.pos(model.he(e).origin);
-    const b = model.pos(model.dest(e));
-    offer({ kind: 'midpoint', point: scale(add(a, b), 0.5), edge: e }, pointTol);
-    const on = closestRaySegment(ray, a, b);
-    if (on) offer({ kind: 'onEdge', point: on, edge: e }, lineTol);
+  for (const m of [model, ...(input.others ?? [])]) {
+    const own = m === model;
+    for (const v of m.vertices.values()) {
+      if (m.outgoing(v.id).size > 0) offer({ kind: 'endpoint', point: v.pos }, pointTol);
+    }
+    for (const e of m.edges()) {
+      const a = m.pos(m.he(e).origin);
+      const b = m.pos(m.dest(e));
+      offer({ kind: 'midpoint', point: scale(add(a, b), 0.5), ...(own ? { edge: e } : {}) }, pointTol);
+      const on = closestRaySegment(ray, a, b);
+      if (on) offer({ kind: 'onEdge', point: on, ...(own ? { edge: e } : {}) }, lineTol);
+    }
   }
 
   if (guides.visible) {
@@ -126,7 +137,12 @@ export function infer(input: InferenceInput): Snap | null {
     if (on && on.t > 0 && distance(on.point, axisFrom) > TOL) offer({ kind: 'axis', point: on.point, axis: i as 0 | 1 | 2, from: axisFrom }, lineTol);
   });
 
-  if (faceHit) found.set('onFace', { snap: { kind: 'onFace', point: faceHit.point, face: faceHit.face }, px: 0 });
+  if (faceHit) {
+    const onFace: Snap = faceHit.model
+      ? { kind: 'onFace', point: faceHit.point, normal: faceHit.model.face(faceHit.face).normal }
+      : { kind: 'onFace', point: faceHit.point, face: faceHit.face };
+    found.set('onFace', { snap: onFace, px: 0 });
+  }
   const ground = rayPlane(ray, GROUND_PLANE);
   if (ground) found.set('ground', { snap: { kind: 'ground', point: ground }, px: 0 });
 

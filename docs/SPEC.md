@@ -55,6 +55,12 @@ Use our own icons and assets, and copy nothing from SketchUp.
 - Click paints a face (a whole curved surface; all selected faces if the clicked face is selected). Shift: every face with the same paint. Ctrl: connected faces with the same paint. Alt: pick up a face's paint.
 - Paint follows the geometry: faces split from a painted face, and pushed or moved faces, keep their paint.
 - Materials panel: materials in the model, a library of colours and textures (our own artwork), and an editor (name, colour, opacity, texture image and tile size).
+### Groups
+- Select geometry and press Ctrl+G (Make Group): it moves into a group with geometry of its own, so it never sticks to or merges with anything outside it. Selected groups go inside the new group (groups can hold groups).
+- A group selects, moves, rotates, scales, copies, erases and paints as one piece. Painting a group colours its faces that have no paint of their own.
+- Double-click a group to edit its contents with every tool; the rest of the model is faded. Esc (with nothing selected), a click outside it, or the Close badge closes it.
+- Explode Group (Search) puts a group's geometry back into the geometry around it, joining it up where it touches.
+- Groups are saved in the file and included in STL and OBJ export.
 ### Export
 - STL (binary): watertight check before export, with adjustable curve resolution.
 - OBJ
@@ -67,7 +73,7 @@ Use our own icons and assets, and copy nothing from SketchUp.
 - **Phase 4: Export and App** — STL and OBJ export, save and open in our own file format, undo and redo, Tauri desktop build.
 
 ## Out of Scope (v1)
-Parametric history, constraints, components and groups (revisit in v2), SKP import, exporting materials.
+Parametric history, constraints, components (revisit in v2), SKP import, exporting materials.
 
 ## Notes for Claude Code
 - Read this spec before every task.

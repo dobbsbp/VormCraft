@@ -17,7 +17,8 @@ export interface Placement {
 /**
  * Where a drawing tool's first click lands: on the face under the cursor (when the inferred point
  * lies on its plane, including on its edges and corners), else on a face containing the point,
- * else on a plane parallel to the ground through the point.
+ * else on the plane of a group's face under the cursor, else on a plane parallel to the ground
+ * through the point.
  */
 export function placementAt(model: Model, e: ToolEvent): Placement | null {
   const point = e.snap?.point;
@@ -28,6 +29,7 @@ export function placementAt(model: Model, e: ToolEvent): Placement | null {
   if (onPlaneOf(e.snap?.face)) host = e.snap!.face;
   else if (onPlaneOf(e.face)) host = e.face!;
   else host = findFaceAt(model, point);
-  const normal: Vec3 = host !== undefined ? model.face(host).normal : [0, 0, 1];
+  // A group's face (not in this model) still gives its plane to draw on.
+  const normal: Vec3 = host !== undefined ? model.face(host).normal : (e.snap?.normal ?? [0, 0, 1]);
   return { point, plane: drawingPlane(point, normal), host };
 }

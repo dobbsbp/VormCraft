@@ -2,6 +2,7 @@ import { TOL } from '../core/math/tolerance';
 import { add, distance, dot, length, normalize, scale, sub, type Vec3 } from '../core/math/vec3';
 import { scaling } from '../core/ops/transform';
 import type { Document, DocumentSnapshot } from '../doc/Document';
+import { transformModel } from '../core/ops/group';
 import { applyToTargets } from './targets';
 import type { InferenceHints, Preview, SnapKind, Tool, ToolContext, ToolEvent } from './types';
 import { formatLength, parseLength } from './units';
@@ -177,8 +178,11 @@ function withLength(m: Measure, d: number): Measure {
 /** Scale everything (geometry, guides, labels) about the origin by `factor`. */
 export function rescaleDocument(doc: Document, factor: number): void {
   if (!(factor > 0)) throw new Error('The new length must be more than zero');
-  const targets = { vertices: new Set(doc.model.vertices.keys()), labels: [...doc.labels.items.keys()], guides: [...doc.guides.items.keys()] };
-  applyToTargets(doc, targets, [scaling([0, 0, 0], [factor, factor, factor])], false);
+  const a = scaling([0, 0, 0], [factor, factor, factor]);
+  // Every group too, wherever editing is: the whole model changes size.
+  for (const m of doc.allModels()) if (m !== doc.model) transformModel(m, a);
+  const targets = { vertices: new Set(doc.model.vertices.keys()), labels: [...doc.labels.items.keys()], guides: [...doc.guides.items.keys()], groups: [] };
+  applyToTargets(doc, targets, [a], false);
 }
 
 const formatFactor = (f: number) => `×${Math.round(f * 10000) / 10000}`;

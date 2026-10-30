@@ -45,10 +45,11 @@ export function faceUVAxes(normal: Vec3): { u: Vec3; v: Vec3 } {
   return { u, v: cross(normal, u) };
 }
 
-export function buildDisplayData(model: Model): DisplayData {
+/** `fallback`: paint for faces without their own (a group's paint). */
+export function buildDisplayData(model: Model, fallback?: MaterialId): DisplayData {
   const byMaterial = new Map<MaterialId | null, FaceId[]>();
   for (const f of model.faces.values()) {
-    const key = f.material ?? null;
+    const key = f.material ?? fallback ?? null;
     if (!byMaterial.has(key)) byMaterial.set(key, []);
     byMaterial.get(key)!.push(f.id);
   }

@@ -1,7 +1,9 @@
 import type { FaceId, HalfEdgeId } from '../core/model/Model';
+import type { GroupId } from '../doc/Groups';
 import type { GuideId } from '../doc/Guides';
 import { smoothSurface, surfaceOutline } from '../core/model/surfaces';
-import { boxSelect } from './boxSelect';
+import { boxSelect, polygonSelectGroups, rectPolygon } from './boxSelect';
+import { contextGroups } from './groupModels';
 import { edgeId } from './Selection';
 import type { Preview, Tool, ToolContext, ToolEvent } from './types';
 
@@ -9,7 +11,8 @@ import type { Preview, Tool, ToolContext, ToolEvent } from './types';
  * Select: click a face or edge (Shift adds/removes), drag a box (left→right: fully inside;
  * right→left: touching), double-click a face for the face plus its edges, double-click an edge for
  * the edge plus its faces, triple-click for everything connected. A facet of a curved surface
- * (a cylinder wall, say) selects and highlights the whole surface.
+ * (a cylinder wall, say) selects and highlights the whole surface. A group selects as one piece;
+ * double-click it to edit its contents, and click outside it (or press Esc) to close it again.
  */
 export class SelectTool implements Tool {
   readonly id = 'select';
@@ -19,12 +22,13 @@ export class SelectTool implements Tool {
   private hoverFace: FaceId | null = null;
   private hoverEdge: HalfEdgeId | null = null;
   private hoverGuide: GuideId | null = null;
+  private hoverGroup: GroupId | null = null;
   private lastDouble: { time: number; screen: [number, number] } | null = null;
 
   constructor(private readonly ctx: ToolContext) {}
 
   hint(): string {
-    return 'Click or drag to select (faces, edges, guides). Shift = add/remove. Double-click a face: face and its edges. Delete erases.';
+    return 'Click or drag to select (faces, edges, groups, guides). Shift = add/remove. Double-click a face: face and its edges; a group: edit it. Delete erases.';
   }
 
   vcbLabel(): string {
@@ -42,6 +46,7 @@ export class SelectTool implements Tool {
   pointerMove(e: ToolEvent): void {
     this.hoverGuide = guideFirst(e);
     this.hoverEdge = this.hoverGuide === null && e.edge !== null ? edgeId(this.ctx.doc.model, e.edge) : null;
+    this.hoverGroup = this.hoverGuide === null && this.hoverEdge === null ? e.group : null;
     this.hoverFace = this.hoverGuide === null && this.hoverEdge === null ? e.face : null;
     if (this.press && e.down) {
       const [x, y] = this.press.screen;
@@ -59,14 +64,20 @@ export class SelectTool implements Tool {
     if (this.box) {
       const crossing = this.box.to[0] < this.box.from[0];
       const hit = boxSelect(doc.model, this.ctx.projector(), this.box, crossing, doc.guides);
-      if (e.shift) selection.toggle(hit.faces, hit.edges, hit.guides);
-      else selection.set(hit.faces, hit.edges, hit.guides);
+      const groups = polygonSelectGroups(contextGroups(doc), this.ctx.projector(), rectPolygon(this.box), crossing);
+      if (e.shift) selection.toggle(hit.faces, hit.edges, hit.guides, groups);
+      else selection.set(hit.faces, hit.edges, hit.guides, groups);
     } else if (this.press) {
       // A click right after a double-click at the same spot is a triple-click.
       const guide = guideFirst(e);
       if (guide !== null) {
         if (e.shift) selection.toggle([], [], [guide]);
         else selection.set([], [], [guide]);
+      } else if (e.group !== null && e.edge === null) {
+        if (e.shift) selection.toggle([], [], [], [e.group]);
+        else selection.set([], [], [], [e.group]);
+      } else if (e.outside && e.edge === null) {
+        this.ctx.exitGroup();
       } else if (this.lastDouble && performanceNow() - this.lastDouble.time < 400 && near(this.lastDouble.screen, e.screen)) {
         this.selectConnected(e);
       } else {
@@ -95,6 +106,10 @@ export class SelectTool implements Tool {
     let faces: FaceId[] = [];
     let edges: HalfEdgeId[] = [];
     if (guideFirst(e) !== null) return; // the click already selected the guide
+    if (e.group !== null && e.edge === null) {
+      this.ctx.enterGroup(e.group);
+      return;
+    }
     if (e.edge !== null) {
       edges = [edgeId(model, e.edge)];
       faces = [model.faceOf(e.edge), model.faceOf(model.he(e.edge).twin)].filter((f): f is FaceId => f !== null);
@@ -137,6 +152,7 @@ export class SelectTool implements Tool {
     if (this.box) p.box = { from: this.box.from, to: this.box.to, crossing: this.box.to[0] < this.box.from[0] };
     else if (this.hoverGuide !== null) p.guides = [this.hoverGuide];
     else if (this.hoverEdge !== null) p.edges = [this.hoverEdge];
+    else if (this.hoverGroup !== null) p.groups = [this.hoverGroup];
     else if (this.hoverFace !== null && this.ctx.doc.model.faces.has(this.hoverFace)) p.faces = smoothSurface(this.ctx.doc.model, this.hoverFace);
     return p;
   }
