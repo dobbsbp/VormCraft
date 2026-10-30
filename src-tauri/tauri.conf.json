@@ -63,7 +63,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "REPLACE_WITH_UPDATER_PUBLIC_KEY",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDdBRURCODZDRjYwNTM3MDcKUldRSE53WDJiTGp0ZXQwMW5zZUJqYjlQYWo1YzZUMkdTRGF6RGhYc0dNVzNPUTdkZXhZOFdsVE4K",
       "endpoints": [
         "https://github.com/dobbsbp/VormCraft/releases/latest/download/latest.json"
       ],
