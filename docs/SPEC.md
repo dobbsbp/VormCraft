@@ -76,6 +76,15 @@ Use our own icons and assets, and copy nothing from SketchUp.
 - Scenes panel: list (click to go, double-click to rename, arrows to reorder, ✕ to delete), Add scene, Update (overwrite with the current view, keeping name and place), Play/Stop, timings. Tabs along the top of the viewport go to a scene in one click; Page Up / Page Down step through them.
 - Slideshow: plays the scenes in order, gliding for the transition time and staying for the delay, looping until Esc or a click.
 - Not yet captured (the features do not exist yet): tags/layers, section planes, sun/shadows, fog.
+### Autosave, history and settings
+- Autosave every N minutes (default 1) when the design changed: records a version and writes a recovery copy (`<name>-<hash>.autosave.vorm`) to the backup folder (default: the app's local data folder; browser: IndexedDB). The design's own file is never written by autosave. The copy is removed when the design is saved or its changes discarded; copies left at startup are offered back (newest first) and deleted after N days (default 14).
+- History: versions of the whole document (gzip, base64, textures stored once by hash) recorded at each autosave, save, open (if the file has none) and restore; identical states are not recorded twice. Thinned: all from the last day, newest per hour for a week, newest per day before that; trimmed to a size limit (default 25 MB). Saved in the .vorm file (format 5); a damaged history never stops the design opening.
+- Looking at a version is read-only (tools, undo and redo are refused; Esc or Back to now returns). Restoring records the current design first, then replaces the document as one undo step.
+- Settings (stored on the computer, kept across updates): autosave on/off and minutes, backup folder, keep-for days, history on/off and size limit, check for updates at startup.
+### Desktop app, updates and compatibility
+- Windows installer (NSIS, per-user, no admin), built by GitHub Actions from a version tag; `.vorm` files open with a double-click. Updates: the Tauri updater reads `latest.json` from the newest GitHub Release, checks at startup (Settings) and on request, shows the CHANGELOG notes, installs and restarts. Updates are signed; the private key is a repository secret. The app identifier `app.vormcraft.modeler` must never change (settings live under it).
+- Graphics: WebGL through WebView2 (Direct3D 11); asks for the high-performance GPU, warns when only a software renderer is available, redraws after a graphics driver reset. About shows the version and GPU.
+- Every older file format keeps opening (sample file per format version in `tests/fixtures`, tested). Files from a newer version are refused with an offer to update. The first save over an older-format file keeps a copy of the original.
 ### Export
 - STL (binary): watertight check before export, with adjustable curve resolution.
 - OBJ

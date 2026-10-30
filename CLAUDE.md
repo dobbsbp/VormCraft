@@ -11,13 +11,19 @@
 ## Layout
 - `src/core` — geometry kernel (half-edge model, ops, booleans, checks). Pure TypeScript.
 - `src/view` — Three.js display. `displayData.ts` derives buffers from the model (one face id per triangle, one edge id per line segment); `picking.ts` maps hits back to model ids; `navigation.ts` is pure camera math; `Viewer.ts` is the only DOM/WebGL code. Call `viewer.refresh()` after every model change.
-- `src/doc` — `Document` (top-level model, groups, guides, labels, materials) with snapshots; what gets saved. Scenes (`src/doc/Scenes.ts`) are saved views; they talk to the viewport only through the `SceneView` interface (the `Viewer` implements it), so they are testable with a stand-in. `doc.model` is the model being edited (the open group's, else `doc.root`); tools only ever touch `doc.model`. Whole-document work (save, export, bounds, rescale) must use `doc.root` / `doc.allModels()`, not `doc.model`.
+- `src/doc` — `Document` (top-level model, groups, guides, labels, materials, scenes) with snapshots; what gets saved. `doc.versions` (the design's history, `Versions.ts`) is saved too but is not part of undo snapshots. Scenes (`src/doc/Scenes.ts`) are saved views; they talk to the viewport only through the `SceneView` interface (the `Viewer` implements it), so they are testable with a stand-in. `doc.model` is the model being edited (the open group's, else `doc.root`); tools only ever touch `doc.model`. Whole-document work (save, export, bounds, rescale) must use `doc.root` / `doc.allModels()`, not `doc.model`.
 - `src/tools` — the tools as plain state machines (`Tool` in `types.ts`), the inference/snapping engine, and `ToolController` (event routing, Measurements box input, atomic commits with rollback). No DOM or Three.js here: tools receive `ToolEvent`s (snapped point, hit face/edge, pick ray) and return a `Preview`.
 - `src/io` — export and file format. `tessellate.ts` triangulates for export and re-divides curved surfaces from the stored true radii (`maxDeviation`); `export.ts` writes binary STL (refuses non-watertight models unless `allowOpen`) and OBJ; `fileFormat.ts` is the versioned `.vorm` JSON format (bump `FORMAT_VERSION` and keep reading old versions when it changes; `.benup` files from before the rename must keep opening).
 - `src/doc/History.ts` — undo/redo as document snapshots, recorded by `ToolController.apply`.
-- `src-tauri` — the Tauri desktop shell (native dialogs + file access only; capabilities in `src-tauri/capabilities/default.json`). `src/app/files.ts` hides browser vs desktop file handling.
+- `src-tauri` — the Tauri desktop shell: native dialogs, file access (models and autosave backups), the updater, and `launch_file` (a .vorm double-clicked in Explorer); capabilities in `src-tauri/capabilities/default.json`. `src/app/files.ts` hides browser vs desktop file handling; `src/app/backups.ts` the backup folder.
 - `src/app` — app shell (toolbar, status bar, Measurements box), icons (our own SVGs), demo model.
 - `tests` — Vitest, Node environment. View logic is tested with Three.js math/raycasting, no WebGL.
+
+## Releases and compatibility
+- Version: `npm run version:set -- x.y.z` (package.json, Cargo.toml, tauri.conf.json), a `## x.y.z` section in `CHANGELOG.md` (shown in the update prompt), then tag `vx.y.z`; `.github/workflows/release.yml` builds and publishes. See `docs/RELEASING.md`.
+- File format changes: bump `FORMAT_VERSION`, keep reading older versions, add `tests/fixtures/format-vN.vorm` and its case in `tests/compatibility.test.ts`. Never edit or delete existing fixtures.
+- Never change the app identifier `app.vormcraft.modeler`.
+- `src/app/lifecycle.ts` owns settings, autosave/recovery, updates and About; `src/io/versions.ts` the design history.
 
 ## Commands
 - `npm run dev` — Vite dev server. `npm run build` — typecheck + production build.

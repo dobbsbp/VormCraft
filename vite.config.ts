@@ -1,7 +1,12 @@
 import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
 import { defineConfig } from 'vite';
 
+const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string };
+
 export default defineConfig({
+  // The app's version (from package.json), shown in About and compared with releases.
+  define: { __APP_VERSION__: JSON.stringify(pkg.version) },
   resolve: {
     // Manifold's loader imports node:module only under Node; the browser gets a stub.
     alias: { 'node:module': fileURLToPath(new URL('./src/shims/node-module.ts', import.meta.url)) },

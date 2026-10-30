@@ -6,7 +6,15 @@ VormCraft is a push/pull 3D modeling program for woodworking, architecture sketc
 
 ![VormCraft with grouped, painted objects, scene tabs along the top and the Scenes panel open](docs/screenshot.jpg)
 
-> **Status:** early (v0.1) and under active development. The modeling core is solid and well tested. New features are added as the program gets used. A Windows 11 installer will be published on the [Releases](../../releases) page. Until then, run it from source (see below).
+> **Status:** early and under active development. The modeling core is solid and well tested, and new features are added as the program gets used.
+
+## Download
+
+Get the Windows installer (`VormCraft_x.y.z_x64-setup.exe`) from the [Releases](../../releases) page. It installs for your user account (no administrator rights needed) and makes `.vorm` files open with a double-click. Windows 11 has everything it needs; on Windows 10 the installer fetches Microsoft's WebView2 if it is missing.
+
+The installer is not code-signed yet, so the first time Windows may say "Windows protected your PC": click **More info → Run anyway**.
+
+VormCraft checks for a new version when it starts and installs it with one click (**Install and restart**). You can also use **Check for Updates** in Settings or the Search box.
 
 ---
 
@@ -60,8 +68,15 @@ Right-click anything to select it and get a menu for it:
 - Snaps to endpoints, midpoints, edges, faces, guide intersections and the red, green and blue axes, with a visual cue for each. Groups' corners and edges snap too.
 - Arrow keys lock to an axis (→ red, ← green, ↑ blue, ↓ parallel or perpendicular to the last edge).
 
+### Autosave and history
+- **Autosave** every minute (when something changed) to a backup folder. Your own file only changes when you save. If VormCraft closes without saving, it offers your work back next time.
+- **History:** every design keeps its earlier versions (recorded at each autosave and save, compressed, inside the `.vorm` file). Open **History**, click a version to look at it, then **Restore this version** or go **Back to now**. Restoring never loses anything: what you had stays in the list, and Undo works too.
+- Older versions are thinned out over time (everything from the last day, one per hour for a week, then one per day) and the history has a size limit.
+- **Save a Copy Without History** for sending a design to someone.
+- **Settings** (gear button): autosave on/off and how often, the backup folder, how long unrecovered backups are kept, history on/off and its size limit, update checks.
+
 ### Files and export
-- Saves to its own `.vorm` file format, including groups, materials and scenes. Older files keep opening as the format evolves, including `.benup` files from before the rename.
+- Saves to its own `.vorm` file format, including groups, materials, scenes and history. Files from every earlier version keep opening (each format version is tested), including `.benup` files from before the rename. The first save over an older-format file keeps a backup of the original.
 - **STL** (binary) export with a watertight check and adjustable curve resolution, for 3D printing.
 - **OBJ** export.
 - Unlimited undo and redo.
@@ -102,7 +117,7 @@ Standard views (top, front, iso, …), Zoom Window, Previous View, display style
 | Ctrl+G | Make Group | Esc | Cancel / clear selection / close group |
 | Delete | Erase selection | Page Down / Page Up | Next / previous scene |
 | Ctrl+Z / Ctrl+Y | Undo / Redo | Ctrl+N / O / S | New / Open / Save |
-| Ctrl+Shift+S | Save As | | |
+| Ctrl+Shift+S | Save As | Esc | Leave an earlier version (History) |
 
 ---
 
@@ -134,6 +149,8 @@ npm run desktop:dev      # desktop window against the dev server
 npm run desktop:build    # installer in src-tauri/target/release/bundle/nsis/
 ```
 
+Releases are built by GitHub Actions when a version tag is pushed: see [docs/RELEASING.md](docs/RELEASING.md).
+
 ---
 
 ## How it works
@@ -159,7 +176,6 @@ Units are millimetres, and Z is up (red = X, green = Y, blue = Z). The full desi
 
 Features are added as real use calls for them. Ideas on the list:
 
-- Windows 11 installer on the Releases page
 - Dimensions, section planes, tags/layers, shadows (scenes will save these too)
 - Components (reusable, linked copies) and locking groups
 - A field-of-view control

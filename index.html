@@ -13,13 +13,16 @@
       <main class="viewport" id="viewport">
         <nav class="scene-tabs" id="scene-tabs" aria-label="Scenes" hidden></nav>
         <button type="button" class="context-badge" id="context-badge" title="Close the group (Esc)" hidden></button>
+        <div class="preview-bar" id="preview-bar" role="status" hidden></div>
       </main>
       <aside class="side-panel" id="materials-panel" aria-label="Materials" hidden></aside>
       <aside class="side-panel" id="scenes-panel" aria-label="Scenes" hidden></aside>
       <aside class="side-panel" id="info-panel" aria-label="Entity Info" hidden></aside>
+      <aside class="side-panel" id="history-panel" aria-label="History" hidden></aside>
       <footer class="statusbar">
         <span class="status-hint" id="status-hint"></span>
         <span class="status-hover" id="status-hover"></span>
+        <span class="status-saved" id="status-saved"></span>
         <label class="measurements">
           <span id="measurements-label">Measurements</span>
           <input id="measurements" type="text" autocomplete="off" spellcheck="false" disabled />

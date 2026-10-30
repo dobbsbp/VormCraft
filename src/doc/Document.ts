@@ -4,6 +4,7 @@ import { Guides } from './Guides';
 import { Labels } from './Labels';
 import { Materials } from './Materials';
 import { Scenes } from './Scenes';
+import { Versions } from './Versions';
 
 export interface DocumentSnapshot {
   /** The top-level geometry (outside every group). */
@@ -27,6 +28,8 @@ export class Document {
   readonly labels: Labels;
   readonly materials: Materials;
   readonly scenes: Scenes;
+  /** The design's version history (saved in the file, not part of undo). */
+  readonly versions = new Versions();
   /** The group being edited (opened with a double-click), or null at the top level. Not saved. */
   editing: GroupId | null = null;
 

@@ -17,6 +17,10 @@ export const ICONS = {
   perspective: svg('<path d="M3 5h18M3 19h18" /><path d="M3 5l9 7 9-7M3 19l9-7 9 7" stroke-width="1"/>'),
   parallel: svg('<path d="M3 6h18M3 12h18M3 18h18"/><path d="M7 4v16M17 4v16" stroke-width="1"/>'),
   scenes: svg('<rect x="3" y="7" width="18" height="13" rx="1.5"/><path d="M6 7V4h12v3M9 4V2.5h6V4"/><path d="m10 11 5 2.5-5 2.5Z" fill="currentColor"/>'),
+  // A clock with an arrow running back round it.
+  history: svg('<path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/><path d="M12 8v4l3 2"/>'),
+  // A cog: eight teeth round a ring.
+  settings: svg('<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/><circle cx="12" cy="12" r="6.5"/>'),
   zoomExtents: svg('<rect x="7" y="7" width="10" height="10" rx="1"/><path d="M3 8V3h5M16 3h5v5M21 16v5h-5M8 21H3v-5"/>'),
   iso: cube(),
   top: cube(face('M12 3 20 7.5 12 12 4 7.5Z')),

@@ -14,13 +14,17 @@
     "typecheck": "tsc --noEmit",
     "tauri": "tauri",
     "desktop:dev": "tauri dev",
-    "desktop:build": "tauri build"
+    "desktop:build": "tauri build",
+    "version:set": "node scripts/bump-version.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.4",
     "@tauri-apps/plugin-dialog": "^2.8.3",
     "@tauri-apps/plugin-fs": "^2.7.1",
+    "@tauri-apps/plugin-process": "^2.4.0",
+    "@tauri-apps/plugin-updater": "^2.14.1",
     "earcut": "^3.2.4",
+    "fflate": "^0.8.3",
     "manifold-3d": "^3.5.4",
     "three": "^0.186.1"
   },

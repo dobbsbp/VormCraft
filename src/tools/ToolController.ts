@@ -3,6 +3,8 @@ import { erase } from '../core/ops/erase';
 import { inheritMaterials, unpaintMaterial } from '../core/ops/materials';
 import type { Document, DocumentSnapshot } from '../doc/Document';
 import type { GroupId } from '../doc/Groups';
+import type { VersionKind } from '../doc/Versions';
+import { openVersion, recordVersion } from '../io/versions';
 import { ALL_PARTS, applyScene, captureScene, type SceneId, type SceneParts, type SceneView } from '../doc/Scenes';
 import { extractGeometry, mergeGeometry, modelBounds, scaleModel } from '../core/ops/group';
 import { reverseFaces } from '../core/ops/orient';
@@ -158,14 +160,15 @@ export class ToolController {
    * Apply a change as one undoable step; on failure restore the document exactly and rethrow.
    * With `base` the last step is redone with new values (re-dimensioning) and stays one step.
    */
-  private apply(change: () => void, base: DocumentSnapshot | undefined, by: Tool | null, label = by?.name ?? 'Edit'): DocumentSnapshot {
+  private apply(change: () => void, base: DocumentSnapshot | undefined, by: Tool | null, label = by?.name ?? 'Edit', inherit = true): DocumentSnapshot {
+    if (this.previewing) throw new Error('You are looking at an earlier version: Restore it, or go Back to now, to make changes');
     const before = this.doc.snapshot();
     try {
       if (base) this.doc.restore(base);
       change();
       // New faces cut from painted faces keep their paint.
       const was = this.doc.editing === null ? (base ?? before).model : (base ?? before).groups.get(this.doc.editing)?.model;
-      if (was) inheritMaterials(was, this.doc.model);
+      if (was && inherit) inheritMaterials(was, this.doc.model);
       this.doc.model.validate();
     } catch (err) {
       this.doc.restore(before);
@@ -193,6 +196,7 @@ export class ToolController {
   }
 
   undo(): void {
+    if (this.blockedByPreview()) return;
     this.tool.cancel();
     const label = this.history.undo(this.doc);
     this.error = label ? null : 'Nothing to undo';
@@ -202,12 +206,20 @@ export class ToolController {
   }
 
   redo(): void {
+    if (this.blockedByPreview()) return;
     this.tool.cancel();
     const label = this.history.redo(this.doc);
     this.error = label ? null : 'Nothing to redo';
     this.notice = label ? `Redo ${label}` : null;
     if (label) this.afterHistoryJump();
     this.onUpdate();
+  }
+
+  private blockedByPreview(): boolean {
+    if (!this.previewing) return false;
+    this.error = 'You are looking at an earlier version: Restore it, or go Back to now';
+    this.onUpdate();
+    return true;
   }
 
   private afterHistoryJump(): void {
@@ -243,8 +255,10 @@ export class ToolController {
   /** Replace the whole document (New / Open). Clears history and selection. */
   replaceDocument(next: Document): void {
     for (const t of Object.values(this.tools)) t.reset();
+    this.previewing = null;
     this.doc.editing = null;
     this.doc.restore(next.snapshot());
+    this.doc.versions.copyFrom(next.versions);
     this.history.clear();
     this.selection.clear();
     this.dirty = false;
@@ -571,6 +585,79 @@ export class ToolController {
     this.editDocument('Unhide all', () => {
       for (const g of this.doc.groups.items.values()) delete g.hidden;
     });
+  }
+
+  /**
+   * Looking at an earlier version (read-only): which one, and the document as it was before, to
+   * come back to.
+   */
+  previewing: { id: number; now: DocumentSnapshot; dirty: boolean; editing: GroupId | null } | null = null;
+
+  /** Record a version of the design now (autosave, save, open). Returns false if nothing changed. */
+  recordVersion(kind: VersionKind, limitBytes?: number): boolean {
+    if (this.previewing) return false;
+    const label = kind === 'opened' ? 'Opened' : (this.history.undoLabel ?? 'Edit');
+    return recordVersion(this.doc, label, kind, { limitBytes }) !== null;
+  }
+
+  /** Show an earlier version in place of the design (read-only) until Back to now or Restore. */
+  previewVersion(id: number): void {
+    const v = this.doc.versions.get(id);
+    if (!v) return;
+    this.run(() => {
+      const then = openVersion(this.doc.versions, id).snapshot();
+      if (!this.previewing) this.previewing = { id, now: this.doc.snapshot(), dirty: this.dirty, editing: this.doc.editing };
+      else this.previewing.id = id;
+      this.tool.cancel();
+      for (const t of Object.values(this.tools)) t.reset();
+      this.selection.clear();
+      this.doc.editing = null;
+      this.doc.restore(then);
+      this.notice = null;
+      this.error = null;
+      this.afterDocumentChange();
+    });
+  }
+
+  /** Leave the earlier version: the design comes back exactly as it was. */
+  endPreview(): void {
+    const p = this.previewing;
+    if (!p) return;
+    this.previewing = null;
+    this.error = null;
+    this.doc.restore(p.now);
+    this.doc.editing = p.editing !== null && this.doc.groups.has(p.editing) ? p.editing : null;
+    this.dirty = p.dirty;
+    this.selection.clear();
+    this.afterDocumentChange();
+  }
+
+  /**
+   * Make an earlier version the current design. What you had is recorded as a version first, so
+   * you can come forward to it again, and the restore itself is one undo step.
+   */
+  restoreVersion(id: number, limitBytes?: number): void {
+    const v = this.doc.versions.get(id);
+    if (!v) return;
+    const then = openVersion(this.doc.versions, id).snapshot();
+    this.endPreview();
+    this.recordVersion('auto', limitBytes);
+    const when = new Date(v.time).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+    this.run(() =>
+      this.apply(
+        () => {
+          this.doc.editing = null;
+          this.doc.restore(then);
+        },
+        undefined,
+        null,
+        `Restore version from ${when}`,
+        false,
+      ),
+    );
+    this.recordVersion('restore', limitBytes);
+    this.notice = `Restored the version from ${when}. Undo (Ctrl+Z) or History takes you back.`;
+    this.onUpdate();
   }
 
   /** The open group's name, or null at the top level. */

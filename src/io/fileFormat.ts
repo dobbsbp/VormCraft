@@ -6,12 +6,13 @@ import { Guides } from '../doc/Guides';
 import { Labels } from '../doc/Labels';
 import { Materials, type Material } from '../doc/Materials';
 import { ALL_PARTS, DEFAULT_STYLE, Scenes, type Scene } from '../doc/Scenes';
+import type { Version } from '../doc/Versions';
 
 /** File extension of our own format. */
 export const FILE_EXTENSION = 'vorm';
 /** Extensions of files saved before the app was renamed (they still open). */
 export const OLD_FILE_EXTENSIONS = ['benup'];
-export const FORMAT_VERSION = 4;
+export const FORMAT_VERSION = 5;
 
 /**
  * Geometry as stored: vertices, faces as vertex-id loops (outer first, then holes), every edge with
@@ -33,12 +34,12 @@ interface GeometryData {
  * and groups.
  * Version 2 adds edge smoothing (a fourth entry per edge) and materials (colours and textures,
  * with each face's material). Version 3 adds groups, each with geometry of its own; version 4
- * hidden groups and scenes (saved views). Older versions
- * still open, and so do files from before the app was renamed (format tag 'benup').
+ * hidden groups and scenes (saved views); version 5 the design's version history (compressed).
+ * Older versions still open, and so do files from before the app was renamed (format tag 'benup').
  */
 interface FileV3 extends GeometryData {
   format: 'vormcraft' | 'benup';
-  version: 1 | 2 | 3 | 4;
+  version: 1 | 2 | 3 | 4 | 5;
   units: 'mm';
   guides: { visible: boolean; lines: { point: Vec3; dir: Vec3 }[]; points: { pos: Vec3 }[] };
   /** Text labels (optional: files saved before labels existed have none). */
@@ -49,6 +50,8 @@ interface FileV3 extends GeometryData {
   groups?: ({ id: number; name: string; parent: number | null; material?: string; hidden?: boolean } & GeometryData)[];
   /** Scenes in order, and the glide and slideshow timings (version 4). */
   scenes?: { transition: number; delay: number; items: Scene[] };
+  /** The version history (version 5): compressed documents, and the texture images they use. */
+  history?: { versions: Version[]; textures: Record<string, string> };
 }
 
 function geometryData(m: Model): GeometryData {
@@ -63,12 +66,17 @@ function geometryData(m: Model): GeometryData {
   };
 }
 
-export function serializeDocument(doc: Document): string {
+export interface SerializeOptions {
+  /** Include the version history (default true). */
+  history?: boolean;
+}
+
+export function serializeDocument(doc: Document, opts: SerializeOptions = {}): string {
   // Parents first, so a reader can create groups in order.
   const ordered = doc.groups.children(null).flatMap((g) => doc.groups.subtree(g.id));
   const file: FileV3 = {
     format: 'vormcraft',
-    version: 4,
+    version: 5,
     units: 'mm',
     ...geometryData(doc.root),
     guides: {
@@ -81,10 +89,26 @@ export function serializeDocument(doc: Document): string {
     groups: ordered.map((g) => ({ id: g.id, name: g.name, parent: g.parent, ...(g.material !== undefined ? { material: g.material } : {}), ...(g.hidden ? { hidden: true } : {}), ...geometryData(g.model) })),
     scenes: { transition: doc.scenes.transition, delay: doc.scenes.delay, items: doc.scenes.items },
   };
+  if (opts.history !== false && doc.versions.items.length) {
+    file.history = { versions: doc.versions.items, textures: Object.fromEntries(doc.versions.textures) };
+  }
   return JSON.stringify(file);
 }
 
 export class FileFormatError extends Error {}
+
+/** The file was saved by a newer version of the app (updating it will open the file). */
+export class NewerFormatError extends FileFormatError {}
+
+/** The format version a file was saved in, or null if it is not one of ours. */
+export function fileFormatVersion(text: string): number | null {
+  try {
+    const f = JSON.parse(text);
+    return f && (f.format === 'vormcraft' || f.format === 'benup') && typeof f.version === 'number' ? f.version : null;
+  } catch {
+    return null;
+  }
+}
 
 const vec = (v: unknown, what: string): Vec3 => {
   if (!Array.isArray(v) || v.length !== 3 || !v.every((x) => typeof x === 'number' && Number.isFinite(x))) throw new Error(`bad ${what}`);
@@ -128,7 +152,7 @@ export function parseDocument(text: string): Document {
   const f = raw as Partial<FileV3> & { version?: unknown };
   if (!f || typeof f !== 'object' || (f.format !== 'vormcraft' && f.format !== 'benup')) throw new FileFormatError('This is not a VormCraft file.');
   if (typeof f.version !== 'number') throw new FileFormatError('The file has no version number.');
-  if (f.version > FORMAT_VERSION) throw new FileFormatError(`This file was saved by a newer version of VormCraft (format ${f.version}); please update the app.`);
+  if (f.version > FORMAT_VERSION) throw new NewerFormatError(`This file was saved by a newer version of VormCraft (format ${f.version}); please update the app.`);
   if (f.units !== 'mm') throw new FileFormatError(`Unsupported units "${String(f.units)}".`);
 
   const materials = new Materials();
@@ -180,5 +204,15 @@ export function parseDocument(text: string): Document {
     if (typeof l.text !== 'string') throw new FileFormatError('The file is damaged: a label has no text.');
     labels.add(l.anchor, l.position, l.text);
   }
-  return new Document(model, guides, labels, materials, groups, scenes);
+  const doc = new Document(model, guides, labels, materials, groups, scenes);
+  // A damaged history must not stop the design itself from opening: it is left out instead.
+  const h = f.history;
+  if (h && Array.isArray(h.versions) && h.textures && typeof h.textures === 'object') {
+    const ok = h.versions.every((v) => Number.isInteger(v.id) && typeof v.time === 'number' && typeof v.data === 'string' && typeof v.hash === 'string' && Array.isArray(v.textures));
+    if (ok) {
+      for (const [k, t] of Object.entries(h.textures)) if (typeof t === 'string') doc.versions.textures.set(k, t);
+      for (const v of h.versions) doc.versions.add({ time: v.time, label: typeof v.label === 'string' ? v.label : '', kind: v.kind ?? 'auto', data: v.data, hash: v.hash, textures: v.textures }, v.id);
+    }
+  }
+  return doc;
 }

@@ -69,6 +69,20 @@ export class Viewer implements SceneView {
 
   /** Left-button pointer input for the tools, already picked. */
   onPointer: (kind: PointerKind, sample: PointerSample) => void = () => {};
+  /** The graphics driver reset ('lost') and the view came back ('restored'). */
+  onGraphicsReset: (state: 'lost' | 'restored') => void = () => {};
+
+  /**
+   * The graphics the view runs on: the GPU's name, and whether it is a software fallback (no
+   * hardware acceleration: slow; usually missing or broken graphics drivers).
+   */
+  graphicsInfo(): { renderer: string; software: boolean } {
+    const gl = this.renderer.getContext();
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    const renderer = String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
+    return { renderer, software: /swiftshader|llvmpipe|softpipe|software|basic render|microsoft basic/i.test(renderer) };
+  }
+
   /** A right-click (pressed and released without dragging): open the context menu here. */
   onContextMenu: (sample: PointerSample, client: [number, number]) => void = () => {};
   /** A text label was clicked (Shift held or not). */
@@ -121,7 +135,20 @@ export class Viewer implements SceneView {
     private readonly container: HTMLElement,
     private readonly doc: Document,
   ) {
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    // Ask for the faster graphics card on laptops that have two.
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    // A graphics driver reset (driver update, sleep, crash) loses the GPU copy of everything;
+    // the model itself is safe, so redraw once the browser gives the context back.
+    this.renderer.domElement.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+      this.onGraphicsReset('lost');
+    });
+    this.renderer.domElement.addEventListener('webglcontextrestored', () => {
+      for (const p of this.paints.values()) this.disposePaint(p);
+      this.paints.clear();
+      this.refresh();
+      this.onGraphicsReset('restored');
+    });
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.domElement.classList.add('viewport-canvas');
     container.appendChild(this.renderer.domElement);

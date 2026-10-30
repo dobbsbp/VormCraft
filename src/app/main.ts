@@ -17,6 +17,9 @@ import { ScenesPanel } from './scenesPanel';
 import { ContextMenu } from './contextMenuView';
 import { EntityInfoPanel } from './entityInfoPanel';
 import { contextMenuItems } from '../tools/contextMenu';
+import { createBackupStore } from './backups';
+import { HistoryPanel } from './historyPanel';
+import { Lifecycle } from './lifecycle';
 import type { FaceStyle } from '../doc/Scenes';
 import { SearchBox } from './searchBox';
 
@@ -56,16 +59,31 @@ async function start(): Promise<void> {
   const doc = new Document();
   const viewer = new Viewer(document.getElementById('viewport')!, doc);
   const controller = new ToolController(doc, () => viewer.projector());
-  const files = new FileCommands(await createFileHost(), controller);
+  // Settings, autosave, recovery and updates (Lifecycle), and the file commands that use them.
+  let lifecycle!: Lifecycle;
+  const backups = await createBackupStore(() => lifecycle.settings.backupFolder);
+  lifecycle = new Lifecycle(controller, viewer, backups);
+  const files = new FileCommands(await createFileHost(), controller, {
+    settings: () => lifecycle.settings,
+    autosave: lifecycle.autosave,
+    onNewerFile: () => void lifecycle.checkForUpdates(),
+  });
+  lifecycle.attach(files);
   const materials = new MaterialsPanel(document.getElementById('materials-panel')!, controller, () => setTool('paint'));
   controller.sceneView = viewer;
   const player = new ScenePlayer(controller);
   const scenes = new ScenesPanel(document.getElementById('scenes-panel')!, controller, player);
   player.onChange = () => update();
   const info = new EntityInfoPanel(document.getElementById('info-panel')!, controller);
+  const history = new HistoryPanel(
+    document.getElementById('history-panel')!,
+    controller,
+    () => lifecycle.settings.history,
+    (id) => controller.restoreVersion(id, lifecycle.historyLimit),
+  );
   const menu = new ContextMenu();
   menu.onDone = () => update();
-  if (import.meta.env.DEV) Object.assign(window, { __app: { doc, viewer, controller, files, materials, scenes, player } });
+  if (import.meta.env.DEV) Object.assign(window, { __app: { doc, viewer, controller, files, materials, scenes, player, history, lifecycle } });
 
   const hint = document.getElementById('status-hint')!;
   const nav = document.getElementById('status-hover')!;
@@ -73,6 +91,16 @@ async function start(): Promise<void> {
   const vcbLabel = document.getElementById('measurements-label')!;
   const contextBadge = document.getElementById('context-badge')!;
   contextBadge.addEventListener('click', () => controller.exitGroup());
+  const autosaved = document.getElementById('status-saved')!;
+  // While looking at an earlier version: what it is, Restore, Back to now.
+  const previewBar = document.getElementById('preview-bar')!;
+  const previewText = document.createElement('span');
+  const restoreButton = Object.assign(document.createElement('button'), { type: 'button', className: 'primary', textContent: 'Restore this version' });
+  const backButton = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Back to now' });
+  restoreButton.addEventListener('click', () => controller.previewing && controller.restoreVersion(controller.previewing.id, lifecycle.historyLimit));
+  backButton.addEventListener('click', () => controller.endPreview());
+  previewBar.append(previewText, restoreButton, backButton);
+  viewer.onGraphicsReset = (state) => controller.notify(state === 'lost' ? 'The graphics driver reset: redrawing…' : 'Graphics restored');
   nav.textContent = NAV_HINT;
 
   /** Text being typed into the Measurements box, or null when it shows the tool's value. */
@@ -130,6 +158,12 @@ async function start(): Promise<void> {
     materials.render();
     scenes.render();
     info.render();
+    history.render();
+    const viewing = controller.previewing ? controller.doc.versions.get(controller.previewing.id) : undefined;
+    previewBar.hidden = !viewing;
+    if (viewing) previewText.textContent = `Looking at the version from ${new Date(viewing.time).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })} · ${viewing.label} (read-only)`;
+    autosaved.textContent = lifecycle.lastAutosave ? `Autosaved ${new Date(lifecycle.lastAutosave).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}` : '';
+    viewButtons?.history.setAttribute('aria-pressed', String(history.isOpen));
     renderTabs();
     if (viewButtons) {
       const style = viewer.displayStyle();
@@ -184,7 +218,7 @@ async function start(): Promise<void> {
   };
 
   // One side panel at a time.
-  const panels = { materials, scenes, info };
+  const panels = { materials, scenes, info, history };
   const togglePanel = (which: keyof typeof panels, open = !panels[which].isOpen) => {
     for (const [k, p] of Object.entries(panels)) if (k !== which && open) p.toggle(false);
     panels[which].toggle(open);
@@ -198,6 +232,13 @@ async function start(): Promise<void> {
   const toggleMaterials = () => togglePanel('materials');
   const toggleScenes = () => togglePanel('scenes');
   const showEntityInfo = () => togglePanel('info', true);
+  const keep: KeepActions = {
+    toggleHistory: () => togglePanel('history'),
+    settings: () => void lifecycle.openSettings(),
+    checkUpdates: () => void lifecycle.checkForUpdates(),
+    about: () => void lifecycle.about(),
+    saveCopy: () => void files.saveCopyWithoutHistory(),
+  };
 
   // Right-click: select what is under the cursor (unless already selected), then the menu.
   viewer.onContextMenu = (sample, [x, y]) => {
@@ -227,8 +268,8 @@ async function start(): Promise<void> {
   document.getElementById('viewport')!.addEventListener('pointerdown', () => player.stop(), true);
 
   buildPalette(toolButtons, setTool);
-  const search = new SearchBox(document.getElementById('viewport')!, () => commandList(viewer, controller, files, setTool, toggleMaterials, view, showEntityInfo));
-  ({ undoButton, redoButton, materialsButton, viewButtons } = buildToolbar(viewer, controller, files, toggleMaterials, view));
+  const search = new SearchBox(document.getElementById('viewport')!, () => commandList(viewer, controller, files, setTool, toggleMaterials, view, showEntityInfo, keep));
+  ({ undoButton, redoButton, materialsButton, viewButtons } = buildToolbar(viewer, controller, files, toggleMaterials, view, keep));
 
   const submitTyped = () => {
     const text = typing ?? vcb.value;
@@ -304,6 +345,7 @@ async function start(): Promise<void> {
     if (key === 'Escape') {
       typing = null;
       if (player.playing) player.stop();
+      else if (controller.previewing) controller.endPreview();
       else controller.escape();
       return;
     }
@@ -333,6 +375,8 @@ async function start(): Promise<void> {
 
   await guardUnsavedChanges(controller, files);
   void updateTitle();
+  update();
+  await lifecycle.start();
   update();
 }
 
@@ -380,6 +424,7 @@ interface ViewButtons {
   styles: Map<FaceStyle, HTMLButtonElement>;
   projection: HTMLButtonElement;
   scenes: HTMLButtonElement;
+  history: HTMLButtonElement;
 }
 
 const FACE_STYLES: [FaceStyle, string, string][] = [
@@ -389,7 +434,16 @@ const FACE_STYLES: [FaceStyle, string, string][] = [
   ['xray', 'X-ray (see-through faces)', ICONS.styleXray],
 ];
 
-function commandList(viewer: Viewer, controller: ToolController, files: FileCommands, setTool: (id: ToolId) => void, toggleMaterials: () => void, view: ViewActions, showEntityInfo: () => void): Command[] {
+/** Keeping work safe and the app current (toolbar and Search share these). */
+interface KeepActions {
+  toggleHistory(): void;
+  settings(): void;
+  checkUpdates(): void;
+  about(): void;
+  saveCopy(): void;
+}
+
+function commandList(viewer: Viewer, controller: ToolController, files: FileCommands, setTool: (id: ToolId) => void, toggleMaterials: () => void, view: ViewActions, showEntityInfo: () => void, keep: KeepActions): Command[] {
   const keyOf = (pred: (b: (typeof KEY_BINDINGS)[number]) => boolean) => KEY_BINDINGS.find(pred)?.label;
   const tools: Command[] = TOOLS.map((t) => ({
     id: `tool:${t.id}`,
@@ -410,6 +464,11 @@ function commandList(viewer: Viewer, controller: ToolController, files: FileComm
     { id: 'file:open', name: 'Open…', keywords: ['file', 'load'], shortcut: 'Ctrl+O', run: () => void files.open() },
     { id: 'file:save', name: 'Save', keywords: ['file'], shortcut: 'Ctrl+S', run: () => void files.save() },
     { id: 'file:saveas', name: 'Save As…', keywords: ['file'], shortcut: 'Ctrl+Shift+S', run: () => void files.save(true) },
+    { id: 'file:copy', name: 'Save a Copy Without History…', keywords: ['file', 'share', 'send', 'export'], run: keep.saveCopy },
+    { id: 'file:history', name: 'History (earlier versions)', keywords: ['versions', 'restore', 'backup', 'go back', 'revert'], run: keep.toggleHistory },
+    { id: 'app:settings', name: 'Settings', keywords: ['preferences', 'options', 'autosave', 'backup folder'], run: keep.settings },
+    { id: 'app:update', name: 'Check for Updates', keywords: ['version', 'upgrade', 'new version'], run: keep.checkUpdates },
+    { id: 'app:about', name: 'About VormCraft', keywords: ['version', 'graphics', 'gpu', 'help'], run: keep.about },
     { id: 'file:stl', name: 'Export STL…', keywords: ['export', '3d print', 'mesh'], run: () => void files.exportStl() },
     { id: 'file:obj', name: 'Export OBJ…', keywords: ['export', 'mesh'], run: () => void files.exportObj() },
     { id: 'edit:undo', name: 'Undo', keywords: ['edit'], shortcut: 'Ctrl+Z', run: () => controller.undo() },
@@ -460,7 +519,7 @@ function buildPalette(buttons: Map<ToolId, HTMLButtonElement>, setTool: (id: Too
   }
 }
 
-function buildToolbar(viewer: Viewer, controller: ToolController, files: FileCommands, toggleMaterials: () => void, view: ViewActions) {
+function buildToolbar(viewer: Viewer, controller: ToolController, files: FileCommands, toggleMaterials: () => void, view: ViewActions, keep: KeepActions) {
   const bar = document.getElementById('toolbar')!;
   const brand = document.createElement('span');
   brand.className = 'brand';
@@ -516,7 +575,11 @@ function buildToolbar(viewer: Viewer, controller: ToolController, files: FileCom
   sep();
   const scenes = iconButton(ICONS.scenes, 'Scenes (saved views)', view.toggleScenes);
   bar.append(scenes);
-  const viewButtons: ViewButtons = { styles, projection, scenes };
+  const history = iconButton(ICONS.history, 'History: earlier versions of this design', keep.toggleHistory);
+  bar.append(history);
+  sep();
+  bar.append(iconButton(ICONS.settings, 'Settings (autosave, backups, history, updates)', keep.settings));
+  const viewButtons: ViewButtons = { styles, projection, scenes, history };
   return { undoButton, redoButton, materialsButton, viewButtons };
 }
 

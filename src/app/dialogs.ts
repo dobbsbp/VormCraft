@@ -96,7 +96,7 @@ export function showExportDialog(format: 'STL' | 'OBJ', report: WatertightReport
 }
 
 /** A small modal question (our own, not window.confirm). Resolves true for the confirming button. */
-export function confirmDialog(title: string, message: string, confirmLabel: string): Promise<boolean> {
+export function confirmDialog(title: string, message: string, confirmLabel: string, cancelLabel = 'Cancel'): Promise<boolean> {
   const dlg = document.createElement('dialog');
   dlg.className = 'modal';
   dlg.innerHTML = `
@@ -111,6 +111,8 @@ export function confirmDialog(title: string, message: string, confirmLabel: stri
   dlg.querySelector('h2')!.textContent = title;
   dlg.querySelector('p')!.textContent = message;
   dlg.querySelector('button[value="ok"]')!.textContent = confirmLabel;
+  dlg.querySelector('button[value="cancel"]')!.textContent = cancelLabel;
+  dlg.querySelector('p')!.classList.add('pre');
   document.body.append(dlg);
   return new Promise((resolve) => {
     const finish = (v: boolean) => {
@@ -123,6 +125,34 @@ export function confirmDialog(title: string, message: string, confirmLabel: stri
     dlg.querySelector('form')!.addEventListener('submit', (e) => {
       e.preventDefault();
       finish(true);
+    });
+    dlg.showModal();
+  });
+}
+
+/** A message with a single OK button. `body` may hold a few lines (shown as written). */
+export function messageDialog(title: string, body: string): Promise<void> {
+  const dlg = document.createElement('dialog');
+  dlg.className = 'modal';
+  dlg.innerHTML = `
+    <form method="dialog">
+      <h2></h2>
+      <p class="pre"></p>
+      <div class="buttons"><button type="submit" class="primary">OK</button></div>
+    </form>`;
+  dlg.querySelector('h2')!.textContent = title;
+  dlg.querySelector('p')!.textContent = body;
+  document.body.append(dlg);
+  return new Promise((resolve) => {
+    const finish = () => {
+      dlg.close();
+      dlg.remove();
+      resolve();
+    };
+    dlg.addEventListener('cancel', finish);
+    dlg.querySelector('form')!.addEventListener('submit', (e) => {
+      e.preventDefault();
+      finish();
     });
     dlg.showModal();
   });

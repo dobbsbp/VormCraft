@@ -22,6 +22,8 @@ export interface FileHost {
    * the user cancelled.
    */
   save(data: string | Uint8Array, suggestedName: string, filter: FileFilter, path?: string): Promise<{ name: string; path?: string } | null>;
+  /** Read a file by path (desktop only: a file opened from Explorer). */
+  readPath?(path: string): Promise<OpenedFile>;
 }
 
 export const isTauri = (): boolean => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -48,6 +50,9 @@ async function tauriHost(): Promise<FileHost> {
       if (typeof data === 'string') await fs.writeTextFile(target, data);
       else await fs.writeFile(target, data);
       return { name: baseName(target), path: target };
+    },
+    async readPath(path) {
+      return { name: baseName(path), path, text: await fs.readTextFile(path) };
     },
   };
 }
