@@ -22,4 +22,5 @@ export { applyAffine, BendError, duplicateVertices, rotation, scaling, selection
 export { facesWithCurveEdges, isSoftEdge, smoothSurface, surfaceOutline } from './model/surfaces';
 export { followMe, type FollowMeMode, type FollowMeResult } from './ops/followMe';
 export { inheritMaterials, paintFaces, unpaintMaterial } from './ops/materials';
+export { reverseFaces } from './ops/orient';
 export { extractGeometry, mergeGeometry, modelBounds, scaleModel, transformModel } from './ops/group';

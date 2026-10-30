@@ -4,9 +4,12 @@ import { inheritMaterials, unpaintMaterial } from '../core/ops/materials';
 import type { Document, DocumentSnapshot } from '../doc/Document';
 import type { GroupId } from '../doc/Groups';
 import { ALL_PARTS, applyScene, captureScene, type SceneId, type SceneParts, type SceneView } from '../doc/Scenes';
-import { extractGeometry, mergeGeometry } from '../core/ops/group';
+import { extractGeometry, mergeGeometry, modelBounds, scaleModel } from '../core/ops/group';
+import { reverseFaces } from '../core/ops/orient';
+import { scaling, selectionVertices, transformVertices } from '../core/ops/transform';
+import { edgeId } from './Selection';
 import { History } from '../doc/History';
-import { facesWithCurveEdges, smoothSurface } from '../core/model/surfaces';
+import { facesWithCurveEdges, smoothSurface, surfaceOutline } from '../core/model/surfaces';
 import type { LabelId } from '../doc/Labels';
 import { ArcTool } from './ArcTool';
 import { CircleTool } from './CircleTool';
@@ -179,7 +182,11 @@ export class ToolController {
     return base ?? before;
   }
 
+  /** Counts document changes (panels redraw when it moves). */
+  revision = 0;
+
   private afterDocumentChange(): void {
+    this.revision++;
     this.selection.prune(this.doc.model, this.doc.labels, this.doc.guides, (g) => this.doc.groups.get(g)?.parent === this.doc.editing && !this.doc.groups.isHidden(g));
     this.onModelChanged();
     this.onUpdate();
@@ -660,6 +667,175 @@ export class ToolController {
         'Explode',
       ),
     );
+  }
+
+  /** Zoom the view to a box (Zoom Selection). */
+  onZoomTo: (min: Vec3, max: Vec3) => void = () => {};
+
+  /**
+   * Right-click: what is under the cursor becomes the selection, unless it is already selected (so
+   * the menu acts on a whole selection). Clicking empty space keeps the selection.
+   */
+  contextPick(s: PointerSample): void {
+    const e = this.event(s);
+    const model = this.doc.model;
+    const sel = this.selection;
+    const guide = e.guide && (e.guide.kind === 'point' || e.edge === null) ? e.guide.id : null;
+    if (guide !== null) {
+      if (!sel.guides.has(guide)) sel.set([], [], [guide]);
+    } else if (e.edge !== null) {
+      const id = edgeId(model, e.edge);
+      if (!sel.edges.has(id)) sel.set([], [id]);
+    } else if (e.group !== null) {
+      if (!sel.groups.has(e.group)) sel.set([], [], [], [e.group]);
+    } else if (e.face !== null && model.faces.has(e.face)) {
+      if (!sel.faces.has(e.face)) sel.set(smoothSurface(model, e.face), []);
+    }
+    this.onUpdate();
+  }
+
+  /** Edges the selection softens: selected edges, and edges between two selected faces. */
+  private softenTargets(): HalfEdgeId[] {
+    const model = this.doc.model;
+    const out = new Set([...this.selection.edges].filter((e) => model.halfEdges.has(e)));
+    for (const f of this.selection.faces) {
+      if (!model.faces.has(f)) continue;
+      for (const h of model.faceHalfEdges(f)) {
+        const other = model.faceOf(model.he(h).twin);
+        if (other !== null && this.selection.faces.has(other)) out.add(edgeId(model, h));
+      }
+    }
+    return [...out];
+  }
+
+  /** Whether Soften / Unsoften has edges to work on. */
+  canSoften(): boolean {
+    return this.softenTargets().length > 0;
+  }
+
+  /** Soften (hide, joining the faces into one smooth surface) or unsoften (always show) edges. */
+  softenSelection(soft: boolean): void {
+    const edges = this.softenTargets();
+    if (!edges.length) {
+      this.error = 'Select edges, or faces next to each other, to soften';
+      this.onUpdate();
+      return;
+    }
+    const model = this.doc.model;
+    this.editDocument(soft ? 'Soften edges' : 'Unsoften edges', () => {
+      for (const e of edges) model.setEdgeSoft(model.he(e).origin, model.dest(e), soft);
+    });
+  }
+
+  /** Turn the selected faces inside out (Reverse Faces). */
+  reverseSelectedFaces(): void {
+    const faces = [...this.selection.faces];
+    if (!faces.length) {
+      this.error = 'Select the faces to reverse';
+      this.onUpdate();
+      return;
+    }
+    this.editDocument('Reverse faces', () => reverseFaces(this.doc.model, faces));
+  }
+
+  /** Vertices of the selected geometry (exactly the selection). */
+  private selectedVertices(): Set<number> {
+    return selectionVertices(this.doc.model, this.selection.faces, this.selection.edges);
+  }
+
+  /** Bounds of the selection (geometry and groups), or null when nothing is selected. */
+  selectionBounds(): { min: Vec3; max: Vec3 } | null {
+    const model = this.doc.model;
+    const pts = [...this.selectedVertices()].map((v) => model.pos(v));
+    for (const id of this.selection.groups) {
+      const b = modelBounds(this.doc.groups.subtree(id).map((g) => g.model));
+      if (b) pts.push(b.min, b.max);
+    }
+    for (const id of this.selection.labels) {
+      const l = this.doc.labels.items.get(id);
+      if (l) pts.push(l.anchor, l.position);
+    }
+    if (!pts.length) return null;
+    const min: Vec3 = [Math.min(...pts.map((p) => p[0])), Math.min(...pts.map((p) => p[1])), Math.min(...pts.map((p) => p[2]))];
+    const max: Vec3 = [Math.max(...pts.map((p) => p[0])), Math.max(...pts.map((p) => p[1])), Math.max(...pts.map((p) => p[2]))];
+    return { min, max };
+  }
+
+  zoomSelection(): void {
+    const b = this.selectionBounds();
+    if (!b) this.notify('Select something to zoom to');
+    else this.onZoomTo(b.min, b.max);
+  }
+
+  /** Mirror the selection across its own centre along the red (0), green (1) or blue (2) axis. */
+  flipSelection(axis: 0 | 1 | 2): void {
+    const b = this.selectionBounds();
+    if (!b || (this.selection.faces.size === 0 && this.selection.edges.size === 0 && this.selection.groups.size === 0)) {
+      this.error = 'Select what to flip first';
+      this.onUpdate();
+      return;
+    }
+    const centre: Vec3 = [(b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2];
+    const factors: Vec3 = [axis === 0 ? -1 : 1, axis === 1 ? -1 : 1, axis === 2 ? -1 : 1];
+    const vertices = this.selectedVertices();
+    const groups = [...this.selection.groups];
+    this.editDocument(`Flip along ${['red', 'green', 'blue'][axis]}`, () => {
+      if (vertices.size) transformVertices(this.doc.model, vertices, scaling(centre, factors));
+      for (const id of groups) for (const m of this.doc.groups.subtree(id).map((g) => g.model)) scaleModel(m, centre, factors);
+    });
+  }
+
+  /** Select the edges around the selected faces (only those). */
+  selectBoundingEdges(): void {
+    const model = this.doc.model;
+    const faces = [...this.selection.faces].filter((f) => model.faces.has(f));
+    this.selection.set([], surfaceOutline(model, faces));
+  }
+
+  /** Add the faces connected to the selection (without their edges). */
+  selectConnectedFaces(): void {
+    const model = this.doc.model;
+    const faces = new Set<FaceId>();
+    for (const f of this.selection.faces) if (model.faces.has(f)) for (const g of model.connectedFaces(f)) faces.add(g);
+    for (const e of this.selection.edges) {
+      if (!model.halfEdges.has(e)) continue;
+      for (const h of [e, model.he(e).twin]) {
+        const f = model.faceOf(h);
+        if (f !== null) for (const g of model.connectedFaces(f)) faces.add(g);
+      }
+    }
+    this.selection.set(faces, []);
+  }
+
+  /** Everything connected to the selection: faces and edges (like a triple-click). */
+  selectAllConnected(): void {
+    this.selectConnectedFaces();
+    const model = this.doc.model;
+    const faces = [...this.selection.faces];
+    this.selection.set(faces, new Set(faces.flatMap((f) => model.faceHalfEdges(f).map((h) => edgeId(model, h)))));
+  }
+
+  /** Every face with the same paint as a selected face. */
+  selectSameMaterial(): void {
+    const model = this.doc.model;
+    const paints = new Set([...this.selection.faces].filter((f) => model.faces.has(f)).map((f) => model.face(f).material));
+    if (!paints.size) {
+      this.notify('Select a face first');
+      return;
+    }
+    this.selection.set([...model.faces.values()].filter((f) => paints.has(f.material)).map((f) => f.id), []);
+  }
+
+  renameGroup(id: GroupId, name: string): void {
+    if (!name.trim()) {
+      this.error = 'A group needs a name';
+      this.onUpdate();
+      return;
+    }
+    this.editDocument('Rename group', () => {
+      const g = this.doc.groups.get(id);
+      if (g) g.name = name.trim();
+    });
   }
 
   /** Show a message in the status bar until the next action. */

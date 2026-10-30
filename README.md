@@ -34,6 +34,9 @@ VormCraft is a push/pull 3D modeling program for woodworking, architecture sketc
 - Double-click a group to edit what's inside it; the rest of the model fades while you work. Press Esc (or click outside it) to close it.
 - **Explode Group** (in the Search box, Shift+S) turns a group back into loose geometry.
 
+### Right-click menu
+- Right-click anything for a menu: Entity Info (rename groups, see areas and lengths), Erase, Hide, Edit/Explode/Make Group, Select (bounding edges, connected, same material), Reverse Faces, Flip Along red/green/blue, Soften/Unsoften Edges and Zoom Selection.
+
 ### Inference snapping
 - Snaps to endpoints, midpoints, edges, faces, guide intersections and the red, green and blue axes, with a visual cue for each.
 - Arrow keys lock to an axis (→ red, ← green, ↑ blue, ↓ parallel or perpendicular to the last edge).

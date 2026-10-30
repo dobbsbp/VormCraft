@@ -14,6 +14,9 @@ import { bindingFor, KEY_BINDINGS, withShortcut } from './keymap';
 import { MaterialsPanel } from './materialsPanel';
 import { ScenePlayer } from './scenePlayer';
 import { ScenesPanel } from './scenesPanel';
+import { ContextMenu } from './contextMenuView';
+import { EntityInfoPanel } from './entityInfoPanel';
+import { contextMenuItems } from '../tools/contextMenu';
 import type { FaceStyle } from '../doc/Scenes';
 import { SearchBox } from './searchBox';
 
@@ -59,6 +62,9 @@ async function start(): Promise<void> {
   const player = new ScenePlayer(controller);
   const scenes = new ScenesPanel(document.getElementById('scenes-panel')!, controller, player);
   player.onChange = () => update();
+  const info = new EntityInfoPanel(document.getElementById('info-panel')!, controller);
+  const menu = new ContextMenu();
+  menu.onDone = () => update();
   if (import.meta.env.DEV) Object.assign(window, { __app: { doc, viewer, controller, files, materials, scenes, player } });
 
   const hint = document.getElementById('status-hint')!;
@@ -123,6 +129,7 @@ async function start(): Promise<void> {
     for (const [id, b] of toolButtons) b.setAttribute('aria-pressed', String(id === tool.id));
     materials.render();
     scenes.render();
+    info.render();
     renderTabs();
     if (viewButtons) {
       const style = viewer.displayStyle();
@@ -162,6 +169,7 @@ async function start(): Promise<void> {
   controller.onUpdate = update;
   controller.onModelChanged = () => viewer.refresh();
   controller.onZoomWindow = (from, to) => viewer.zoomWindow(from, to);
+  controller.onZoomTo = (min, max) => viewer.zoomTo(min, max);
   controller.ask = (message) => confirmDialog('Resize model', message, 'Resize');
 
   viewer.onLabelClick = (id, shift) => {
@@ -175,24 +183,28 @@ async function start(): Promise<void> {
     else controller.doubleClick(sample);
   };
 
+  // One side panel at a time.
+  const panels = { materials, scenes, info };
+  const togglePanel = (which: keyof typeof panels, open = !panels[which].isOpen) => {
+    for (const [k, p] of Object.entries(panels)) if (k !== which && open) p.toggle(false);
+    panels[which].toggle(open);
+    update();
+  };
   const setTool = (id: ToolId) => {
     typing = null;
-    if (id === 'paint' && !materials.isOpen) {
-      scenes.toggle(false);
-      materials.toggle(true);
-    }
+    if (id === 'paint' && !materials.isOpen) togglePanel('materials', true);
     controller.setTool(id);
   };
-  // One side panel at a time.
-  const toggleMaterials = () => {
-    if (!materials.isOpen) scenes.toggle(false);
-    materials.toggle();
-    update();
-  };
-  const toggleScenes = () => {
-    if (!scenes.isOpen) materials.toggle(false);
-    scenes.toggle();
-    update();
+  const toggleMaterials = () => togglePanel('materials');
+  const toggleScenes = () => togglePanel('scenes');
+  const showEntityInfo = () => togglePanel('info', true);
+
+  // Right-click: select what is under the cursor (unless already selected), then the menu.
+  viewer.onContextMenu = (sample, [x, y]) => {
+    typing = null;
+    player.stop();
+    controller.contextPick(sample);
+    menu.open(contextMenuItems(controller, { entityInfo: showEntityInfo }), x, y);
   };
   const view: ViewActions = {
     setFaces: (faces) => {
@@ -215,7 +227,7 @@ async function start(): Promise<void> {
   document.getElementById('viewport')!.addEventListener('pointerdown', () => player.stop(), true);
 
   buildPalette(toolButtons, setTool);
-  const search = new SearchBox(document.getElementById('viewport')!, () => commandList(viewer, controller, files, setTool, toggleMaterials, view));
+  const search = new SearchBox(document.getElementById('viewport')!, () => commandList(viewer, controller, files, setTool, toggleMaterials, view, showEntityInfo));
   ({ undoButton, redoButton, materialsButton, viewButtons } = buildToolbar(viewer, controller, files, toggleMaterials, view));
 
   const submitTyped = () => {
@@ -377,7 +389,7 @@ const FACE_STYLES: [FaceStyle, string, string][] = [
   ['xray', 'X-ray (see-through faces)', ICONS.styleXray],
 ];
 
-function commandList(viewer: Viewer, controller: ToolController, files: FileCommands, setTool: (id: ToolId) => void, toggleMaterials: () => void, view: ViewActions): Command[] {
+function commandList(viewer: Viewer, controller: ToolController, files: FileCommands, setTool: (id: ToolId) => void, toggleMaterials: () => void, view: ViewActions, showEntityInfo: () => void): Command[] {
   const keyOf = (pred: (b: (typeof KEY_BINDINGS)[number]) => boolean) => KEY_BINDINGS.find(pred)?.label;
   const tools: Command[] = TOOLS.map((t) => ({
     id: `tool:${t.id}`,
@@ -422,6 +434,16 @@ function commandList(viewer: Viewer, controller: ToolController, files: FileComm
     { id: 'scenes:next', name: 'Next Scene', keywords: ['scene'], shortcut: 'Page Down', run: () => controller.stepScene(1) },
     { id: 'scenes:previous', name: 'Previous Scene', keywords: ['scene'], shortcut: 'Page Up', run: () => controller.stepScene(-1) },
     { id: 'scenes:play', name: 'Play Scenes (Slideshow)', keywords: ['scene', 'animation', 'walkthrough', 'slideshow'], run: () => view.player.toggle() },
+    { id: 'edit:info', name: 'Entity Info', keywords: ['properties', 'details', 'area', 'length', 'rename'], run: showEntityInfo },
+    { id: 'edit:reverse', name: 'Reverse Faces', keywords: ['flip', 'orient', 'inside out', 'normal'], run: () => controller.reverseSelectedFaces() },
+    { id: 'edit:soften', name: 'Soften Edges', keywords: ['smooth', 'hide edges'], run: () => controller.softenSelection(true) },
+    { id: 'edit:unsoften', name: 'Unsoften Edges', keywords: ['smooth', 'show edges', 'hard'], run: () => controller.softenSelection(false) },
+    ...(['Red', 'Green', 'Blue'] as const).map((c, i) => ({ id: `edit:flip${c}`, name: `Flip Along ${c} Direction`, keywords: ['mirror', 'flip'], run: () => controller.flipSelection(i as 0 | 1 | 2) })),
+    { id: 'view:zoomselection', name: 'Zoom Selection', keywords: ['camera', 'fit', 'focus'], run: () => controller.zoomSelection() },
+    { id: 'select:edges', name: 'Select Bounding Edges', keywords: ['selection'], run: () => controller.selectBoundingEdges() },
+    { id: 'select:connected', name: 'Select Connected Faces', keywords: ['selection'], run: () => controller.selectConnectedFaces() },
+    { id: 'select:allconnected', name: 'Select All Connected', keywords: ['selection'], run: () => controller.selectAllConnected() },
+    { id: 'select:material', name: 'Select All with Same Material', keywords: ['selection', 'paint'], run: () => controller.selectSameMaterial() },
     { id: 'group:hide', name: 'Hide Selected Groups', keywords: ['hide', 'visibility', 'group'], run: () => controller.hideSelection() },
     { id: 'group:unhide', name: 'Unhide All', keywords: ['show', 'unhide', 'visibility', 'group'], run: () => controller.unhideAll() },
     { id: 'guides:toggle', name: 'Show/Hide Guides', keywords: ['guide', 'construction'], run: () => controller.toggleGuides() },

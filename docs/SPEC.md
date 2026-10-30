@@ -43,6 +43,11 @@ Use our own icons and assets, and copy nothing from SketchUp.
 - Click an edge and drag to create a parallel guide line at a typed distance.
 - Click a point and drag to create a guide point.
 - Guides act as snap targets for all drawing tools and can be hidden or deleted in bulk.
+### Right-click menu
+- Right-click (press and release without dragging; right-drag still orbits, double right-click still re-centres) selects what is under the cursor unless it is already selected, then opens a menu for the selection. Items that do not apply are greyed out.
+- Entity Info, Erase, Hide (groups), Unhide All · Edit Group, Close Group, Explode, Make Group · Select ▸ (Bounding Edges, Connected Faces, All Connected, All with Same Material, Select All, Select None) · Reverse Faces, Flip Along ▸ (Red/Green/Blue, about the selection's centre), Soften / Unsoften Edges (selected edges, or edges between selected faces), Zoom Selection.
+- Entity Info panel: a group's name (editable), contents, size and paint; faces' area and paint; edges' length and smoothing.
+- Not included: Lock, Make Component, Unglue, Reset Scale/Skew, Intersect Faces (no components or locking yet; booleans already cut automatically).
 ### Inference Snapping (applies to all tools)
 - Snap to endpoints, midpoints, edges, faces, guide intersections, and the red, green and blue axes.
 - Show a visual cue for the active snap.

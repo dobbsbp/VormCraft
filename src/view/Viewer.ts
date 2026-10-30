@@ -69,6 +69,8 @@ export class Viewer implements SceneView {
 
   /** Left-button pointer input for the tools, already picked. */
   onPointer: (kind: PointerKind, sample: PointerSample) => void = () => {};
+  /** A right-click (pressed and released without dragging): open the context menu here. */
+  onContextMenu: (sample: PointerSample, client: [number, number]) => void = () => {};
   /** A text label was clicked (Shift held or not). */
   onLabelClick: (id: LabelId, shift: boolean) => void = () => {};
   /** When set (Orbit/Pan/Zoom tools), the left button navigates instead of going to the tools. */
@@ -103,7 +105,7 @@ export class Viewer implements SceneView {
   private readonly labelEls = new Map<LabelId, HTMLDivElement>();
   private readonly headlight = new THREE.DirectionalLight(0xffffff, 1.6);
 
-  private drag: { mode: DragMode; x: number; y: number; pivot: THREE.Vector3; depth: number; pointerId: number } | null = null;
+  private drag: { mode: DragMode; x: number; y: number; startX: number; startY: number; button: number; viewsBefore: number; pivot: THREE.Vector3; depth: number; pointerId: number } | null = null;
   private leftDown = false;
   /** Last right-button press, to detect a double right-click (re-centre). */
   private lastOrbitPress: { time: number; x: number; y: number } | null = null;
@@ -477,6 +479,14 @@ export class Viewer implements SceneView {
     this.requestRender();
   }
 
+  /** Zoom so a box in the model (e.g. the selection) fills the view, keeping the view direction. */
+  zoomTo(min: Vec3, max: Vec3): void {
+    const sphere = new THREE.Box3(new THREE.Vector3(...min), new THREE.Vector3(...max)).getBoundingSphere(new THREE.Sphere());
+    this.rememberView();
+    this.nav.zoomExtents(sphere);
+    this.requestRender();
+  }
+
   /** Zoom so the screen box `from`–`to` fills the view. */
   zoomWindow(from: [number, number], to: [number, number]): void {
     const { width, height } = this.viewport();
@@ -832,10 +842,11 @@ export class Viewer implements SceneView {
       const mode = dragModeFor(e.button, this.leftDragNavigation);
       if (!mode) return;
       e.preventDefault();
+      const viewsBefore = this.views.size;
       this.rememberView();
       const pivot = this.focusPoint(screen);
       const depth = Math.max(pivot.clone().sub(this.camera.position).dot(this.nav.forward()), this.camera.near);
-      this.drag = { mode, x: e.clientX, y: e.clientY, pivot, depth, pointerId: e.pointerId };
+      this.drag = { mode, x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY, button: e.button, viewsBefore, pivot, depth, pointerId: e.pointerId };
       capturePointer(el, e.pointerId, true);
       el.classList.add(mode === 'orbit' ? 'is-orbiting' : mode === 'zoom' ? 'is-zooming' : 'is-panning');
     });
@@ -863,9 +874,16 @@ export class Viewer implements SceneView {
         return;
       }
       if (!this.drag || e.pointerId !== this.drag.pointerId) return;
+      const d = this.drag;
       this.drag = null;
       capturePointer(el, e.pointerId, false);
       el.classList.remove('is-orbiting', 'is-panning', 'is-zooming');
+      // Right button pressed and released in place: a right-click, not an orbit.
+      if (e.type === 'pointerup' && d.button === 2 && Math.hypot(e.clientX - d.startX, e.clientY - d.startY) < 5) {
+        if (this.views.size > d.viewsBefore) this.views.pop(); // the orbit that never happened
+        this.onContextMenu(this.sample(this.local(e), e, false), [e.clientX, e.clientY]);
+        return;
+      }
       this.onPointer('move', this.sample(this.local(e), e, false));
     };
     el.addEventListener('pointerup', endDrag);
