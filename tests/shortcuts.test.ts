@@ -22,7 +22,7 @@ describe('keyboard map', () => {
     ['s', false, 'Scale', 'tool:scale'],
     ['f', false, 'Offset', 'tool:offset'],
     ['e', false, 'Eraser', 'tool:eraser'],
-    ['b', false, 'Paint Bucket', 'unavailable'],
+    ['b', false, 'Paint Bucket', 'tool:paint'],
     ['t', false, 'Tape Measure', 'tool:tape'],
     [' ', false, 'Select', 'tool:select'],
     [' ', true, 'Lasso Select', 'tool:lasso'],

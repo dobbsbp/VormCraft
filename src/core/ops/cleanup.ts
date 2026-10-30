@@ -30,9 +30,10 @@ export function mergeFaces(model: Model, f: FaceId, g: FaceId, keepId: FaceId = 
   }
   const pos2 = (v: VertexId) => toPlane2D(plane, model.pos(v));
   const { faces } = assembleFaces(traceLoops(boundary, pos2), pos2);
+  const material = model.face(keepId).material;
   model.removeFace(f);
   model.removeFace(g);
-  const result = faces.map((r, i) => model.addFace(r.outer, r.holes, { normal, id: i === 0 ? keepId : undefined }));
+  const result = faces.map((r, i) => model.addFace(r.outer, r.holes, { normal, id: i === 0 ? keepId : undefined, material }));
   model.purgeFree(internal);
   return result;
 }
@@ -94,11 +95,12 @@ export function removeCollinearVertices(model: Model, candidates: Iterable<Verte
     const rebuilt = [...faces].map((f) => ({
       f,
       normal: model.face(f).normal,
+      material: model.face(f).material,
       rings: model.faceVertexLoops(f).map((r) => r.filter((x) => x !== v)),
     }));
     if (rebuilt.some((r) => r.rings.some((ring) => ring.length < 3))) continue;
     for (const r of rebuilt) model.removeFace(r.f);
-    for (const r of rebuilt) model.addFace(r.rings[0], r.rings.slice(1), { normal: r.normal, id: r.f });
+    for (const r of rebuilt) model.addFace(r.rings[0], r.rings.slice(1), { normal: r.normal, id: r.f, material: r.material });
     if (curve !== null) model.setEdgeCurve(a, b, curve);
     model.purgeFree(hes);
     removed++;

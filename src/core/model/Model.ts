@@ -7,6 +7,8 @@ export type HalfEdgeId = number;
 export type LoopId = number;
 export type FaceId = number;
 export type CurveId = number;
+/** A material (colour or texture) defined in the document; faces refer to it by id. */
+export type MaterialId = string;
 
 export interface Vertex {
   readonly id: VertexId;
@@ -45,6 +47,8 @@ export interface Face {
   outer: LoopId;
   holes: LoopId[];
   normal: Vec3;
+  /** Paint on the face (both sides); unset for the default material. */
+  material?: MaterialId;
 }
 
 export interface CircleCurve {
@@ -63,6 +67,7 @@ export interface AddFaceOptions {
   normal?: Vec3;
   /** Reuse a specific face id (must not be in use). */
   id?: FaceId;
+  material?: MaterialId;
 }
 
 const edgeKey = (a: VertexId, b: VertexId) => `${a}>${b}`;
@@ -325,7 +330,7 @@ export class Model {
     if (opts.id !== undefined && opts.id >= this.nextId) this.nextId = opts.id + 1;
     const normal = opts.normal ? normalize(opts.normal) : newellNormal(outer.map((v) => this.pos(v)));
     const loopIds = all.map((ring) => this.buildLoop(id, ring));
-    this.faces.set(id, { id, outer: loopIds[0], holes: loopIds.slice(1), normal });
+    this.faces.set(id, { id, outer: loopIds[0], holes: loopIds.slice(1), normal, ...(opts.material !== undefined ? { material: opts.material } : {}) });
     return id;
   }
 
@@ -357,8 +362,9 @@ export class Model {
     const f = this.face(id);
     const rings = this.faceVertexLoops(id).map((r) => [...r].reverse());
     const normal: Vec3 = [-f.normal[0], -f.normal[1], -f.normal[2]];
+    const material = f.material;
     this.removeFace(id);
-    this.addFace(rings[0], rings.slice(1), { normal, id });
+    this.addFace(rings[0], rings.slice(1), { normal, id, material });
   }
 
   loopHalfEdges(id: LoopId): HalfEdgeId[] {

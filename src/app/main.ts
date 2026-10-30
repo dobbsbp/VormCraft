@@ -11,6 +11,7 @@ import { createFileHost, isTauri } from './files';
 import { ICONS } from './icons';
 import type { Command } from './commands';
 import { bindingFor, KEY_BINDINGS, withShortcut } from './keymap';
+import { MaterialsPanel } from './materialsPanel';
 import { SearchBox } from './searchBox';
 
 const NAV_HINT = 'Orbit: right-drag · Re-centre: double right-click · Pan: middle-drag · Zoom: wheel · Lock axis: arrow keys';
@@ -32,6 +33,7 @@ const TOOLS: { id: ToolId; icon: string; label: string }[] = [
   { id: 'pushpull', icon: ICONS.pushpull, label: 'Push/Pull' },
   { id: 'offset', icon: ICONS.offset, label: 'Offset' },
   { id: 'followMe', icon: ICONS.followMe, label: 'Follow Me' },
+  { id: 'paint', icon: ICONS.paint, label: 'Paint Bucket' },
   { id: 'move', icon: ICONS.move, label: 'Move' },
   { id: 'rotate', icon: ICONS.rotate, label: 'Rotate' },
   { id: 'scale', icon: ICONS.scale, label: 'Scale' },
@@ -46,10 +48,11 @@ const TOOLS: { id: ToolId; icon: string; label: string }[] = [
 async function start(): Promise<void> {
   await initBooleanKernel({ wasmUrl });
   const doc = new Document();
-  const viewer = new Viewer(document.getElementById('viewport')!, doc.model, doc.guides, doc.labels);
+  const viewer = new Viewer(document.getElementById('viewport')!, doc.model, doc.guides, doc.labels, doc.materials);
   const controller = new ToolController(doc, () => viewer.projector());
   const files = new FileCommands(await createFileHost(), controller);
-  if (import.meta.env.DEV) Object.assign(window, { __app: { doc, viewer, controller, files } });
+  const materials = new MaterialsPanel(document.getElementById('materials-panel')!, controller, () => setTool('paint'));
+  if (import.meta.env.DEV) Object.assign(window, { __app: { doc, viewer, controller, files, materials } });
 
   const hint = document.getElementById('status-hint')!;
   const nav = document.getElementById('status-hover')!;
@@ -62,6 +65,7 @@ async function start(): Promise<void> {
   const toolButtons = new Map<ToolId, HTMLButtonElement>();
   let undoButton: HTMLButtonElement | undefined;
   let redoButton: HTMLButtonElement | undefined;
+  let materialsButton: HTMLButtonElement | undefined;
 
   const updateTitle = async () => {
     document.title = files.title();
@@ -81,6 +85,8 @@ async function start(): Promise<void> {
     vcb.disabled = tool.vcbLabel() === '';
     if (typing === null) vcb.value = tool.vcbValue();
     for (const [id, b] of toolButtons) b.setAttribute('aria-pressed', String(id === tool.id));
+    materials.render();
+    materialsButton?.setAttribute('aria-pressed', String(materials.isOpen));
     viewer.leftDragNavigation = tool.id === 'orbit' || tool.id === 'pan' || tool.id === 'zoom' ? tool.id : null;
     const { undoLabel, redoLabel } = controller.history;
     if (undoButton) {
@@ -101,7 +107,7 @@ async function start(): Promise<void> {
       selectedLabels: controller.selection.labels,
       selectedGuides: controller.selection.guides,
       preview: controller.preview(),
-      snap: tool.id === 'select' || tool.id === 'lasso' || tool.id === 'zoomWindow' ? null : controller.snap,
+      snap: ['select', 'lasso', 'zoomWindow', 'paint', 'followMe'].includes(tool.id) ? null : controller.snap,
     });
   };
   controller.onUpdate = update;
@@ -122,12 +128,17 @@ async function start(): Promise<void> {
 
   const setTool = (id: ToolId) => {
     typing = null;
+    if (id === 'paint' && !materials.isOpen) materials.toggle(true);
     controller.setTool(id);
+  };
+  const toggleMaterials = () => {
+    materials.toggle();
+    update();
   };
 
   buildPalette(toolButtons, setTool);
-  const search = new SearchBox(document.getElementById('viewport')!, () => commandList(viewer, controller, files, setTool));
-  ({ undoButton, redoButton } = buildToolbar(viewer, controller, files));
+  const search = new SearchBox(document.getElementById('viewport')!, () => commandList(viewer, controller, files, setTool, toggleMaterials));
+  ({ undoButton, redoButton, materialsButton } = buildToolbar(viewer, controller, files, toggleMaterials));
 
   const submitTyped = () => {
     const text = typing ?? vcb.value;
@@ -251,7 +262,7 @@ function previousView(viewer: Viewer, controller: ToolController): void {
 }
 
 /** Everything the Search box can run: all tools, then file, edit, view and guide actions. */
-function commandList(viewer: Viewer, controller: ToolController, files: FileCommands, setTool: (id: ToolId) => void): Command[] {
+function commandList(viewer: Viewer, controller: ToolController, files: FileCommands, setTool: (id: ToolId) => void, toggleMaterials: () => void): Command[] {
   const keyOf = (pred: (b: (typeof KEY_BINDINGS)[number]) => boolean) => KEY_BINDINGS.find(pred)?.label;
   const tools: Command[] = TOOLS.map((t) => ({
     id: `tool:${t.id}`,
@@ -282,6 +293,7 @@ function commandList(viewer: Viewer, controller: ToolController, files: FileComm
     { id: 'view:previous', name: 'Previous View', keywords: ['camera', 'back', 'undo view'], shortcut: 'Shift+V', run: () => previousView(viewer, controller) },
     ...views,
     { id: 'view:backedges', name: 'Back Edges', keywords: ['hidden', 'x-ray', 'view'], shortcut: 'K', run: () => controller.notify(viewer.toggleBackEdges() ? 'Back edges shown (K to hide)' : 'Back edges hidden') },
+    { id: 'view:materials', name: 'Materials', keywords: ['paint', 'colour', 'color', 'texture'], run: toggleMaterials },
     { id: 'guides:toggle', name: 'Show/Hide Guides', keywords: ['guide', 'construction'], run: () => controller.toggleGuides() },
     { id: 'guides:delete', name: 'Delete All Guides', keywords: ['guide', 'construction'], run: () => controller.deleteGuides() },
   ];
@@ -296,7 +308,7 @@ function buildPalette(buttons: Map<ToolId, HTMLButtonElement>, setTool: (id: Too
   }
 }
 
-function buildToolbar(viewer: Viewer, controller: ToolController, files: FileCommands) {
+function buildToolbar(viewer: Viewer, controller: ToolController, files: FileCommands, toggleMaterials: () => void) {
   const bar = document.getElementById('toolbar')!;
   const brand = document.createElement('span');
   brand.className = 'brand';
@@ -337,7 +349,10 @@ function buildToolbar(viewer: Viewer, controller: ToolController, files: FileCom
   });
   guidesButton.setAttribute('aria-pressed', 'true');
   bar.append(guidesButton, iconButton(ICONS.guidesDelete, 'Delete all guides', () => controller.deleteGuides()));
-  return { undoButton, redoButton };
+  sep();
+  const materialsButton = iconButton(ICONS.materials, 'Materials (colours and textures)', toggleMaterials);
+  bar.append(materialsButton);
+  return { undoButton, redoButton, materialsButton };
 }
 
 function iconButton(icon: string, title: string, onClick: () => void): HTMLButtonElement {

@@ -3,6 +3,7 @@ import { Model } from '../core/model/Model';
 import { Document } from '../doc/Document';
 import { Guides } from '../doc/Guides';
 import { Labels } from '../doc/Labels';
+import { Materials, type Material } from '../doc/Materials';
 
 /** File extension of our own format. */
 export const FILE_EXTENSION = 'benup';
@@ -12,7 +13,8 @@ export const FORMAT_VERSION = 2;
  * Benup document (JSON, millimetres). The boundary representation is stored exactly: vertices,
  * faces as vertex-id loops (outer first, then holes), every edge with its true-curve tag, the
  * curves themselves, and the guides. Ids are kept so a reload is identical.
- * Version 2 adds edge smoothing (a fourth entry per edge). Version 1 files still open.
+ * Version 2 adds edge smoothing (a fourth entry per edge) and materials (colours and textures,
+ * with each face's material). Version 1 files still open.
  */
 interface FileV2 {
   format: 'benup';
@@ -20,7 +22,7 @@ interface FileV2 {
   units: 'mm';
   vertices: [number, number, number, number][];
   curves: { id: number; kind: 'circle'; center: Vec3; normal: Vec3; radius: number; segments: number }[];
-  faces: { id: number; normal: Vec3; loops: number[][] }[];
+  faces: { id: number; normal: Vec3; loops: number[][]; material?: string }[];
   /**
    * [a, b, curveId | null, soft?] for every edge, including loose (wire) edges. `soft` is 1 for a
    * soft edge, 0 for one that always shows, and absent for automatic (version 2).
@@ -29,6 +31,8 @@ interface FileV2 {
   guides: { visible: boolean; lines: { point: Vec3; dir: Vec3 }[]; points: { pos: Vec3 }[] };
   /** Text labels (optional: files saved before labels existed have none). */
   labels?: { anchor: Vec3; position: Vec3; text: string }[];
+  /** Materials (version 2); textures are embedded as data URLs. */
+  materials?: Material[];
 }
 
 export function serializeDocument(doc: Document): string {
@@ -39,7 +43,7 @@ export function serializeDocument(doc: Document): string {
     units: 'mm',
     vertices: [...m.vertices.values()].map((v) => [v.id, ...v.pos]),
     curves: [...m.curves.values()].map((c) => ({ id: c.id, kind: c.kind, center: c.center, normal: c.normal, radius: c.radius, segments: c.segments })),
-    faces: [...m.faces.values()].map((f) => ({ id: f.id, normal: f.normal, loops: m.faceVertexLoops(f.id) })),
+    faces: [...m.faces.values()].map((f) => ({ id: f.id, normal: f.normal, loops: m.faceVertexLoops(f.id), ...(f.material !== undefined ? { material: f.material } : {}) })),
     edges: [...m.edges()].map((e) => {
       const h = m.he(e);
       return h.soft === undefined ? [h.origin, m.dest(e), h.curve] : [h.origin, m.dest(e), h.curve, h.soft ? 1 : 0];
@@ -50,6 +54,7 @@ export function serializeDocument(doc: Document): string {
       points: doc.guides.points().map((g) => ({ pos: g.pos })),
     },
     labels: [...doc.labels.items.values()].map((l) => ({ anchor: l.anchor, position: l.position, text: l.text })),
+    materials: [...doc.materials.items.values()],
   };
   return JSON.stringify(file);
 }
@@ -71,7 +76,13 @@ export function parseDocument(text: string): Document {
   if (f.units !== 'mm') throw new FileFormatError(`Unsupported units "${String(f.units)}".`);
 
   const model = new Model();
+  const materials = new Materials();
   try {
+    for (const mat of f.materials ?? []) {
+      const { id, name, color, opacity, texture } = mat;
+      if (typeof id !== 'string') throw new Error('a material has no id');
+      materials.add({ name, color, opacity, ...(texture ? { texture: { image: texture.image, width: texture.width, height: texture.height } } : {}) }, id);
+    }
     const vec = (v: unknown, what: string): Vec3 => {
       if (!Array.isArray(v) || v.length !== 3 || !v.every((x) => typeof x === 'number' && Number.isFinite(x))) throw new Error(`bad ${what}`);
       return [v[0], v[1], v[2]];
@@ -85,7 +96,8 @@ export function parseDocument(text: string): Document {
     }
     for (const face of f.faces ?? []) {
       if (!Array.isArray(face.loops) || face.loops.length === 0) throw new Error(`face ${face.id} has no loops`);
-      model.addFace(face.loops[0], face.loops.slice(1), { normal: vec(face.normal, 'face normal'), id: face.id });
+      if (face.material !== undefined && !materials.get(face.material)) throw new Error(`face ${face.id} uses missing material ${face.material}`);
+      model.addFace(face.loops[0], face.loops.slice(1), { normal: vec(face.normal, 'face normal'), id: face.id, material: face.material });
     }
     for (const [a, b, curve, soft] of f.edges ?? []) {
       model.addEdge(a, b);
@@ -109,5 +121,5 @@ export function parseDocument(text: string): Document {
     if (typeof l.text !== 'string') throw new FileFormatError('The file is damaged: a label has no text.');
     labels.add(l.anchor, l.position, l.text);
   }
-  return new Document(model, guides, labels);
+  return new Document(model, guides, labels, materials);
 }

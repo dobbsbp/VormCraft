@@ -61,6 +61,8 @@ export interface ToolEvent {
   screen: [number, number];
   shift: boolean;
   ctrl: boolean;
+  /** Alt held (Paint Bucket: pick up a face's paint). */
+  alt?: boolean;
   /** Left button held (dragging). */
   down: boolean;
 }
@@ -143,6 +145,7 @@ export type ToolId =
   | 'pushpull'
   | 'offset'
   | 'followMe'
+  | 'paint'
   | 'scale'
   | 'move'
   | 'rotate'

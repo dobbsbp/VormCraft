@@ -3,9 +3,10 @@ import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
 import type { Vec3 } from '../core/math/vec3';
-import type { FaceId, HalfEdgeId, Model } from '../core/model/Model';
+import type { FaceId, HalfEdgeId, MaterialId, Model } from '../core/model/Model';
 import type { Guide, GuideId, Guides } from '../doc/Guides';
 import type { LabelId, Labels } from '../doc/Labels';
+import type { Material, Materials } from '../doc/Materials';
 import type { PointerSample } from '../tools/ToolController';
 import type { Preview, PreviewColor, PreviewLines, Projector, Snap } from '../tools/types';
 import { surfaceOutline } from '../core/model/surfaces';
@@ -58,6 +59,10 @@ export class Viewer {
   private data: DisplayData | null = null;
   private readonly frontMesh: THREE.Mesh;
   private readonly backMesh: THREE.Mesh;
+  /** Default face colours (front, and back as a cue), then one pair per material in use. */
+  private readonly defaultFront: THREE.MeshLambertMaterial;
+  private readonly defaultBack: THREE.MeshLambertMaterial;
+  private readonly paints = new Map<MaterialId, { def: Material; front: THREE.MeshLambertMaterial; back: THREE.MeshLambertMaterial; texture: THREE.Texture | null }>();
   private readonly edges: THREE.LineSegments;
   /** The same edges drawn through faces, dashed (Back Edges view, K). */
   private readonly backEdges: THREE.LineSegments;
@@ -88,6 +93,7 @@ export class Viewer {
     private model: Model,
     private guides: Guides,
     private labels: Labels,
+    private materials: Materials,
   ) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(window.devicePixelRatio);
@@ -101,10 +107,10 @@ export class Viewer {
     this.scene.add(this.camera);
 
     const geometry = new THREE.BufferGeometry();
-    const faceMaterial = (color: number, side: THREE.Side) =>
-      new THREE.MeshLambertMaterial({ color, side, flatShading: true, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
-    this.frontMesh = new THREE.Mesh(geometry, faceMaterial(THEME.faceFront, THREE.FrontSide));
-    this.backMesh = new THREE.Mesh(geometry, faceMaterial(THEME.faceBack, THREE.BackSide));
+    this.defaultFront = faceMaterial(THEME.faceFront, THREE.FrontSide);
+    this.defaultBack = faceMaterial(THEME.faceBack, THREE.BackSide);
+    this.frontMesh = new THREE.Mesh(geometry, [this.defaultFront]);
+    this.backMesh = new THREE.Mesh(geometry, [this.defaultBack]);
     this.edges = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: THEME.edge }));
     this.backEdges = new THREE.LineSegments(
       this.edges.geometry,
@@ -136,8 +142,10 @@ export class Viewer {
     this.data = data;
     const g = this.frontMesh.geometry;
     g.setAttribute('position', new THREE.BufferAttribute(data.positions, 3));
+    g.setAttribute('uv', new THREE.BufferAttribute(data.uvs, 2));
     g.setIndex(new THREE.BufferAttribute(data.indices, 1));
     g.computeBoundingSphere();
+    this.applyPaints(data);
     const eg = this.edges.geometry;
     eg.setAttribute('position', new THREE.BufferAttribute(data.edgePositions, 3));
     eg.computeBoundingSphere();
@@ -146,6 +154,64 @@ export class Viewer {
     Object.assign(this.backEdges.material as THREE.LineDashedMaterial, { dashSize: dash, gapSize: dash * 0.75 });
     this.rebuildGuides();
     this.rebuildOverlay();
+  }
+
+  /** One draw group per material; painted faces show their material on both sides. */
+  private applyPaints(data: DisplayData): void {
+    const g = this.frontMesh.geometry;
+    g.clearGroups();
+    const front: THREE.Material[] = [this.defaultFront];
+    const back: THREE.Material[] = [this.defaultBack];
+    const slot = new Map<MaterialId, number>();
+    for (const group of data.groups) {
+      const paint = group.material === null ? null : this.paint(group.material);
+      if (paint && !slot.has(group.material!)) {
+        slot.set(group.material!, front.length);
+        front.push(paint.front);
+        back.push(paint.back);
+      }
+      g.addGroup(group.start, group.count, paint ? slot.get(group.material!)! : 0);
+    }
+    this.frontMesh.material = front;
+    this.backMesh.material = back;
+    // Free materials that were deleted or replaced by an edit.
+    for (const [id, p] of this.paints) {
+      if (this.materials.get(id) === p.def) continue;
+      this.disposePaint(p);
+      this.paints.delete(id);
+    }
+  }
+
+  /** The display materials for a document material (rebuilt when the material is edited). */
+  private paint(id: MaterialId): { front: THREE.MeshLambertMaterial; back: THREE.MeshLambertMaterial } | null {
+    const def = this.materials.get(id);
+    if (!def) return null;
+    const cached = this.paints.get(id);
+    if (cached?.def === def) return cached;
+    if (cached) this.disposePaint(cached);
+    let texture: THREE.Texture | null = null;
+    if (def.texture) {
+      texture = new THREE.TextureLoader().load(def.texture.image, () => this.requestRender());
+      texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+      texture.repeat.set(1 / def.texture.width, 1 / def.texture.height);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+    }
+    const make = (side: THREE.Side) => {
+      const m = faceMaterial(def.texture ? 0xffffff : new THREE.Color(def.color), side);
+      m.map = texture;
+      if (def.opacity < 1) Object.assign(m, { transparent: true, opacity: def.opacity, depthWrite: false });
+      return m;
+    };
+    const p = { def, front: make(THREE.FrontSide), back: make(THREE.BackSide), texture };
+    this.paints.set(id, p);
+    return p;
+  }
+
+  private disposePaint(p: { front: THREE.Material; back: THREE.Material; texture: THREE.Texture | null }): void {
+    p.front.dispose();
+    p.back.dispose();
+    p.texture?.dispose();
   }
 
   setOverlay(overlay: Overlay): void {
@@ -475,11 +541,11 @@ export class Viewer {
   }
 
   /** Pick at a viewport position and package it for the tools. */
-  sample(screen: [number, number], e: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean }, down: boolean): PointerSample {
+  sample(screen: [number, number], e: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean; altKey?: boolean }, down: boolean): PointerSample {
     const ray = screenRay(this.camera, screen, this.viewport());
     const hits = this.hitsAt(screen);
     const face: PointerSample['faceHit'] = hits.face ? { face: hits.face.face, point: hits.face.point, distance: hits.face.distance } : null;
-    return { screen, ray, faceHit: face, edge: hits.edge?.edge ?? null, shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey, down };
+    return { screen, ray, faceHit: face, edge: hits.edge?.edge ?? null, shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey, alt: !!e.altKey, down };
   }
 
   /**
@@ -660,4 +726,8 @@ function buildAxes(): THREE.Group {
   }
   group.renderOrder = -1;
   return group;
+}
+
+function faceMaterial(color: THREE.ColorRepresentation, side: THREE.Side): THREE.MeshLambertMaterial {
+  return new THREE.MeshLambertMaterial({ color, side, flatShading: true, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
 }

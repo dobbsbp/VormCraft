@@ -1,5 +1,6 @@
-import type { FaceId, HalfEdgeId } from '../core/model/Model';
+import type { FaceId, HalfEdgeId, MaterialId } from '../core/model/Model';
 import { erase } from '../core/ops/erase';
+import { inheritMaterials, unpaintMaterial } from '../core/ops/materials';
 import type { Document, DocumentSnapshot } from '../doc/Document';
 import { History } from '../doc/History';
 import { facesWithCurveEdges, smoothSurface } from '../core/model/surfaces';
@@ -18,6 +19,7 @@ import { NavigationTool } from './NavigationTool';
 import { infer } from './inference';
 import { OffsetTool } from './OffsetTool';
 import { FollowMeTool } from './FollowMeTool';
+import { PaintTool } from './PaintTool';
 import { PushPullTool } from './PushPullTool';
 import { RectangleTool } from './RectangleTool';
 import { RotatedRectangleTool } from './RotatedRectangleTool';
@@ -37,6 +39,7 @@ export interface PointerSample {
   edge: HalfEdgeId | null;
   shift: boolean;
   ctrl: boolean;
+  alt?: boolean;
   down: boolean;
 }
 
@@ -102,6 +105,11 @@ export class ToolController {
       pushpull: new PushPullTool(this.ctx),
       offset: new OffsetTool(this.ctx),
       followMe: new FollowMeTool(this.ctx),
+      paint: new PaintTool(
+        this.ctx,
+        () => this.paintMaterial,
+        (m) => this.setPaintMaterial(m),
+      ),
       tape: new TapeMeasureTool(this.ctx),
       eraser: new EraserTool(this.ctx),
       lasso: new LassoTool(this.ctx),
@@ -141,6 +149,8 @@ export class ToolController {
     try {
       if (base) this.doc.restore(base);
       change();
+      // New faces cut from painted faces keep their paint.
+      inheritMaterials((base ?? before).model, this.doc.model);
       this.doc.model.validate();
     } catch (err) {
       this.doc.restore(before);
@@ -187,10 +197,33 @@ export class ToolController {
     this.afterDocumentChange();
   }
 
+  /** The material the Paint Bucket paints with (undefined = the default material). */
+  paintMaterial: MaterialId | undefined = undefined;
+
+  setPaintMaterial(m: MaterialId | undefined): void {
+    this.paintMaterial = m !== undefined && this.doc.materials.get(m) ? m : undefined;
+    this.onUpdate();
+  }
+
+  /** A document change that is not a tool's (e.g. editing a material), as one undoable step. */
+  editDocument(label: string, change: () => void): void {
+    this.error = null;
+    this.run(() => this.apply(change, undefined, null, label));
+  }
+
+  /** Delete a material: faces painted with it go back to the default material. */
+  deleteMaterial(id: MaterialId): void {
+    this.editDocument('Delete material', () => {
+      unpaintMaterial(this.doc.model, id);
+      this.doc.materials.delete(id);
+    });
+    if (this.paintMaterial === id) this.setPaintMaterial(undefined);
+  }
+
   /** Replace the whole document (New / Open). Clears history and selection. */
   replaceDocument(next: Document): void {
     for (const t of Object.values(this.tools)) t.reset();
-    this.doc.restore({ model: next.model, guides: next.guides, labels: next.labels });
+    this.doc.restore(next);
     this.history.clear();
     this.selection.clear();
     this.dirty = false;
@@ -280,6 +313,7 @@ export class ToolController {
       screen: s.screen,
       shift: s.shift,
       ctrl: s.ctrl,
+      alt: !!s.alt,
       down: s.down,
     };
   }

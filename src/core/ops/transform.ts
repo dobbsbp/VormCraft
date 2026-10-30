@@ -126,9 +126,9 @@ export function transformVertices(model: Model, vertices: ReadonlySet<VertexId>,
   }
 
   if (mirror) {
-    const rebuilt = [...faces].map((f) => ({ f, normal: model.face(f).normal, rings: model.faceVertexLoops(f).map((r) => [...r].reverse()) }));
+    const rebuilt = [...faces].map((f) => ({ f, normal: model.face(f).normal, material: model.face(f).material, rings: model.faceVertexLoops(f).map((r) => [...r].reverse()) }));
     for (const r of rebuilt) model.removeFace(r.f);
-    for (const r of rebuilt) model.addFace(r.rings[0], r.rings.slice(1), { normal: r.normal, id: r.f });
+    for (const r of rebuilt) model.addFace(r.rings[0], r.rings.slice(1), { normal: r.normal, id: r.f, material: r.material });
   }
 
   const s = similarityScale(a);
@@ -167,7 +167,7 @@ export function duplicateVertices(model: Model, vertices: ReadonlySet<VertexId>)
   const faces = [...model.faces.values()].filter((f) => model.faceVertexLoops(f.id).flat().every((v) => vertices.has(v)));
   for (const f of faces) {
     const rings = model.faceVertexLoops(f.id).map((r) => r.map((v) => map.get(v)!));
-    model.addFace(rings[0], rings.slice(1), { normal: f.normal });
+    model.addFace(rings[0], rings.slice(1), { normal: f.normal, material: f.material });
   }
   for (const e of [...model.edges()]) {
     const h = model.he(e);
@@ -179,6 +179,7 @@ export function duplicateVertices(model: Model, vertices: ReadonlySet<VertexId>)
     model.addEdge(ca, cb);
     const c = copyCurve(h.curve);
     if (c !== null) model.setEdgeCurve(ca, cb, c);
+    if (h.soft !== undefined) model.setEdgeSoft(ca, cb, h.soft);
   }
   // Vertices that ended up without edges (isolated in the source) are not worth copying.
   for (const [v, c] of map) {

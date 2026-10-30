@@ -3,7 +3,7 @@ import { makePlane, planesCoincide, signedDistance, toPlane2D, type Plane } from
 import { SpatialHash } from '../math/spatialHash';
 import { TOL } from '../math/tolerance';
 import { add, cross, distance, dot, scale, type Vec3 } from '../math/vec3';
-import type { FaceId, HalfEdgeId, Model, VertexId } from '../model/Model';
+import type { FaceId, HalfEdgeId, MaterialId, Model, VertexId } from '../model/Model';
 import { assembleFaces, traceLoops } from '../model/region';
 import { triangulateFaces } from '../triangulate';
 
@@ -122,8 +122,13 @@ export function booleanInPlace(model: Model, targetFaces: ReadonlySet<FaceId>, t
       snap.insert(model.pos(v), v);
     }
   }
+  const materials = new Map<number, MaterialId>();
+  for (const f of targetFaces) {
+    const m = model.face(f).material;
+    if (m !== undefined) materials.set(f, m);
+  }
   for (const f of targetFaces) model.removeFace(f);
-  const result = rebuildFaces(model, out, planes, normals, snap);
+  const result = rebuildFaces(model, out, planes, normals, snap, materials);
   model.purgeFree(oldEdges);
   return { ...result, toolFaceIds };
 }
@@ -134,6 +139,7 @@ function rebuildFaces(
   planes: Map<number, Plane>,
   normals: Map<number, Vec3>,
   snap: SpatialHash<VertexId>,
+  materials: Map<number, MaterialId>,
 ): { faces: FaceId[]; newVertices: VertexId[] } {
   const np = mesh.numProp;
   const nVerts = mesh.vertProperties.length / np;
@@ -190,7 +196,7 @@ function rebuildFaces(
     const { faces: rings } = assembleFaces(traceLoops([...edges.values()], pos2), pos2);
     rings.forEach((r, i) => {
       const reuse = i === 0 && !model.faces.has(id);
-      faces.push(model.addFace(r.outer, r.holes, { normal: normals.get(id), id: reuse ? id : undefined }));
+      faces.push(model.addFace(r.outer, r.holes, { normal: normals.get(id), id: reuse ? id : undefined, material: materials.get(id) }));
     });
   }
   return { faces, newVertices };

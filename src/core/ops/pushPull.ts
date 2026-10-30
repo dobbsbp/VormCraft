@@ -278,9 +278,9 @@ function booleanPushPull(model: Model, faceId: FaceId, d: number, shell: Set<Fac
 
 function renameFace(model: Model, from: FaceId, to: FaceId): void {
   const rings = model.faceVertexLoops(from);
-  const normal = model.face(from).normal;
+  const { normal, material } = model.face(from);
   model.removeFace(from);
-  model.addFace(rings[0], rings.slice(1), { normal, id: to });
+  model.addFace(rings[0], rings.slice(1), { normal, id: to, material });
 }
 
 export type CurveCandidate = { id: CurveId; center: Vec3; normal: Vec3; radius: number; segments: number; kind: 'circle'; scratch?: true };

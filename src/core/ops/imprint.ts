@@ -173,9 +173,9 @@ export function imprintSegments(model: Model, faceId: FaceId, segments: readonly
   const faces = assembled.filter((f) => inFace(interiorPoint(f.outer.map(pos2), f.holes.map((h) => h.map(pos2)))) === 'inside');
   faces.sort((x, y) => signedArea(y.outer.map(pos2)) - signedArea(x.outer.map(pos2)));
 
-  const normal = face.normal;
+  const { normal, material } = face;
   model.removeFace(faceId);
-  const result = faces.map((f, i) => model.addFace(f.outer, f.holes, { normal, id: i === 0 ? faceId : undefined }));
+  const result = faces.map((f, i) => model.addFace(f.outer, f.holes, { normal, id: i === 0 ? faceId : undefined, material }));
   const newEdges: HalfEdgeId[] = [];
   for (const s of kept.values()) {
     const a = nodes[s.a].v!;

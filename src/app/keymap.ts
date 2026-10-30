@@ -46,7 +46,7 @@ export const KEY_BINDINGS: readonly KeyBinding[] = [
   tool('F', 'f', 'Offset', 'offset'),
   shiftTool('p', 'Follow Me', 'followMe'),
   tool('E', 'e', 'Eraser', 'eraser'),
-  missing('B', 'b', false, 'Paint Bucket', OUT_OF_SCOPE),
+  tool('B', 'b', 'Paint Bucket', 'paint'),
   tool('T', 't', 'Tape Measure', 'tape'),
   // Selection & editing
   tool('Space', ' ', 'Select', 'select'),

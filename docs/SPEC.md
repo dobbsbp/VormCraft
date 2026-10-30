@@ -46,6 +46,15 @@ The SketchUp screenshot is for layout reference only. Use our own icons and asse
 ### Inference Snapping (applies to all tools)
 - Snap to endpoints, midpoints, edges, faces, guide intersections, and the red, green and blue axes.
 - Show a visual cue for the active snap.
+### Follow Me
+- Select the path (connected edges, or a face to follow its edge), then click the profile face. The profile is swept along the path with mitred corners.
+- A free-standing profile becomes a new solid; a closed path turns it right round (lathe). A profile drawn on a solid cuts a groove or chamfer along the path.
+- Curved profiles and paths give smooth (soft-edged) surfaces, with true curves kept where the path has arcs.
+### Materials (Paint Bucket)
+- Paint faces with a colour (optionally see-through) or a texture image tiled at a real-world size. Materials are saved in the document.
+- Click paints a face (a whole curved surface; all selected faces if the clicked face is selected). Shift: every face with the same paint. Ctrl: connected faces with the same paint. Alt: pick up a face's paint.
+- Paint follows the geometry: faces split from a painted face, and pushed or moved faces, keep their paint.
+- Materials panel: materials in the model, a library of colours and textures (our own artwork), and an editor (name, colour, opacity, texture image and tile size).
 ### Export
 - STL (binary): watertight check before export, with adjustable curve resolution.
 - OBJ
@@ -58,7 +67,7 @@ The SketchUp screenshot is for layout reference only. Use our own icons and asse
 - **Phase 4: Export and App** — STL and OBJ export, save and open in our own file format, undo and redo, Tauri desktop build.
 
 ## Out of Scope (v1)
-Parametric history, constraints, materials and textures, components and groups (revisit in v2), SKP import.
+Parametric history, constraints, components and groups (revisit in v2), SKP import, exporting materials.
 
 ## Notes for Claude Code
 - Read this spec before every task.
