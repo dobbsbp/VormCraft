@@ -157,3 +157,24 @@ export function messageDialog(title: string, body: string): Promise<void> {
     dlg.showModal();
   });
 }
+
+/** A small window showing that something is happening (no buttons); update its text, then close it. */
+export function progressDialog(title: string, message: string): { set(message: string): void; close(): void } {
+  const dlg = document.createElement('dialog');
+  dlg.className = 'modal progress';
+  dlg.innerHTML = `<form method="dialog"><h2></h2><p></p><div class="progress-bar"><span></span></div></form>`;
+  dlg.querySelector('h2')!.textContent = title;
+  const p = dlg.querySelector('p')!;
+  p.textContent = message;
+  // Not dismissed with Esc: it closes itself when the work is done.
+  dlg.addEventListener('cancel', (e) => e.preventDefault());
+  document.body.append(dlg);
+  dlg.showModal();
+  return {
+    set: (text) => (p.textContent = text),
+    close: () => {
+      dlg.close();
+      dlg.remove();
+    },
+  };
+}

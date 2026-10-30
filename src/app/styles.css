@@ -1056,3 +1056,30 @@ body {
   border-radius: 999px;
   background: var(--chrome-border);
 }
+
+/* An indeterminate progress bar (checking or downloading). */
+.modal.progress .progress-bar {
+  position: relative;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--chrome-border);
+}
+
+.modal.progress .progress-bar span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 35%;
+  border-radius: 2px;
+  background: var(--accent);
+  animation: progress-slide 1.2s ease-in-out infinite;
+}
+
+@keyframes progress-slide {
+  from {
+    left: -35%;
+  }
+  to {
+    left: 100%;
+  }
+}
