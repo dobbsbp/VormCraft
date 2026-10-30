@@ -1,15 +1,20 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import {
+  arcThroughPoints,
   checkWatertight,
+  drawArc,
   drawCircle,
   drawRectangle,
   faceArea,
   findFaceAt,
   GROUND_PLANE,
   initBooleanKernel,
+  normalize,
   pushPull,
+  sub,
   volume,
   type Model,
+  type Vec3,
 } from '../src/core';
 import { Document } from '../src/doc/Document';
 import { parseLength, parseLengths, parseSegments } from '../src/tools/units';
@@ -302,6 +307,38 @@ describe('Push/Pull tool', () => {
     const r = checkWatertight(model);
     expect(r.watertight).toBe(true);
     expect(r.genus).toBe(1);
+  });
+
+  it('moving over the rest of the same face does not snap the distance to zero (regression)', () => {
+    const { doc, model, controller } = harness();
+    pushPull(model, drawRectangle(model, GROUND_PLANE, [0, 0, 0], 200, 200).inner!, -200);
+    // A curved bite out of the top's front edge: the pushed face touches the edge of the top.
+    drawArc(model, arcThroughPoints([50, 0, 0], [100, 50, 0], [150, 0, 0]), 12);
+    const bite = findFaceAt(model, [100, 20, 0])!;
+    const rest = findFaceAt(model, [100, 150, 0])!;
+    expect(bite).not.toBe(rest);
+    const t = use(controller, 'pushpull');
+    t.pointerDown(ev(doc, [100, 20, 0], { face: bite }));
+    // The cursor passes over the rest of the top (an on-face snap in the start plane).
+    const ray = { origin: [100, -1000, 300] as Vec3, dir: normalize(sub([100, 80, 0], [100, -1000, 300])) };
+    t.pointerMove(ev(doc, [100, 80, 0], { face: rest, ray }));
+    expect(t.vcbValue()).not.toBe('0 mm');
+    const v = volume(model);
+    t.pointerDown(ev(doc, [100, 80, 0], { face: rest, ray }));
+    expect(volume(model)).not.toBeCloseTo(v, 0);
+    expect(checkWatertight(model).watertight).toBe(true);
+  });
+
+  it('looking straight along the push, moving the cursor keeps the distance', () => {
+    const { doc, model, controller } = harness();
+    const f = drawRectangle(model, GROUND_PLANE, [0, 0, 0], 10, 10).inner!;
+    const t = use(controller, 'pushpull');
+    t.pointerDown(ev(doc, [5, 5, 0], { face: f }));
+    t.pointerMove(ev(doc, [5, 5, 30], { ray: sideRay([5, 5, 30]), snap: null }));
+    // Now from (almost) straight above: a ray 1° off the face normal.
+    const tilt = (Math.PI / 180) * 1;
+    t.pointerMove(ev(doc, [7, 5, 0], { snap: null, ray: { origin: [7, 5, 1000], dir: [Math.sin(tilt), 0, -Math.cos(tilt)] } }));
+    expect(t.vcbValue()).toBe('30 mm');
   });
 
   it('double-click repeats the last distance on another face', () => {

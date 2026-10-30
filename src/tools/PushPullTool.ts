@@ -7,6 +7,9 @@ import { closestRayLine } from './geom';
 import type { Preview, PreviewLines, Tool, ToolContext, ToolEvent } from './types';
 import { formatLength, parseLength } from './units';
 
+/** Cosine of the angle (5°) within which the view counts as looking straight along the push. */
+const HEAD_ON = Math.cos((5 * Math.PI) / 180);
+
 /**
  * Push/Pull: click a face, move along its normal, click to finish, or type a distance + Enter
  * (positive = out, adds material; negative = in, removes it). Moving onto other geometry snaps the
@@ -55,7 +58,15 @@ export class PushPullTool implements Tool {
     const a = this.active!;
     const s = e.snap;
     const snapsToGeometry = s && s.kind !== 'ground' && s.kind !== 'onPlane' && !(s.kind === 'onFace' && s.face === a.face);
-    if (snapsToGeometry) return dot(sub(s.point, a.start), a.normal);
+    if (snapsToGeometry) {
+      const d = dot(sub(s.point, a.start), a.normal);
+      // Geometry in the face's own plane (the rest of a face the pushed face was cut from, its
+      // edges and corners) would pin the distance at zero: follow the cursor instead.
+      if (Math.abs(d) > TOL) return d;
+    }
+    // Looking (almost) straight along the push, the cursor says nothing about depth: keep the
+    // distance (type one, or orbit a little) rather than jump about.
+    if (Math.abs(dot(e.ray.dir, a.normal)) > HEAD_ON) return a.distance;
     const r = closestRayLine(e.ray, a.start, a.normal);
     return r ? r.s : a.distance;
   }
