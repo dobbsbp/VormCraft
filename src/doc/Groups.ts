@@ -14,6 +14,8 @@ export interface Group {
   model: Model;
   /** Paint for the group's faces that have none of their own (and those of groups inside it). */
   material?: MaterialId;
+  /** Hidden groups (and everything inside them) are not drawn, picked or snapped to. */
+  hidden?: boolean;
 }
 
 /** The document's groups. Like the rest of the document they are saved and undoable. */
@@ -71,6 +73,12 @@ export class Groups {
       if (g.parent === context) return g.id;
     }
     return null;
+  }
+
+  /** Whether the group, or a group around it, is hidden. */
+  isHidden(id: GroupId): boolean {
+    for (let g = this.items.get(id); g; g = g.parent === null ? undefined : this.items.get(g.parent)) if (g.hidden) return true;
+    return false;
   }
 
   /** Paint shown on unpainted faces of the group: its own, else that of the nearest group around it. */

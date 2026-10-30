@@ -38,6 +38,13 @@ VormCraft is a push/pull 3D modeling program for woodworking, architecture sketc
 - Snaps to endpoints, midpoints, edges, faces, guide intersections and the red, green and blue axes, with a visual cue for each.
 - Arrow keys lock to an axis (→ red, ← green, ↑ blue, ↓ parallel or perpendicular to the last edge).
 
+### Scenes and view styles
+- **Scenes** save a view: the camera, which groups are hidden, and the display style. Tabs along the top of the viewport jump between them with a smooth camera glide, and **Play** runs them as a looping slideshow.
+- Choose per scene what it restores (camera, hidden groups, style), overwrite a scene with **Update**, and rename or reorder scenes in the Scenes panel.
+- Display styles: **Textured**, **Shaded**, **Wireframe** and **X-ray**, plus back edges and a background colour.
+- **Perspective** or **parallel** projection.
+- Hide selected groups and unhide them all (from the Search box).
+
 ### Materials
 - **Paint Bucket**: plain colours, see-through colours such as glass, or tiled textures at real-world size.
 - Built-in library of colours and textures (brick, wood planks, tiles, concrete, grass), or use your own image.
@@ -79,6 +86,7 @@ Standard views (top, front, iso, …), Zoom Window, Previous View and back-edge 
 | T | Tape Measure | B | Paint Bucket |
 | O / H / Z | Orbit / Pan / Zoom | Shift+W | Zoom Window |
 | Shift+V | Previous View | K | Back Edges |
+| Page Down / Page Up | Next / previous scene | | |
 | Shift+S | Search commands | Ctrl+G | Make Group |
 | Ctrl+Z / Ctrl+Y | Undo / Redo | | |
 | Ctrl+N / O / S | New / Open / Save | Ctrl+Shift+S | Save As |
@@ -139,7 +147,7 @@ Units are millimetres, and Z is up (red = X, green = Y, blue = Z). The full desi
 Features are added as real use calls for them. Ideas on the list:
 
 - Windows 11 installer on the Releases page
-- Dimensions, Section Planes
+- Dimensions, Section Planes, tags/layers, shadows (scenes will save these too)
 - Components (reusable, linked copies)
 - STEP export (true curves, through OpenCascade)
 - Exporting materials with OBJ

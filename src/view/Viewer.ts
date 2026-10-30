@@ -10,6 +10,7 @@ import type { GroupId } from '../doc/Groups';
 import type { Guide, GuideId, Guides } from '../doc/Guides';
 import type { LabelId, Labels } from '../doc/Labels';
 import type { Material, Materials } from '../doc/Materials';
+import { DEFAULT_STYLE, type CameraView, type DisplayStyle, type FaceStyle, type SceneView } from '../doc/Scenes';
 import type { PointerSample } from '../tools/ToolController';
 import type { Preview, PreviewColor, PreviewLines, Projector, Snap } from '../tools/types';
 import { surfaceOutline } from '../core/model/surfaces';
@@ -56,11 +57,15 @@ interface Layer {
  * change), handles navigation (middle/right mouse, wheel), forwards left-button input to the tools
  * as picked samples, and draws the tools' overlay.
  */
-export class Viewer {
+export class Viewer implements SceneView {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
+  /** The eye: navigation moves it. In parallel projection `ortho` draws what it looks at. */
   readonly camera = new THREE.PerspectiveCamera(35, 1, 1, 1e5);
+  private readonly ortho = new THREE.OrthographicCamera();
   readonly nav = new Navigator(this.camera);
+  private faceStyle: FaceStyle = DEFAULT_STYLE.faces;
+  private background = DEFAULT_STYLE.background;
 
   /** Left-button pointer input for the tools, already picked. */
   onPointer: (kind: PointerKind, sample: PointerSample) => void = () => {};
@@ -75,7 +80,7 @@ export class Viewer {
   /** Default face colours (front, and back as a cue), then one pair per material in use. */
   private readonly defaultFront: THREE.MeshLambertMaterial;
   private readonly defaultBack: THREE.MeshLambertMaterial;
-  private readonly paints = new Map<MaterialId, { def: Material; front: THREE.MeshLambertMaterial; back: THREE.MeshLambertMaterial; texture: THREE.Texture | null }>();
+  private readonly paints = new Map<MaterialId, { def: Material; style: FaceStyle; front: THREE.MeshLambertMaterial; back: THREE.MeshLambertMaterial; texture: THREE.Texture | null }>();
   private readonly edges: THREE.LineSegments;
   /** The same edges drawn through faces, dashed (Back Edges view, K). */
   private readonly backEdges: THREE.LineSegments;
@@ -118,7 +123,7 @@ export class Viewer {
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.domElement.classList.add('viewport-canvas');
     container.appendChild(this.renderer.domElement);
-    this.scene.background = new THREE.Color(THEME.background);
+    this.scene.background = new THREE.Color(this.background);
 
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8f99, 1.4));
     this.camera.add(this.headlight);
@@ -183,6 +188,9 @@ export class Viewer {
     g.setIndex(new THREE.BufferAttribute(data.indices, 1));
     g.computeBoundingSphere();
     this.applyPaints(g, data, this.frontMesh, this.backMesh);
+    this.styleDefaults();
+    const faces = this.faceStyle !== 'wireframe';
+    this.frontMesh.visible = this.backMesh.visible = faces;
     this.rebuildLayers();
     this.freeUnusedPaints();
     this.sphere = this.computeSphere();
@@ -229,10 +237,12 @@ export class Viewer {
     const def = this.materials.get(id);
     if (!def) return null;
     const cached = this.paints.get(id);
-    if (cached?.def === def) return cached;
+    if (cached?.def === def && cached.style === this.faceStyle) return cached;
     if (cached) this.disposePaint(cached);
     let texture: THREE.Texture | null = null;
-    if (def.texture) {
+    // Shaded: colours only, textures shown as their colour.
+    const textured = !!def.texture && this.faceStyle !== 'shaded';
+    if (def.texture && textured) {
       texture = new THREE.TextureLoader().load(def.texture.image, () => this.requestRender());
       texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
       texture.repeat.set(1 / def.texture.width, 1 / def.texture.height);
@@ -240,14 +250,26 @@ export class Viewer {
       texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
     }
     const make = (side: THREE.Side) => {
-      const m = faceMaterial(def.texture ? 0xffffff : new THREE.Color(def.color), side);
+      const m = faceMaterial(textured ? 0xffffff : new THREE.Color(def.color), side);
       m.map = texture;
-      if (def.opacity < 1) Object.assign(m, { transparent: true, opacity: def.opacity, depthWrite: false });
+      this.seeThrough(m, def.opacity);
       return m;
     };
-    const p = { def, front: make(THREE.FrontSide), back: make(THREE.BackSide), texture };
+    const p = { def, style: this.faceStyle, front: make(THREE.FrontSide), back: make(THREE.BackSide), texture };
     this.paints.set(id, p);
     return p;
+  }
+
+  /** Transparency of a face material: its own opacity, and see-through faces in X-ray. */
+  private seeThrough(m: THREE.Material, opacity: number): void {
+    const o = this.faceStyle === 'xray' ? Math.min(opacity, 0.4) : opacity;
+    Object.assign(m, { transparent: o < 1, opacity: o, depthWrite: o >= 1 });
+    m.needsUpdate = true;
+  }
+
+  private styleDefaults(): void {
+    this.seeThrough(this.defaultFront, 1);
+    this.seeThrough(this.defaultBack, 1);
   }
 
   private disposePaint(p: { front: THREE.Material; back: THREE.Material; texture: THREE.Texture | null }): void {
@@ -268,7 +290,8 @@ export class Viewer {
 
   /** Bounds of every model in the document, or null when there is no geometry. */
   private computeSphere(): THREE.Sphere | null {
-    const b = modelBounds(this.doc.allModels());
+    const visible = [this.doc.root, ...[...this.doc.groups.items.values()].filter((g) => !this.doc.groups.isHidden(g.id)).map((g) => g.model)];
+    const b = modelBounds(visible);
     if (!b) return null;
     const box = new THREE.Box3(new THREE.Vector3(...b.min), new THREE.Vector3(...b.max));
     const s = box.getBoundingSphere(new THREE.Sphere());
@@ -289,7 +312,7 @@ export class Viewer {
     const editing = this.doc.editing;
     const owners: (GroupId | null)[] = [null, ...this.doc.groups.items.keys()];
     for (const owner of owners) {
-      if (owner === editing) continue;
+      if (owner === editing || (owner !== null && this.doc.groups.isHidden(owner))) continue;
       const model = this.doc.modelOf(owner);
       if (model.faces.size === 0 && model.halfEdges.size === 0) continue;
       const faded = editing !== null && (owner === null || !this.doc.groups.isWithin(owner, editing));
@@ -307,6 +330,7 @@ export class Viewer {
       edgeGeo.setAttribute('position', new THREE.BufferAttribute(data.edgePositions, 3));
       const edges = new THREE.LineSegments(edgeGeo, faded ? this.fadedEdge : this.layerEdge);
       if (faded) front.renderOrder = edges.renderOrder = 2;
+      if (this.faceStyle === 'wireframe') front.visible = back.visible = false;
       this.layerGroup.add(front, back, edges);
       this.layers.push({ owner, data, front, back, edges });
     }
@@ -325,20 +349,106 @@ export class Viewer {
     this.animateTo({ position: this.nav.recenterPosition(point), quaternion: this.camera.quaternion.clone() });
   }
 
-  /** Glide the camera to a view. */
-  private animateTo(to: CameraState): void {
-    const from = this.nav.state();
+  /**
+   * Glide the camera to a view over `ms` milliseconds (ease-out for short hops, ease-in-out for
+   * scene transitions), with the field of view and parallel view height if given.
+   */
+  private animateTo(to: CameraState & { fov?: number; height?: number }, ms = 180, easeInOut = false): void {
+    const from = { ...this.nav.state(), fov: this.camera.fov, height: this.nav.height };
     const start = performance.now();
     const id = ++this.recenterAnimation;
     const step = () => {
       if (id !== this.recenterAnimation) return; // a newer animation took over
-      const t = Math.min(1, (performance.now() - start) / 180);
-      const ease = 1 - Math.pow(1 - t, 3);
+      const t = ms <= 0 ? 1 : Math.min(1, (performance.now() - start) / ms);
+      const ease = easeInOut ? (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2) : 1 - Math.pow(1 - t, 3);
       this.nav.setState({ position: from.position.clone().lerp(to.position, ease), quaternion: from.quaternion.clone().slerp(to.quaternion, ease) });
+      if (to.fov !== undefined) {
+        this.camera.fov = from.fov + (to.fov - from.fov) * ease;
+        this.camera.updateProjectionMatrix();
+      }
+      if (to.height !== undefined) this.nav.height = from.height * Math.pow(to.height / from.height, ease);
       this.requestRender();
       if (t < 1) requestAnimationFrame(step);
+      else this.onCameraSettled();
     };
-    requestAnimationFrame(step);
+    if (ms <= 0) step();
+    else requestAnimationFrame(step);
+  }
+
+  /** Called when a camera glide ends (the slideshow waits for it). */
+  onCameraSettled: () => void = () => {};
+
+  /** The camera that draws and picks: the eye, or the orthographic one in parallel projection. */
+  private view(): THREE.Camera {
+    return this.nav.projection === 'parallel' ? this.ortho : this.camera;
+  }
+
+  /** How far ahead the camera's target is: the depth of the scene's centre (at least 1 mm). */
+  private targetDepth(): number {
+    const s = this.sceneSphere();
+    return Math.max(s.center.clone().sub(this.camera.position).dot(this.nav.forward()), 1);
+  }
+
+  get projection(): 'perspective' | 'parallel' {
+    return this.nav.projection;
+  }
+
+  /** Switch between perspective and parallel projection, keeping the scene the same size on screen. */
+  setProjection(p: 'perspective' | 'parallel'): void {
+    if (p === this.nav.projection) return;
+    if (p === 'parallel') {
+      this.nav.height = this.nav.heightAt(this.targetDepth());
+      this.syncOrtho();
+    }
+    this.nav.projection = p;
+    this.requestRender();
+  }
+
+  private syncOrtho(): void {
+    this.nav.syncParallel(this.ortho, this.sceneSphere().union(new THREE.Sphere(new THREE.Vector3(), 1000)));
+  }
+
+  // ------------------------------------------------------------------ scenes (SceneView)
+
+  /** The view as a scene stores it. */
+  cameraView(): CameraView {
+    const depth = this.nav.projection === 'parallel' ? this.nav.height / (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)) : this.targetDepth();
+    const p = this.camera.position;
+    const target = p.clone().addScaledVector(this.nav.forward(), depth);
+    return {
+      position: [p.x, p.y, p.z],
+      target: [target.x, target.y, target.z],
+      fov: this.camera.fov,
+      projection: this.nav.projection,
+      height: this.nav.projection === 'parallel' ? this.nav.height : this.nav.heightAt(depth),
+    };
+  }
+
+  /** Go to a stored view: the projection switches at once, the camera glides over `seconds`. */
+  setCameraView(v: CameraView, seconds: number): void {
+    this.rememberView();
+    // Where it ends up: a camera at the position looking at the target, Z up.
+    const probe = new THREE.PerspectiveCamera(v.fov, this.camera.aspect);
+    probe.position.set(...v.position);
+    new Navigator(probe).lookAt(new THREE.Vector3(...v.target));
+    if (v.projection === 'parallel' && this.nav.projection !== 'parallel') this.nav.height = this.nav.heightAt(this.targetDepth());
+    this.nav.projection = v.projection;
+    this.animateTo({ position: probe.position.clone(), quaternion: probe.quaternion.clone(), fov: v.fov, height: v.height }, seconds * 1000, true);
+  }
+
+  displayStyle(): DisplayStyle {
+    return { faces: this.faceStyle, backEdges: this.backEdges.visible, guides: this.guides.visible, background: this.background };
+  }
+
+  /** Change how the model is drawn (faces, back edges, background). Guides are the document's. */
+  setDisplayStyle(s: Partial<DisplayStyle>): void {
+    if (s.faces !== undefined) this.faceStyle = s.faces;
+    if (s.backEdges !== undefined) this.backEdges.visible = s.backEdges;
+    if (s.background !== undefined) {
+      this.background = s.background;
+      (this.scene.background as THREE.Color).set(s.background);
+    }
+    this.refresh();
   }
 
   /** Record the current view for Previous View (before the camera changes). */
@@ -381,7 +491,7 @@ export class Viewer {
   }
 
   projector(): Projector {
-    return cameraProjector(this.camera, this.viewport());
+    return cameraProjector(this.view(), this.viewport());
   }
 
   requestRender(): void {
@@ -389,8 +499,10 @@ export class Viewer {
     this.renderQueued = true;
     requestAnimationFrame(() => {
       this.renderQueued = false;
-      this.nav.fitClipping(this.sceneSphere().union(new THREE.Sphere(new THREE.Vector3(), 1000)));
-      this.renderer.render(this.scene, this.camera);
+      const sphere = this.sceneSphere().union(new THREE.Sphere(new THREE.Vector3(), 1000));
+      this.nav.fitClipping(sphere);
+      if (this.nav.projection === 'parallel') this.nav.syncParallel(this.ortho, sphere);
+      this.renderer.render(this.scene, this.view());
       this.drawScreenOverlay();
     });
   }
@@ -650,22 +762,23 @@ export class Viewer {
     if (!this.data) return { face: null, edge: null, other: null };
     const viewport = this.viewport();
     const ndc = new THREE.Vector2((screen[0] / viewport.width) * 2 - 1, -(screen[1] / viewport.height) * 2 + 1);
-    const hits = pickHits({ camera: this.camera, ndc, viewport, faceObjects: [this.frontMesh, this.backMesh], data: this.data });
+    const wire = this.faceStyle === 'wireframe';
+    const hits = pickHits({ camera: this.view(), ndc, viewport, faceObjects: wire ? [] : [this.frontMesh, this.backMesh], data: this.data, seeThrough: this.faceStyle === 'xray' });
     const raycaster = new THREE.Raycaster();
-    raycaster.setFromCamera(ndc, this.camera);
-    const meshes = this.layers.flatMap((l) => [l.front, l.back]);
+    raycaster.setFromCamera(ndc, this.view());
+    const meshes = wire ? [] : this.layers.flatMap((l) => [l.front, l.back]);
     const hit = raycaster.intersectObjects(meshes, false).find((h) => h.faceIndex !== undefined && h.faceIndex !== null);
     const layer = hit && this.layers.find((l) => l.front === hit.object || l.back === hit.object);
     if (!hit || !layer || (hits.face && hits.face.distance <= hit.distance)) return { ...hits, other: null };
     const other = { owner: layer.owner, face: layer.data.triangleFaces[hit.faceIndex!], point: [hit.point.x, hit.point.y, hit.point.z] as Vec3, distance: hit.distance };
     // An edge of the edited model behind the other geometry is hidden by it.
-    const edge = hits.edge && hits.edge.distance <= hit.distance * (1 + 1e-3) ? hits.edge : null;
+    const edge = hits.edge && (this.faceStyle === 'xray' || hits.edge.distance <= hit.distance * (1 + 1e-3)) ? hits.edge : null;
     return { face: null, edge, other };
   }
 
   /** Pick at a viewport position and package it for the tools. */
   sample(screen: [number, number], e: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean; altKey?: boolean }, down: boolean): PointerSample {
-    const ray = screenRay(this.camera, screen, this.viewport());
+    const ray = screenRay(this.view(), screen, this.viewport());
     const hits = this.hitsAt(screen);
     const face: PointerSample['faceHit'] = hits.face ? { face: hits.face.face, point: hits.face.point, distance: hits.face.distance } : null;
     return { screen, ray, faceHit: face, edge: hits.edge?.edge ?? null, otherHit: hits.other, shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey, alt: !!e.altKey, down };
@@ -682,7 +795,7 @@ export class Viewer {
     if (hits.edge && (!hits.face || hits.edge.distance <= hits.face.distance * (1 + 1e-3))) return new THREE.Vector3(...hits.edge.point);
     if (hits.face) return new THREE.Vector3(...hits.face.point);
     if (hits.other) return new THREE.Vector3(...hits.other.point);
-    const r = screenRay(this.camera, screen, this.viewport());
+    const r = screenRay(this.view(), screen, this.viewport());
     const ray = new THREE.Ray(new THREE.Vector3(...r.origin), new THREE.Vector3(...r.dir));
     const ground = ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 0, 1), 0), new THREE.Vector3());
     const sphere = this.sceneSphere();

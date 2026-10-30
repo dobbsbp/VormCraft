@@ -61,6 +61,16 @@ Use our own icons and assets, and copy nothing from SketchUp.
 - Double-click a group to edit its contents with every tool; the rest of the model is faded. Esc (with nothing selected), a click outside it, or the Close badge closes it.
 - Explode Group (Search) puts a group's geometry back into the geometry around it, joining it up where it touches.
 - Groups are saved in the file and included in STL and OBJ export.
+### View: styles, projection, hiding
+- Face styles: Textured, Shaded (colours only), Wireframe (edges only, faces not pickable), X-ray (see-through faces; edges behind them stay pickable). Back edges (K) and the background colour are part of the style.
+- Perspective or parallel projection (toolbar). Parallel keeps the scene the same size on screen when switched on; zoom, pan and zoom window work in both.
+- Hide selected groups / Unhide all (Search). Hidden groups are not drawn, picked, snapped to or box-selected; they are still saved and exported.
+### Scenes
+- A scene is a saved view: camera (position, target, field of view, projection, parallel view height), hidden groups, and style (face style, back edges, guides, background). Scenes are saved in the file; adding, updating, deleting, renaming and reordering them are undo steps, going to one is not.
+- Each scene has checkboxes for what it restores (camera, hidden groups, style). Going to a scene changes style and hidden groups at once and glides the camera there (ease-in-out, transition time configurable, default 1 s).
+- Scenes panel: list (click to go, double-click to rename, arrows to reorder, ✕ to delete), Add scene, Update (overwrite with the current view, keeping name and place), Play/Stop, timings. Tabs along the top of the viewport go to a scene in one click; Page Up / Page Down step through them.
+- Slideshow: plays the scenes in order, gliding for the transition time and staying for the delay, looping until Esc or a click.
+- Not yet captured (the features do not exist yet): tags/layers, section planes, sun/shadows, fog.
 ### Export
 - STL (binary): watertight check before export, with adjustable curve resolution.
 - OBJ

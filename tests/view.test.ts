@@ -302,3 +302,40 @@ describe('scene queries', () => {
     expect(r.genus).toBe(1);
   });
 });
+
+describe('parallel projection', () => {
+  /** Where a world point lands on an 800 × 600 screen through the orthographic camera. */
+  function screenOf(ortho: THREE.OrthographicCamera, p: THREE.Vector3): [number, number] {
+    const v = p.clone().project(ortho);
+    return [((v.x + 1) / 2) * 800, ((1 - v.y) / 2) * 600];
+  }
+
+  it('zooming toward a point keeps it under the cursor and shrinks the view height', () => {
+    const { camera, nav } = cameraAt([0, -2000, 1000], [0, 0, 0]);
+    camera.aspect = 800 / 600;
+    nav.projection = 'parallel';
+    nav.height = 1500;
+    const ortho = new THREE.OrthographicCamera();
+    const sphere = new THREE.Sphere(new THREE.Vector3(), 1000);
+    nav.syncParallel(ortho, sphere);
+    const focus = new THREE.Vector3(300, 200, 50);
+    const before = screenOf(ortho, focus);
+    nav.zoomToward(focus, 2);
+    nav.syncParallel(ortho, sphere);
+    const after = screenOf(ortho, focus);
+    expect(after[0]).toBeCloseTo(before[0], 6);
+    expect(after[1]).toBeCloseTo(before[1], 6);
+    expect(nav.height).toBeCloseTo(1500 * 0.64, 6);
+  });
+
+  it('the orthographic camera sits behind everything in view, looking the same way', () => {
+    const { camera, nav } = cameraAt([0, 0, 100], [0, 0, 0]); // the eye is inside the scene
+    nav.projection = 'parallel';
+    const ortho = new THREE.OrthographicCamera();
+    nav.syncParallel(ortho, new THREE.Sphere(new THREE.Vector3(), 1000));
+    expect(ortho.position.z).toBeGreaterThan(1000);
+    expect(ortho.quaternion.angleTo(camera.quaternion)).toBeCloseTo(0, 9);
+    // Panning moves a fixed amount per pixel, whatever the depth.
+    expect(nav.unitsPerPixel(10, 500)).toBeCloseTo(nav.unitsPerPixel(5000, 500), 9);
+  });
+});

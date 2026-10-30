@@ -3,6 +3,7 @@ import { erase } from '../core/ops/erase';
 import { inheritMaterials, unpaintMaterial } from '../core/ops/materials';
 import type { Document, DocumentSnapshot } from '../doc/Document';
 import type { GroupId } from '../doc/Groups';
+import { ALL_PARTS, applyScene, captureScene, type SceneId, type SceneParts, type SceneView } from '../doc/Scenes';
 import { extractGeometry, mergeGeometry } from '../core/ops/group';
 import { History } from '../doc/History';
 import { facesWithCurveEdges, smoothSurface } from '../core/model/surfaces';
@@ -179,7 +180,7 @@ export class ToolController {
   }
 
   private afterDocumentChange(): void {
-    this.selection.prune(this.doc.model, this.doc.labels, this.doc.guides, (g) => this.doc.groups.get(g)?.parent === this.doc.editing);
+    this.selection.prune(this.doc.model, this.doc.labels, this.doc.guides, (g) => this.doc.groups.get(g)?.parent === this.doc.editing && !this.doc.groups.isHidden(g));
     this.onModelChanged();
     this.onUpdate();
   }
@@ -311,7 +312,7 @@ export class ToolController {
       cursor: s.screen,
       ray: s.ray,
       faceHit,
-      others: this.doc.allModels().filter((m) => m !== this.doc.model),
+      others: this.visibleModels().filter((m) => m !== this.doc.model),
       hints: this.hints(),
     });
     const edge = s.edge ?? this.snap?.edge;
@@ -411,7 +412,12 @@ export class ToolController {
 
   /** Select every face and edge. */
   selectAll(): void {
-    this.selection.set(this.doc.model.faces.keys(), this.doc.model.edges(), [], this.doc.groups.children(this.doc.editing).map((g) => g.id));
+    this.selection.set(this.doc.model.faces.keys(), this.doc.model.edges(), [], this.doc.groups.children(this.doc.editing).filter((g) => !g.hidden).map((g) => g.id));
+  }
+
+  /** The top level and every group that is not hidden. */
+  private visibleModels() {
+    return [this.doc.root, ...[...this.doc.groups.items.values()].filter((g) => !this.doc.groups.isHidden(g.id)).map((g) => g.model)];
   }
 
   deleteSelection(): void {
@@ -442,6 +448,122 @@ export class ToolController {
   deleteGuides(): void {
     if (this.doc.guides.items.size === 0) return;
     this.run(() => this.apply(() => this.doc.guides.clear(), undefined, null, 'Delete guides'));
+  }
+
+  /** The live view scenes capture and restore (the app's viewport). */
+  sceneView: SceneView | null = null;
+  /** The scene last shown or saved (highlighted in the tabs), if any. */
+  currentScene: SceneId | null = null;
+
+  private view(): SceneView {
+    if (!this.sceneView) throw new Error('Scenes need the viewport');
+    return this.sceneView;
+  }
+
+  /** Save the current view as a new scene (at the end of the list). */
+  addScene(): SceneId | null {
+    let id: SceneId | null = null;
+    this.editDocument('Add scene', () => {
+      const scenes = this.doc.scenes;
+      id = scenes.add({ name: scenes.nextName(), parts: { ...ALL_PARTS }, ...captureScene(this.view(), this.doc.groups, this.doc.guides) });
+    });
+    if (id !== null) this.currentScene = id;
+    this.onUpdate();
+    return id;
+  }
+
+  /** Overwrite a scene with the current view (its name, place and saved parts stay). */
+  updateScene(id: SceneId): void {
+    this.editDocument('Update scene', () => this.doc.scenes.update(id, captureScene(this.view(), this.doc.groups, this.doc.guides)));
+    this.currentScene = id;
+    this.onUpdate();
+  }
+
+  deleteScene(id: SceneId): void {
+    this.editDocument('Delete scene', () => this.doc.scenes.delete(id));
+    if (this.currentScene === id) this.currentScene = null;
+    this.onUpdate();
+  }
+
+  renameScene(id: SceneId, name: string): void {
+    this.editDocument('Rename scene', () => this.doc.scenes.update(id, { name: name.trim() }));
+  }
+
+  moveScene(id: SceneId, index: number): void {
+    this.editDocument('Reorder scenes', () => this.doc.scenes.move(id, index));
+  }
+
+  /** Choose which parts of the view a scene restores. */
+  setSceneParts(id: SceneId, parts: Partial<SceneParts>): void {
+    const s = this.doc.scenes.get(id);
+    if (s) this.editDocument('Scene settings', () => this.doc.scenes.update(id, { parts: { ...s.parts, ...parts } }));
+  }
+
+  /** How long the camera glides between scenes, and how long the slideshow stays on each (seconds). */
+  setSceneTimings(transition: number, delay: number): void {
+    if (!(transition >= 0 && transition <= 60) || !(delay >= 0 && delay <= 600)) {
+      this.error = 'Use 0–60 seconds for the transition and 0–600 for the delay';
+      this.onUpdate();
+      return;
+    }
+    this.editDocument('Scene timings', () => {
+      this.doc.scenes.transition = transition;
+      this.doc.scenes.delay = delay;
+    });
+  }
+
+  /**
+   * Show a scene: style and hidden groups change at once, the camera glides there (over the
+   * scenes' transition time unless `seconds` is given). Not an undo step, like moving the camera.
+   */
+  goToScene(id: SceneId, seconds = this.doc.scenes.transition): void {
+    const s = this.doc.scenes.get(id);
+    if (!s) return;
+    const hiddenBefore = [...this.doc.groups.items.values()].map((g) => !!g.hidden).join();
+    applyScene(s, this.view(), this.doc.groups, this.doc.guides, seconds);
+    if ([...this.doc.groups.items.values()].map((g) => !!g.hidden).join() !== hiddenBefore) this.dirty = true;
+    this.currentScene = id;
+    this.notice = `Scene: ${s.name}`;
+    this.afterDocumentChange();
+  }
+
+  /** The next (or, with -1, previous) scene after the current one, wrapping round. */
+  stepScene(step: 1 | -1): void {
+    const items = this.doc.scenes.items;
+    if (!items.length) {
+      this.notify('No scenes yet: add one in the Scenes panel');
+      return;
+    }
+    const at = this.currentScene === null ? -1 : this.doc.scenes.indexOf(this.currentScene);
+    const next = at < 0 ? (step > 0 ? 0 : items.length - 1) : (at + step + items.length) % items.length;
+    this.goToScene(items[next].id);
+  }
+
+  /** Hide the selected groups (one undo step). */
+  hideSelection(): void {
+    const groups = [...this.selection.groups];
+    if (!groups.length) {
+      this.error = 'Select the groups to hide';
+      this.onUpdate();
+      return;
+    }
+    this.editDocument('Hide', () => {
+      for (const id of groups) {
+        const g = this.doc.groups.get(id);
+        if (g) g.hidden = true;
+      }
+    });
+  }
+
+  /** Show every hidden group again. */
+  unhideAll(): void {
+    if (![...this.doc.groups.items.values()].some((g) => g.hidden)) {
+      this.notify('Nothing is hidden');
+      return;
+    }
+    this.editDocument('Unhide all', () => {
+      for (const g of this.doc.groups.items.values()) delete g.hidden;
+    });
   }
 
   /** The open group's name, or null at the top level. */

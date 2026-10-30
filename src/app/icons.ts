@@ -8,6 +8,15 @@ const cube = (fill = '') => svg(`${fill}<path d="M12 3 20 7.5v9L12 21l-8-4.5v-9Z
 const face = (d: string) => `<path d="${d}" fill="currentColor" fill-opacity="0.35" stroke="none"/>`;
 
 export const ICONS = {
+  // Face styles: the same cube drawn four ways.
+  styleTextured: svg('<path d="M12 3 20 7.5v9L12 21l-8-4.5v-9Z" fill="currentColor" fill-opacity="0.2"/><path d="M4 7.5 12 12l8-4.5M12 12v9"/><path d="M6 11.5l4 2.2M6 14.5l4 2.2M14 13.7l4-2.2M14 16.7l4-2.2" stroke-width="1"/>'),
+  styleShaded: svg('<path d="M12 3 20 7.5 12 12 4 7.5Z" fill="currentColor" fill-opacity="0.12"/><path d="M4 7.5 12 12v9l-8-4.5Z" fill="currentColor" fill-opacity="0.45"/><path d="M20 7.5 12 12v9l8-4.5Z" fill="currentColor" fill-opacity="0.28"/><path d="M12 3 20 7.5v9L12 21l-8-4.5v-9Z"/><path d="M4 7.5 12 12l8-4.5M12 12v9"/>'),
+  styleWireframe: svg('<path d="M12 3 20 7.5v9L12 21l-8-4.5v-9Z"/><path d="M4 7.5 12 12l8-4.5M12 12v9"/><path d="M4 16.5 12 12M20 16.5 12 12M12 3v9" stroke-dasharray="1.5 1.5" stroke-width="1"/>'),
+  styleXray: svg('<path d="M12 3 20 7.5v9L12 21l-8-4.5v-9Z" fill="currentColor" fill-opacity="0.12"/><path d="M4 7.5 12 12l8-4.5M12 12v9"/><path d="M4 16.5 12 12l8 4.5M12 3v9" stroke-dasharray="1.5 1.5" stroke-width="1" opacity="0.6"/>'),
+  // Perspective (lines meeting) and parallel (lines that stay apart).
+  perspective: svg('<path d="M3 5h18M3 19h18" /><path d="M3 5l9 7 9-7M3 19l9-7 9 7" stroke-width="1"/>'),
+  parallel: svg('<path d="M3 6h18M3 12h18M3 18h18"/><path d="M7 4v16M17 4v16" stroke-width="1"/>'),
+  scenes: svg('<rect x="3" y="7" width="18" height="13" rx="1.5"/><path d="M6 7V4h12v3M9 4V2.5h6V4"/><path d="m10 11 5 2.5-5 2.5Z" fill="currentColor"/>'),
   zoomExtents: svg('<rect x="7" y="7" width="10" height="10" rx="1"/><path d="M3 8V3h5M16 3h5v5M21 16v5h-5M8 21H3v-5"/>'),
   iso: cube(),
   top: cube(face('M12 3 20 7.5 12 12 4 7.5Z')),

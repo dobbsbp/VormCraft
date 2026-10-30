@@ -5,12 +5,13 @@ import { Groups } from '../doc/Groups';
 import { Guides } from '../doc/Guides';
 import { Labels } from '../doc/Labels';
 import { Materials, type Material } from '../doc/Materials';
+import { ALL_PARTS, DEFAULT_STYLE, Scenes, type Scene } from '../doc/Scenes';
 
 /** File extension of our own format. */
 export const FILE_EXTENSION = 'vorm';
 /** Extensions of files saved before the app was renamed (they still open). */
 export const OLD_FILE_EXTENSIONS = ['benup'];
-export const FORMAT_VERSION = 3;
+export const FORMAT_VERSION = 4;
 
 /**
  * Geometry as stored: vertices, faces as vertex-id loops (outer first, then holes), every edge with
@@ -31,12 +32,13 @@ interface GeometryData {
  * VormCraft document (JSON, millimetres): the top-level geometry, the guides, labels, materials
  * and groups.
  * Version 2 adds edge smoothing (a fourth entry per edge) and materials (colours and textures,
- * with each face's material). Version 3 adds groups, each with geometry of its own. Older versions
+ * with each face's material). Version 3 adds groups, each with geometry of its own; version 4
+ * hidden groups and scenes (saved views). Older versions
  * still open, and so do files from before the app was renamed (format tag 'benup').
  */
 interface FileV3 extends GeometryData {
   format: 'vormcraft' | 'benup';
-  version: 1 | 2 | 3;
+  version: 1 | 2 | 3 | 4;
   units: 'mm';
   guides: { visible: boolean; lines: { point: Vec3; dir: Vec3 }[]; points: { pos: Vec3 }[] };
   /** Text labels (optional: files saved before labels existed have none). */
@@ -44,7 +46,9 @@ interface FileV3 extends GeometryData {
   /** Materials (version 2); textures are embedded as data URLs. */
   materials?: Material[];
   /** Groups (version 3), parents before the groups inside them. */
-  groups?: ({ id: number; name: string; parent: number | null; material?: string } & GeometryData)[];
+  groups?: ({ id: number; name: string; parent: number | null; material?: string; hidden?: boolean } & GeometryData)[];
+  /** Scenes in order, and the glide and slideshow timings (version 4). */
+  scenes?: { transition: number; delay: number; items: Scene[] };
 }
 
 function geometryData(m: Model): GeometryData {
@@ -64,7 +68,7 @@ export function serializeDocument(doc: Document): string {
   const ordered = doc.groups.children(null).flatMap((g) => doc.groups.subtree(g.id));
   const file: FileV3 = {
     format: 'vormcraft',
-    version: 3,
+    version: 4,
     units: 'mm',
     ...geometryData(doc.root),
     guides: {
@@ -74,7 +78,8 @@ export function serializeDocument(doc: Document): string {
     },
     labels: [...doc.labels.items.values()].map((l) => ({ anchor: l.anchor, position: l.position, text: l.text })),
     materials: [...doc.materials.items.values()],
-    groups: ordered.map((g) => ({ id: g.id, name: g.name, parent: g.parent, ...(g.material !== undefined ? { material: g.material } : {}), ...geometryData(g.model) })),
+    groups: ordered.map((g) => ({ id: g.id, name: g.name, parent: g.parent, ...(g.material !== undefined ? { material: g.material } : {}), ...(g.hidden ? { hidden: true } : {}), ...geometryData(g.model) })),
+    scenes: { transition: doc.scenes.transition, delay: doc.scenes.delay, items: doc.scenes.items },
   };
   return JSON.stringify(file);
 }
@@ -128,6 +133,7 @@ export function parseDocument(text: string): Document {
 
   const materials = new Materials();
   const groups = new Groups();
+  const scenes = new Scenes();
   let model: Model;
   try {
     for (const mat of f.materials ?? []) {
@@ -141,6 +147,25 @@ export function parseDocument(text: string): Document {
       if (g.parent !== null && !groups.has(g.parent)) throw new Error(`group ${g.id} is inside missing group ${g.parent}`);
       if (g.material !== undefined && !materials.get(g.material)) throw new Error(`group ${g.id} uses missing material ${g.material}`);
       groups.add(readGeometry(g, materials), g.parent, { id: g.id, name: typeof g.name === 'string' ? g.name : undefined, material: g.material });
+      if (g.hidden) groups.get(g.id)!.hidden = true;
+    }
+    if (f.scenes) {
+      if (f.scenes.transition >= 0) scenes.transition = f.scenes.transition;
+      if (f.scenes.delay >= 0) scenes.delay = f.scenes.delay;
+      for (const s of f.scenes.items ?? []) {
+        const c = s.camera;
+        if (!c || (c.projection !== 'perspective' && c.projection !== 'parallel') || !(c.fov > 0) || !(c.height > 0)) throw new Error(`scene ${s.id} has a bad camera`);
+        scenes.add(
+          {
+            name: typeof s.name === 'string' && s.name.trim() ? s.name : scenes.nextName(),
+            parts: { ...ALL_PARTS, ...s.parts },
+            camera: { position: vec(c.position, 'scene camera'), target: vec(c.target, 'scene target'), fov: c.fov, projection: c.projection, height: c.height },
+            hidden: (s.hidden ?? []).filter((id) => groups.has(id)),
+            style: { ...DEFAULT_STYLE, ...s.style },
+          },
+          s.id,
+        );
+      }
     }
   } catch (err) {
     throw new FileFormatError(`The file is damaged: ${err instanceof Error ? err.message : String(err)}.`);
@@ -155,5 +180,5 @@ export function parseDocument(text: string): Document {
     if (typeof l.text !== 'string') throw new FileFormatError('The file is damaged: a label has no text.');
     labels.add(l.anchor, l.position, l.text);
   }
-  return new Document(model, guides, labels, materials, groups);
+  return new Document(model, guides, labels, materials, groups, scenes);
 }

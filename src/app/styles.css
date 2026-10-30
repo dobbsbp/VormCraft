@@ -670,7 +670,7 @@ body {
 /* Shown while a group is open for editing; clicking it closes the group. */
 .context-badge {
   position: absolute;
-  top: 10px;
+  bottom: 10px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 3;
@@ -690,4 +690,140 @@ body {
 
 .context-badge:hover {
   background: var(--chrome);
+}
+
+.panel-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Scene tabs along the top of the viewport (one click goes to a scene). */
+.scene-tabs {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.scene-tabs[hidden] {
+  display: none;
+}
+
+.scene-tab {
+  pointer-events: auto;
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 10px;
+  border: 1px solid var(--chrome-border);
+  border-radius: 4px;
+  background: var(--chrome);
+  color: var(--text);
+  cursor: pointer;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scene-tab:hover {
+  background: var(--button-hover);
+}
+
+.scene-tab[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* The Scenes panel's list. */
+.scene-list {
+  list-style: none;
+  margin: 10px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.scene-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.scene-name,
+.scene-rename {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scene-name {
+  cursor: pointer;
+}
+
+.scene-name:hover {
+  background: var(--button-hover);
+}
+
+.scene-name[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.scene-rename {
+  border-color: var(--accent);
+  background: #fff;
+}
+
+.scene-icon {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  font-size: 10px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.scene-icon:hover:not(:disabled) {
+  background: var(--button-hover);
+  color: var(--text);
+}
+
+.scene-icon:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.panel-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  margin: 2px 0;
+}
+
+.panel-field.wide > span:first-child {
+  width: 104px;
+}
+
+.panel-field.wide .panel-size {
+  width: 64px;
 }

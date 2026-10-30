@@ -18,6 +18,8 @@ export interface PickInput {
   data: DisplayData;
   /** How close (in pixels) the cursor must be to an edge to pick it. */
   edgeTolerancePx?: number;
+  /** Faces do not hide edges behind them (X-ray). */
+  seeThrough?: boolean;
 }
 
 export type FacePick = Extract<Pick, { kind: 'face' }>;
@@ -36,7 +38,7 @@ export function pickHits(input: PickInput): { face: FacePick | null; edge: EdgeP
   // The plane of the hit face, turned to face the camera: edges on or in front of it are not hidden.
   const occluder = faceHit?.face ? new THREE.Plane().setFromNormalAndCoplanarPoint(faceHit.face.normal.clone(), faceHit.point) : null;
   if (occluder && occluder.normal.dot(raycaster.ray.direction) > 0) occluder.negate();
-  return { face, edge: pickEdge(input, raycaster.ray, face?.distance ?? Infinity, occluder) };
+  return { face, edge: input.seeThrough ? pickEdge(input, raycaster.ray, Infinity, null) : pickEdge(input, raycaster.ray, face?.distance ?? Infinity, occluder) };
 }
 
 /**

@@ -21,10 +21,17 @@ const MAX_ELEVATION = 0.999;
  * SketchUp-style camera navigation for a Z-up perspective camera: turntable orbit about a pivot
  * (usually the point under the cursor), pan that keeps the grabbed point under the cursor, and
  * zoom toward the cursor. Pure camera math, so it is testable without a renderer.
+ *
+ * In parallel projection the same camera gives the position and direction, and `height` is how
+ * much of the world (in millimetres) the view shows top to bottom; zooming shrinks it in step with
+ * the camera's move, so the point under the cursor stays put either way.
  */
 export class Navigator {
   /** Radians of orbit per pixel dragged. */
   orbitSpeed = 0.006;
+  projection: 'perspective' | 'parallel' = 'perspective';
+  /** View height in millimetres (parallel projection). */
+  height = 1000;
 
   constructor(readonly camera: THREE.PerspectiveCamera) {
     camera.up.copy(Z);
@@ -70,6 +77,7 @@ export class Navigator {
 
   /** World units per screen pixel at a given distance in front of the camera. */
   unitsPerPixel(depth: number, viewportHeight: number): number {
+    if (this.projection === 'parallel') return this.height / viewportHeight;
     return (2 * depth * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)) / viewportHeight;
   }
 
@@ -107,6 +115,7 @@ export class Navigator {
     const t = 1 - Math.pow(0.8, steps);
     const offset = focus.clone().sub(this.camera.position);
     this.camera.position.addScaledVector(offset, t);
+    this.height *= 1 - t;
     this.camera.updateMatrixWorld();
   }
 
@@ -120,6 +129,7 @@ export class Navigator {
     const depth = Math.max(target.clone().sub(this.camera.position).dot(f), this.camera.near);
     const k = THREE.MathUtils.clamp(fraction, 1e-4, 1);
     this.camera.position.copy(target).addScaledVector(f, -depth * k);
+    this.height *= k;
     this.camera.updateMatrixWorld();
   }
 
@@ -141,6 +151,7 @@ export class Navigator {
     const radius = Math.max(sphere.radius, 1);
     const distance = (radius / Math.sin(Math.min(vFov, hFov))) * 1.05;
     this.camera.position.copy(sphere.center).addScaledVector(this.forward(), -distance);
+    this.height = (2 * radius * 1.05) / Math.min(1, aspect);
     this.camera.updateMatrixWorld();
   }
 
@@ -148,6 +159,26 @@ export class Navigator {
     this.camera.position.copy(sphere.center).addScaledVector(VIEW_DIRECTIONS[view], -1);
     this.lookAt(sphere.center);
     this.zoomExtents(sphere);
+  }
+
+  /** The view height that matches the perspective view at `depth` (switching to parallel without a jump). */
+  heightAt(depth: number): number {
+    return 2 * Math.max(depth, 1e-3) * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2);
+  }
+
+  /**
+   * Set up an orthographic camera for parallel projection: looking the same way, drawn back far
+   * enough that everything in `sphere` is in front of it, showing `height`.
+   */
+  syncParallel(ortho: THREE.OrthographicCamera, sphere: THREE.Sphere): void {
+    const cam = this.camera;
+    const reach = cam.position.distanceTo(sphere.center) + sphere.radius + 1;
+    ortho.position.copy(cam.position).addScaledVector(this.forward(), -reach);
+    ortho.quaternion.copy(cam.quaternion);
+    const h = this.height / 2;
+    Object.assign(ortho, { top: h, bottom: -h, left: -h * cam.aspect, right: h * cam.aspect, near: Math.max(reach / 1e4, 0.01), far: reach * 2 + sphere.radius * 2 + 1 });
+    ortho.updateProjectionMatrix();
+    ortho.updateMatrixWorld();
   }
 
   /** Near/far planes that bracket the scene tightly enough for good depth precision. */

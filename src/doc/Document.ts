@@ -3,6 +3,7 @@ import { Groups, type GroupId } from './Groups';
 import { Guides } from './Guides';
 import { Labels } from './Labels';
 import { Materials } from './Materials';
+import { Scenes } from './Scenes';
 
 export interface DocumentSnapshot {
   /** The top-level geometry (outside every group). */
@@ -11,11 +12,12 @@ export interface DocumentSnapshot {
   readonly guides: Guides;
   readonly labels: Labels;
   readonly materials: Materials;
+  readonly scenes: Scenes;
 }
 
 /**
  * Everything that is saved: the top-level geometry, the groups (each with geometry of its own),
- * the construction guides, the text labels and the materials.
+ * the construction guides, the text labels, the materials and the scenes.
  */
 export class Document {
   /** The top-level geometry (outside every group). */
@@ -24,15 +26,17 @@ export class Document {
   readonly guides: Guides;
   readonly labels: Labels;
   readonly materials: Materials;
+  readonly scenes: Scenes;
   /** The group being edited (opened with a double-click), or null at the top level. Not saved. */
   editing: GroupId | null = null;
 
-  constructor(model = new Model(), guides = new Guides(), labels = new Labels(), materials = new Materials(), groups = new Groups()) {
+  constructor(model = new Model(), guides = new Guides(), labels = new Labels(), materials = new Materials(), groups = new Groups(), scenes = new Scenes()) {
     this.root = model;
     this.guides = guides;
     this.labels = labels;
     this.materials = materials;
     this.groups = groups;
+    this.scenes = scenes;
   }
 
   /** The geometry being edited: the open group's, else the top level. Tools work on this. */
@@ -51,7 +55,7 @@ export class Document {
   }
 
   snapshot(): DocumentSnapshot {
-    return { model: this.root.clone(), groups: this.groups.clone(), guides: this.guides.clone(), labels: this.labels.clone(), materials: this.materials.clone() };
+    return { model: this.root.clone(), groups: this.groups.clone(), guides: this.guides.clone(), labels: this.labels.clone(), materials: this.materials.clone(), scenes: this.scenes.clone() };
   }
 
   /**
@@ -66,6 +70,7 @@ export class Document {
     this.guides.copyFrom(s.guides);
     this.labels.copyFrom(s.labels);
     this.materials.copyFrom(s.materials);
+    this.scenes.copyFrom(s.scenes);
     this.editing = path.find((id) => this.groups.has(id)) ?? null;
   }
 }

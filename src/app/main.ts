@@ -12,6 +12,9 @@ import { ICONS } from './icons';
 import type { Command } from './commands';
 import { bindingFor, KEY_BINDINGS, withShortcut } from './keymap';
 import { MaterialsPanel } from './materialsPanel';
+import { ScenePlayer } from './scenePlayer';
+import { ScenesPanel } from './scenesPanel';
+import type { FaceStyle } from '../doc/Scenes';
 import { SearchBox } from './searchBox';
 
 const NAV_HINT = 'Orbit: right-drag · Re-centre: double right-click · Pan: middle-drag · Zoom: wheel · Lock axis: arrow keys';
@@ -52,7 +55,11 @@ async function start(): Promise<void> {
   const controller = new ToolController(doc, () => viewer.projector());
   const files = new FileCommands(await createFileHost(), controller);
   const materials = new MaterialsPanel(document.getElementById('materials-panel')!, controller, () => setTool('paint'));
-  if (import.meta.env.DEV) Object.assign(window, { __app: { doc, viewer, controller, files, materials } });
+  controller.sceneView = viewer;
+  const player = new ScenePlayer(controller);
+  const scenes = new ScenesPanel(document.getElementById('scenes-panel')!, controller, player);
+  player.onChange = () => update();
+  if (import.meta.env.DEV) Object.assign(window, { __app: { doc, viewer, controller, files, materials, scenes, player } });
 
   const hint = document.getElementById('status-hint')!;
   const nav = document.getElementById('status-hover')!;
@@ -68,6 +75,33 @@ async function start(): Promise<void> {
   let undoButton: HTMLButtonElement | undefined;
   let redoButton: HTMLButtonElement | undefined;
   let materialsButton: HTMLButtonElement | undefined;
+  let viewButtons: ViewButtons | undefined;
+  const tabs = document.getElementById('scene-tabs')!;
+  let tabsShown = '';
+  /** The quick-access tabs along the top of the viewport, one per scene. */
+  const renderTabs = () => {
+    const items = controller.doc.scenes.items;
+    const key = JSON.stringify([items.map((s) => [s.id, s.name]), controller.currentScene]);
+    if (key === tabsShown) return;
+    tabsShown = key;
+    tabs.hidden = items.length === 0;
+    tabs.replaceChildren(
+      ...items.map((s) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'scene-tab';
+        b.textContent = s.name;
+        b.title = `Go to ${s.name} (Page Up / Page Down step through scenes)`;
+        b.setAttribute('aria-pressed', String(s.id === controller.currentScene));
+        b.addEventListener('click', () => {
+          player.stop();
+          controller.goToScene(s.id);
+          b.blur();
+        });
+        return b;
+      }),
+    );
+  };
 
   const updateTitle = async () => {
     document.title = files.title();
@@ -88,6 +122,15 @@ async function start(): Promise<void> {
     if (typing === null) vcb.value = tool.vcbValue();
     for (const [id, b] of toolButtons) b.setAttribute('aria-pressed', String(id === tool.id));
     materials.render();
+    scenes.render();
+    renderTabs();
+    if (viewButtons) {
+      const style = viewer.displayStyle();
+      for (const [f, b] of viewButtons.styles) b.setAttribute('aria-pressed', String(style.faces === f));
+      viewButtons.projection.innerHTML = viewer.projection === 'parallel' ? ICONS.parallel : ICONS.perspective;
+      viewButtons.projection.title = viewer.projection === 'parallel' ? 'Parallel projection (click for perspective)' : 'Perspective (click for parallel projection)';
+      viewButtons.scenes.setAttribute('aria-pressed', String(scenes.isOpen));
+    }
     const editing = controller.editingName;
     contextBadge.hidden = editing === null;
     if (editing !== null) contextBadge.textContent = `Editing ${editing} · Close`;
@@ -134,17 +177,46 @@ async function start(): Promise<void> {
 
   const setTool = (id: ToolId) => {
     typing = null;
-    if (id === 'paint' && !materials.isOpen) materials.toggle(true);
+    if (id === 'paint' && !materials.isOpen) {
+      scenes.toggle(false);
+      materials.toggle(true);
+    }
     controller.setTool(id);
   };
+  // One side panel at a time.
   const toggleMaterials = () => {
+    if (!materials.isOpen) scenes.toggle(false);
     materials.toggle();
     update();
   };
+  const toggleScenes = () => {
+    if (!scenes.isOpen) materials.toggle(false);
+    scenes.toggle();
+    update();
+  };
+  const view: ViewActions = {
+    setFaces: (faces) => {
+      viewer.setDisplayStyle({ faces });
+      update();
+    },
+    toggleProjection: () => {
+      viewer.setProjection(viewer.projection === 'parallel' ? 'perspective' : 'parallel');
+      controller.notify(viewer.projection === 'parallel' ? 'Parallel projection' : 'Perspective');
+    },
+    chooseBackground: () => {
+      const input = Object.assign(document.createElement('input'), { type: 'color', value: viewer.displayStyle().background });
+      input.addEventListener('input', () => viewer.setDisplayStyle({ background: input.value }));
+      input.click();
+    },
+    toggleScenes,
+    player,
+  };
+  // Any click in the viewport stops a running slideshow.
+  document.getElementById('viewport')!.addEventListener('pointerdown', () => player.stop(), true);
 
   buildPalette(toolButtons, setTool);
-  const search = new SearchBox(document.getElementById('viewport')!, () => commandList(viewer, controller, files, setTool, toggleMaterials));
-  ({ undoButton, redoButton, materialsButton } = buildToolbar(viewer, controller, files, toggleMaterials));
+  const search = new SearchBox(document.getElementById('viewport')!, () => commandList(viewer, controller, files, setTool, toggleMaterials, view));
+  ({ undoButton, redoButton, materialsButton, viewButtons } = buildToolbar(viewer, controller, files, toggleMaterials, view));
 
   const submitTyped = () => {
     const text = typing ?? vcb.value;
@@ -219,7 +291,14 @@ async function start(): Promise<void> {
     }
     if (key === 'Escape') {
       typing = null;
-      controller.escape();
+      if (player.playing) player.stop();
+      else controller.escape();
+      return;
+    }
+    if (key === 'PageDown' || key === 'PageUp') {
+      e.preventDefault();
+      player.stop();
+      controller.stepScene(key === 'PageDown' ? 1 : -1);
       return;
     }
     if (key === 'Delete' || key === 'Backspace') {
@@ -276,7 +355,29 @@ function previousView(viewer: Viewer, controller: ToolController): void {
 }
 
 /** Everything the Search box can run: all tools, then file, edit, view and guide actions. */
-function commandList(viewer: Viewer, controller: ToolController, files: FileCommands, setTool: (id: ToolId) => void, toggleMaterials: () => void): Command[] {
+/** View actions the toolbar and Search share. */
+interface ViewActions {
+  setFaces(faces: FaceStyle): void;
+  toggleProjection(): void;
+  chooseBackground(): void;
+  toggleScenes(): void;
+  player: ScenePlayer;
+}
+
+interface ViewButtons {
+  styles: Map<FaceStyle, HTMLButtonElement>;
+  projection: HTMLButtonElement;
+  scenes: HTMLButtonElement;
+}
+
+const FACE_STYLES: [FaceStyle, string, string][] = [
+  ['textured', 'Textured', ICONS.styleTextured],
+  ['shaded', 'Shaded (colours, no textures)', ICONS.styleShaded],
+  ['wireframe', 'Wireframe (edges only)', ICONS.styleWireframe],
+  ['xray', 'X-ray (see-through faces)', ICONS.styleXray],
+];
+
+function commandList(viewer: Viewer, controller: ToolController, files: FileCommands, setTool: (id: ToolId) => void, toggleMaterials: () => void, view: ViewActions): Command[] {
   const keyOf = (pred: (b: (typeof KEY_BINDINGS)[number]) => boolean) => KEY_BINDINGS.find(pred)?.label;
   const tools: Command[] = TOOLS.map((t) => ({
     id: `tool:${t.id}`,
@@ -312,6 +413,17 @@ function commandList(viewer: Viewer, controller: ToolController, files: FileComm
     ...views,
     { id: 'view:backedges', name: 'Back Edges', keywords: ['hidden', 'x-ray', 'view'], shortcut: 'K', run: () => controller.notify(viewer.toggleBackEdges() ? 'Back edges shown (K to hide)' : 'Back edges hidden') },
     { id: 'view:materials', name: 'Materials', keywords: ['paint', 'colour', 'color', 'texture'], run: toggleMaterials },
+    ...FACE_STYLES.map(([f, label]) => ({ id: `style:${f}`, name: `Style: ${label}`, keywords: ['style', 'display', 'faces', 'view'], run: () => view.setFaces(f) })),
+    { id: 'view:projection', name: 'Parallel / Perspective Projection', keywords: ['camera', 'orthographic', 'ortho', 'perspective', 'parallel'], run: view.toggleProjection },
+    { id: 'view:background', name: 'Background Colour…', keywords: ['style', 'color', 'sky'], run: view.chooseBackground },
+    { id: 'scenes:panel', name: 'Scenes', keywords: ['scene', 'view', 'pages', 'tabs'], run: view.toggleScenes },
+    { id: 'scenes:add', name: 'Add Scene', keywords: ['scene', 'save view'], run: () => controller.addScene() },
+    { id: 'scenes:update', name: 'Update Scene', keywords: ['scene', 'overwrite'], run: () => (controller.currentScene !== null ? controller.updateScene(controller.currentScene) : controller.notify('Go to a scene first, then update it')) },
+    { id: 'scenes:next', name: 'Next Scene', keywords: ['scene'], shortcut: 'Page Down', run: () => controller.stepScene(1) },
+    { id: 'scenes:previous', name: 'Previous Scene', keywords: ['scene'], shortcut: 'Page Up', run: () => controller.stepScene(-1) },
+    { id: 'scenes:play', name: 'Play Scenes (Slideshow)', keywords: ['scene', 'animation', 'walkthrough', 'slideshow'], run: () => view.player.toggle() },
+    { id: 'group:hide', name: 'Hide Selected Groups', keywords: ['hide', 'visibility', 'group'], run: () => controller.hideSelection() },
+    { id: 'group:unhide', name: 'Unhide All', keywords: ['show', 'unhide', 'visibility', 'group'], run: () => controller.unhideAll() },
     { id: 'guides:toggle', name: 'Show/Hide Guides', keywords: ['guide', 'construction'], run: () => controller.toggleGuides() },
     { id: 'guides:delete', name: 'Delete All Guides', keywords: ['guide', 'construction'], run: () => controller.deleteGuides() },
   ];
@@ -326,7 +438,7 @@ function buildPalette(buttons: Map<ToolId, HTMLButtonElement>, setTool: (id: Too
   }
 }
 
-function buildToolbar(viewer: Viewer, controller: ToolController, files: FileCommands, toggleMaterials: () => void) {
+function buildToolbar(viewer: Viewer, controller: ToolController, files: FileCommands, toggleMaterials: () => void, view: ViewActions) {
   const bar = document.getElementById('toolbar')!;
   const brand = document.createElement('span');
   brand.className = 'brand';
@@ -370,7 +482,20 @@ function buildToolbar(viewer: Viewer, controller: ToolController, files: FileCom
   sep();
   const materialsButton = iconButton(ICONS.materials, 'Materials (colours and textures)', toggleMaterials);
   bar.append(materialsButton);
-  return { undoButton, redoButton, materialsButton };
+  sep();
+  const styles = new Map<FaceStyle, HTMLButtonElement>();
+  for (const [f, label, icon] of FACE_STYLES) {
+    const b = iconButton(icon, `Style: ${label}`, () => view.setFaces(f));
+    styles.set(f, b);
+    bar.append(b);
+  }
+  const projection = iconButton(ICONS.perspective, 'Perspective (click for parallel projection)', view.toggleProjection);
+  bar.append(projection);
+  sep();
+  const scenes = iconButton(ICONS.scenes, 'Scenes (saved views)', view.toggleScenes);
+  bar.append(scenes);
+  const viewButtons: ViewButtons = { styles, projection, scenes };
+  return { undoButton, redoButton, materialsButton, viewButtons };
 }
 
 function iconButton(icon: string, title: string, onClick: () => void): HTMLButtonElement {
