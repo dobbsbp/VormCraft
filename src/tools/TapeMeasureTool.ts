@@ -106,7 +106,7 @@ export class TapeMeasureTool implements Tool {
       const factor = d / measuredLength;
       const { from, to } = last;
       this.ctx.confirm(`Resize the whole model by ${formatFactor(factor)} so this length becomes ${formatLength(d)}?`, () => {
-        const before = this.ctx.apply(() => rescaleDocument(this.ctx.doc, factor), last.kind === 'resized' ? last.base : undefined);
+        const before = this.ctx.apply(() => rescaleDocument(this.ctx.doc, factor), last.kind === 'resized' ? last.base : undefined, 'Resize model');
         this.last = { kind: 'resized', base: before, length: measuredLength, from, to, factor };
       });
       return;

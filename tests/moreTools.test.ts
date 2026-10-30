@@ -6,6 +6,7 @@ import {
   drawArc,
   drawCircle,
   drawRectangle,
+  drawRegularPolygon,
   edgeChain,
   faceArea,
   findFaceAt,
@@ -292,6 +293,7 @@ describe('Tape Measure: resize the model from a measured length', () => {
     h.controller.typed('50');
     expect(h.model.findVertex([50, 50, 25])).toBeDefined();
     expect(h.controller.tool.vcbValue()).toBe('50 mm');
+    expect(h.controller.history.undoLabel).toBe('Resize model');
     h.controller.undo();
     expect(h.model.findVertex([100, 100, 50])).toBeDefined();
   });
@@ -382,6 +384,37 @@ describe('offsetting edges (core)', () => {
     expect(m.findVertex([180, 20, 0])).toBeDefined();
     expect(m.findVertex([180, 200, 0])).toBeDefined();
     m.validate();
+  });
+
+  it('an open copy that stops inside a face is carried on to its edge, dividing the face', () => {
+    const m = new Model();
+    const hex = drawRegularPolygon(m, GROUND_PLANE, [0, 0, 0], 100, 6).inner!;
+    const area = faceArea(m, hex);
+    // The two sides meeting at the lower-right corner: their offset ends land inside the hexagon.
+    const h = 50 * Math.sqrt(3);
+    const two = [edgeAt(m, [-50, -h, 0], [50, -h, 0]), edgeAt(m, [50, -h, 0], [100, 0, 0])];
+    const chain = edgeChain(m, two);
+    // Inward is the side the hexagon's centre is on.
+    const [a, b] = chain.vertices.map((v) => m.pos(v));
+    const left = (b[0] - a[0]) * (0 - a[1]) - (b[1] - a[1]) * (0 - a[0]) > 0;
+    const { edges } = offsetEdges(m, two, GROUND_PLANE, left ? 10 : -10);
+    expect(m.faces.size).toBe(2);
+    expect(edges).toHaveLength(4); // the two offset sides and an extension at each end
+    const total = [...m.faces.keys()].reduce((sum, f) => sum + faceArea(m, f), 0);
+    expect(total).toBeCloseTo(area, 6);
+    m.validate();
+  });
+
+  it('a copy outside every face is not extended', () => {
+    const m = new Model();
+    drawRectangle(m, GROUND_PLANE, [0, 0, 0], 200, 200);
+    const bottom = edgeAt(m, [0, 0, 0], [200, 0, 0]);
+    const chain = edgeChain(m, [bottom]);
+    const out = m.pos(chain.vertices[0])[0] === 0 ? -20 : 20;
+    offsetEdges(m, [bottom], GROUND_PLANE, out);
+    expect(m.findVertex([0, -20, 0])).toBeDefined();
+    expect(m.findVertex([200, -20, 0])).toBeDefined();
+    expect(m.faces.size).toBe(1);
   });
 
   it('an arc stays a true arc about the same centre', () => {

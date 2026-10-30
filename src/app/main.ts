@@ -214,6 +214,7 @@ async function start(): Promise<void> {
     const action = binding.action;
     if (action.type === 'tool') setTool(action.tool);
     else if (action.type === 'zoomExtents') viewer.zoomExtents();
+    else if (action.type === 'previousView') previousView(viewer, controller);
     else if (action.type === 'backEdges') controller.notify(viewer.toggleBackEdges() ? 'Back edges shown (K to hide)' : 'Back edges hidden');
     else if (action.type === 'search') search.open();
     else if (action.type === 'lock') controller.toggleLock(action.lock);
@@ -277,7 +278,7 @@ function commandList(viewer: Viewer, controller: ToolController, files: FileComm
     { id: 'edit:selectall', name: 'Select All', keywords: ['edit', 'selection'], run: () => controller.selectAll() },
     { id: 'edit:delete', name: 'Delete Selection', keywords: ['edit', 'erase', 'remove'], shortcut: 'Delete', run: () => controller.deleteSelection() },
     { id: 'view:extents', name: 'Zoom Extents', keywords: ['camera', 'fit'], shortcut: 'Shift+Z', run: () => viewer.zoomExtents() },
-    { id: 'view:previous', name: 'Previous View', keywords: ['camera', 'back', 'undo view'], run: () => previousView(viewer, controller) },
+    { id: 'view:previous', name: 'Previous View', keywords: ['camera', 'back', 'undo view'], shortcut: 'Shift+V', run: () => previousView(viewer, controller) },
     ...views,
     { id: 'view:backedges', name: 'Back Edges', keywords: ['hidden', 'x-ray', 'view'], shortcut: 'K', run: () => controller.notify(viewer.toggleBackEdges() ? 'Back edges shown (K to hide)' : 'Back edges hidden') },
     { id: 'guides:toggle', name: 'Show/Hide Guides', keywords: ['guide', 'construction'], run: () => controller.toggleGuides() },
@@ -318,7 +319,7 @@ function buildToolbar(viewer: Viewer, controller: ToolController, files: FileCom
   );
   sep();
   bar.append(iconButton(ICONS.zoomExtents, withShortcut('Zoom Extents'), () => viewer.zoomExtents()));
-  bar.append(iconButton(ICONS.previousView, 'Previous view', () => previousView(viewer, controller)));
+  bar.append(iconButton(ICONS.previousView, withShortcut('Previous View'), () => previousView(viewer, controller)));
   const views: [Exclude<StandardView, 'bottom'>, string][] = [
     ['iso', 'Iso'],
     ['top', 'Top'],

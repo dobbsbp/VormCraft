@@ -4,6 +4,7 @@ import type { AxisLock, ToolId } from '../tools/types';
 export type KeyAction =
   | { type: 'tool'; tool: ToolId }
   | { type: 'zoomExtents' }
+  | { type: 'previousView' }
   | { type: 'backEdges' }
   | { type: 'search' }
   | { type: 'lock'; lock: AxisLock }
@@ -24,6 +25,7 @@ const OUT_OF_SCOPE = 'planned for a later version (out of scope for v1)';
 
 const bind = (label: string, key: string, shift: boolean, name: string, action: KeyAction): KeyBinding => ({ label, key, shift, name, action });
 const tool = (label: string, key: string, name: string, id: ToolId) => bind(label, key, false, name, { type: 'tool', tool: id });
+const shiftTool = (key: string, name: string, id: ToolId) => bind(`Shift+${key.toUpperCase()}`, key, true, name, { type: 'tool', tool: id });
 const missing = (label: string, key: string, shift: boolean, name: string, reason = NOT_YET) =>
   bind(label, key, shift, name, { type: 'unavailable', name, reason });
 
@@ -32,8 +34,11 @@ export const KEY_BINDINGS: readonly KeyBinding[] = [
   // Drawing & basic tools
   tool('L', 'l', 'Line', 'line'),
   tool('R', 'r', 'Rectangle', 'rectangle'),
+  shiftTool('r', 'Rotated Rectangle', 'rectangle3'),
   tool('C', 'c', 'Circle', 'circle'),
+  shiftTool('c', 'Polygon', 'polygon'),
   tool('A', 'a', '2-Point Arc', 'arc2'),
+  shiftTool('a', 'Pie', 'pie'),
   tool('P', 'p', 'Push/Pull', 'pushpull'),
   tool('M', 'm', 'Move', 'move'),
   tool('Q', 'q', 'Rotate', 'rotate'),
@@ -52,6 +57,9 @@ export const KEY_BINDINGS: readonly KeyBinding[] = [
   tool('H', 'h', 'Pan', 'pan'),
   tool('Z', 'z', 'Zoom', 'zoom'),
   bind('Shift+Z', 'z', true, 'Zoom Extents', { type: 'zoomExtents' }),
+  // Not SketchUp defaults (it has none for these, and its Ctrl+Shift+W closes a browser window).
+  shiftTool('w', 'Zoom Window', 'zoomWindow'),
+  bind('Shift+V', 'v', true, 'Previous View', { type: 'previousView' }),
   bind('K', 'k', false, 'Back Edges', { type: 'backEdges' }),
   missing('I', 'i', false, 'Photo Matching'),
   // Axis locking while using a tool

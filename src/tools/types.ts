@@ -116,9 +116,10 @@ export interface ToolContext {
   /**
    * Make a model change as one step. If `base` is given the document is first restored to it
    * (used to re-dimension the last operation). On error the document is left exactly as it was
-   * and the error is thrown. Returns the snapshot from before the change.
+   * and the error is thrown. Returns the snapshot from before the change. `label` names the step
+   * for undo/redo (the tool's name by default).
    */
-  apply(change: () => void, base?: DocumentSnapshot): DocumentSnapshot;
+  apply(change: () => void, base?: DocumentSnapshot, label?: string): DocumentSnapshot;
   /**
    * Ask the user to confirm (a dialog in the app) and run `action` if they agree. In tests the
    * answer is yes, immediately. Errors from `action` are reported like any tool error.

@@ -83,7 +83,7 @@ export class ToolController {
     this.ctx = {
       doc,
       selection: this.selection,
-      apply: (change, base) => this.apply(change, base, this.tool),
+      apply: (change, base, label) => this.apply(change, base, this.tool, label),
       confirm: (message, action) => {
         const answer = this.ask(message);
         if (answer === true) action();

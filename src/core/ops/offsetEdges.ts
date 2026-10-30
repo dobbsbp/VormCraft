@@ -1,5 +1,5 @@
-import { fromPlane2D, makePlane, signedDistance, toPlane2D, type Plane } from '../math/plane';
-import { cross2, sub2, type Vec2 } from '../math/polygon2d';
+import { fromPlane2D, makePlane, planesCoincide, signedDistance, toPlane2D, type Plane } from '../math/plane';
+import { cross2, pointInRegion, sub2, type Vec2 } from '../math/polygon2d';
 import { TOL } from '../math/tolerance';
 import { add, cross, distance, dot, length, normalize, scale, sub, type Vec3 } from '../math/vec3';
 import type { CircleCurve, CurveId, HalfEdgeId, Model, VertexId } from '../model/Model';
@@ -118,9 +118,40 @@ export function offsetPolyline2D(points: readonly Vec2[], closed: boolean, d: nu
 type CircleSpec = Omit<CircleCurve, 'id'>;
 
 /**
+ * How far a ray from `p` along `dir` (2D, unit) runs before it meets the boundary of a face lying
+ * in `plane` that `p` is strictly inside, or null when `p` is inside no such face.
+ */
+function rayToFaceBoundary(model: Model, plane: Plane, p: Vec3, dir: Vec3): Vec3 | null {
+  const p2 = toPlane2D(plane, p);
+  const tip = toPlane2D(plane, add(p, dir));
+  const d2: Vec2 = sub2(tip, p2);
+  for (const f of model.faces.keys()) {
+    if (!planesCoincide(model.facePlane(f), plane)) continue;
+    const rings = model.faceVertexLoops(f).map((r) => r.map((v) => toPlane2D(plane, model.pos(v))));
+    if (pointInRegion(p2, rings[0], rings.slice(1)) !== 'inside') continue;
+    let best = Infinity;
+    for (const r of rings) {
+      r.forEach((a, i) => {
+        const e = sub2(r[(i + 1) % r.length], a);
+        const den = cross2(d2, e);
+        if (Math.abs(den) < 1e-12) return;
+        const w = sub2(a, p2);
+        const t = cross2(w, e) / den;
+        const u = cross2(w, d2) / den;
+        if (t > TOL && u >= -1e-9 && u <= 1 + 1e-9) best = Math.min(best, t);
+      });
+    }
+    return Number.isFinite(best) ? fromPlane2D(plane, [p2[0] + d2[0] * best, p2[1] + d2[1] * best]) : null;
+  }
+  return null;
+}
+
+/**
  * The offset chain as 3D points (first point repeated at the end when closed), in chain order,
  * and for each segment the circle it lies on when the source segment was part of an arc. Points
- * on an arc go straight out from its centre, so they lie on the new circle.
+ * on an arc go straight out from its centre, so they lie on the new circle. An open chain whose
+ * end lands inside a face is carried straight on (along the end's direction) to the face's edge,
+ * so the copy always divides the face.
  */
 export function offsetChain(model: Model, chain: EdgeChain, plane: Plane, d: number): { points: Vec3[]; curves: (CircleSpec | null)[] } {
   const pts = chain.vertices.map((v) => model.pos(v));
@@ -156,7 +187,21 @@ export function offsetChain(model: Model, chain: EdgeChain, plane: Plane, d: num
     const r = distance(pts[i], spec.center);
     if (r > TOL) off[i] = add(spec.center, scale(sub(pts[i], spec.center), spec.radius / r));
   }
-  return { points: chain.closed ? [...off, off[0]] : off, curves: segCurve.map((c) => (c === null ? null : specs.get(c)!)) };
+  const curves = segCurve.map((c) => (c === null ? null : specs.get(c)!));
+  if (chain.closed) return { points: [...off, off[0]], curves };
+  // Carry each open end on to the edge of the face it stops inside.
+  const endDir = (at: number, from: number, spec: CircleSpec | null): Vec3 => {
+    const chord = normalize(sub(off[at], off[from]));
+    if (!spec) return chord;
+    const tangent = normalize(cross(plane.normal, sub(off[at], spec.center)));
+    return dot(tangent, chord) < 0 ? scale(tangent, -1) : tangent;
+  };
+  const start = rayToFaceBoundary(model, plane, off[0], endDir(0, 1, curves[0]));
+  const end = rayToFaceBoundary(model, plane, off[n - 1], endDir(n - 1, n - 2, curves[n - 2]));
+  return {
+    points: [...(start ? [start] : []), ...off, ...(end ? [end] : [])],
+    curves: [...(start ? [null] : []), ...curves, ...(end ? [null] : [])],
+  };
 }
 
 /** The offset chain as 3D points (first point repeated at the end when closed), in chain order. */
