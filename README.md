@@ -4,7 +4,7 @@
 
 VormCraft is a push/pull 3D modeling program for woodworking, architecture sketches, 3D printing and CAD/CAM handoff. There is no parametric timeline and no constraint solver. You draw on faces, push and pull them, and the model follows. It works much like SketchUp, but it is free and open source.
 
-![VormCraft with a painted sample model and the Materials panel open](docs/screenshot.jpg)
+![VormCraft with grouped, painted objects, scene tabs along the top and the Scenes panel open](docs/screenshot.jpg)
 
 > **Status:** early (v0.1) and under active development. The modeling core is solid and well tested. New features are added as the program gets used. A Windows 11 installer will be published on the [Releases](../../releases) page. Until then, run it from source (see below).
 
@@ -24,53 +24,62 @@ VormCraft is a push/pull 3D modeling program for woodworking, architecture sketc
   - Double-click a face to repeat the last distance.
 - **Offset**: copy a face's outline inward or outward, or offset a chain of edges.
 - **Follow Me**: sweep a profile along a path, for mouldings, pipes, grooves, chamfers and lathed (turned) shapes.
-- **Move** and **Rotate**: tap Ctrl to make copies, then type a count (`5x` or `/5`) to make arrays. **Scale** resizes selected geometry.
+- **Move** and **Rotate**: tap Ctrl to make copies, then type a count (`5x` or `/5`) to make arrays. **Scale** resizes selected geometry; negative factors mirror.
 - **Eraser**, **Tape Measure** (measure, place guides, rescale the model) and **Text** labels.
+- **Reverse Faces**, **Flip Along** red/green/blue, and **Soften/Unsoften Edges** (from the right-click menu).
 - Curves keep their true radius, so circles and arcs export smoothly at any resolution.
 
 ### Groups
 - Select geometry and press **Ctrl+G** to make a group. A group keeps its geometry to itself, so it never sticks to or merges with anything it touches, and groups can hold other groups.
-- A group selects, moves, rotates, scales, copies and paints as one piece.
+- A group selects, moves, rotates, scales, copies, flips and paints as one piece.
 - Double-click a group to edit what's inside it; the rest of the model fades while you work. Press Esc (or click outside it) to close it.
-- **Explode Group** (in the Search box, Shift+S) turns a group back into loose geometry.
+- **Explode** turns a group back into loose geometry; **Hide** and **Unhide All** hide and show groups.
+- Rename groups and see their size and contents in **Entity Info**.
 
 ### Right-click menu
-- Right-click anything for a menu: Entity Info (rename groups, see areas and lengths), Erase, Hide, Edit/Explode/Make Group, Select (bounding edges, connected, same material), Reverse Faces, Flip Along red/green/blue, Soften/Unsoften Edges and Zoom Selection.
-
-### Inference snapping
-- Snaps to endpoints, midpoints, edges, faces, guide intersections and the red, green and blue axes, with a visual cue for each.
-- Arrow keys lock to an axis (→ red, ← green, ↑ blue, ↓ parallel or perpendicular to the last edge).
+Right-click anything to select it and get a menu for it:
+- **Entity Info**: a panel with a group's name (editable), contents, size and paint; faces' area and paint; edges' length and smoothing.
+- **Erase**, **Hide**, **Unhide All**
+- **Edit Group**, **Close Group**, **Explode**, **Make Group**
+- **Select ▸** bounding edges, connected faces, all connected, all with the same material, all, none
+- **Reverse Faces**, **Flip Along ▸** red/green/blue, **Soften / Unsoften Edges**, **Zoom Selection**
 
 ### Scenes and view styles
-- **Scenes** save a view: the camera, which groups are hidden, and the display style. Tabs along the top of the viewport jump between them with a smooth camera glide, and **Play** runs them as a looping slideshow.
-- Choose per scene what it restores (camera, hidden groups, style), overwrite a scene with **Update**, and rename or reorder scenes in the Scenes panel.
+- **Scenes** save a view: the camera, which groups are hidden, and the display style. Tabs along the top of the viewport jump between them with a smooth camera glide; **Page Down / Page Up** step through them.
+- **Play** runs the scenes as a looping slideshow, with adjustable transition and pause times.
+- Choose per scene what it restores (camera, hidden groups, style), overwrite a scene with **Update**, and rename, reorder or delete scenes in the Scenes panel.
 - Display styles: **Textured**, **Shaded**, **Wireframe** and **X-ray**, plus back edges and a background colour.
 - **Perspective** or **parallel** projection.
-- Hide selected groups and unhide them all (from the Search box).
 
 ### Materials
 - **Paint Bucket**: plain colours, see-through colours such as glass, or tiled textures at real-world size.
 - Built-in library of colours and textures (brick, wood planks, tiles, concrete, grass), or use your own image.
-- Paint follows the geometry: split, pushed and moved faces keep their paint.
+- Paint follows the geometry: split, pushed and moved faces keep their paint. Painting a group colours all of its unpainted faces.
+
+### Inference snapping
+- Snaps to endpoints, midpoints, edges, faces, guide intersections and the red, green and blue axes, with a visual cue for each. Groups' corners and edges snap too.
+- Arrow keys lock to an axis (→ red, ← green, ↑ blue, ↓ parallel or perpendicular to the last edge).
 
 ### Files and export
-- Saves to its own `.vorm` file format. Older files keep opening as the format evolves, including `.benup` files from before the rename.
+- Saves to its own `.vorm` file format, including groups, materials and scenes. Older files keep opening as the format evolves, including `.benup` files from before the rename.
 - **STL** (binary) export with a watertight check and adjustable curve resolution, for 3D printing.
 - **OBJ** export.
 - Unlimited undo and redo.
+- **Search** (Shift+S) finds any tool or command by name.
 
 ### Navigation
 
 | Action | Mouse |
 | --- | --- |
 | Use the active tool | Left button |
+| Context menu | Right-click |
 | Orbit | Right-drag (about the point under the cursor) |
 | Re-centre the view | Double right-click |
 | Pan | Middle-drag |
 | Zoom | Mouse wheel (toward the cursor) |
 | Zoom extents | Shift+Z |
 
-Standard views (top, front, iso, …), Zoom Window, Previous View and back-edge display are available from the toolbar.
+Standard views (top, front, iso, …), Zoom Window, Previous View, display styles and projection are on the toolbar.
 
 ---
 
@@ -88,11 +97,12 @@ Standard views (top, front, iso, …), Zoom Window, Previous View and back-edge 
 | S | Scale | E | Eraser |
 | T | Tape Measure | B | Paint Bucket |
 | O / H / Z | Orbit / Pan / Zoom | Shift+W | Zoom Window |
-| Shift+V | Previous View | K | Back Edges |
-| Page Down / Page Up | Next / previous scene | | |
-| Shift+S | Search commands | Ctrl+G | Make Group |
-| Ctrl+Z / Ctrl+Y | Undo / Redo | | |
-| Ctrl+N / O / S | New / Open / Save | Ctrl+Shift+S | Save As |
+| Shift+Z | Zoom Extents | Shift+V | Previous View |
+| K | Back Edges | Shift+S | Search commands |
+| Ctrl+G | Make Group | Esc | Cancel / clear selection / close group |
+| Delete | Erase selection | Page Down / Page Up | Next / previous scene |
+| Ctrl+Z / Ctrl+Y | Undo / Redo | Ctrl+N / O / S | New / Open / Save |
+| Ctrl+Shift+S | Save As | | |
 
 ---
 
@@ -133,13 +143,13 @@ VormCraft's own geometry kernel is the source of truth. The 3D view only display
 | Folder | What's in it |
 | --- | --- |
 | `src/core` | The geometry kernel: a half-edge boundary representation with true polygon faces and holes, modeling operations (push/pull, offset, follow me, imprinting, cleanup), booleans through [Manifold](https://github.com/elalish/manifold), and watertight checks. Plain TypeScript with no graphics, so it is fully testable. |
-| `src/view` | [Three.js](https://threejs.org/) display: triangulation for drawing, picking that maps every triangle and line back to its model face or edge, camera navigation. |
-| `src/tools` | Every tool as a plain state machine, plus the inference/snapping engine and the controller that turns each operation into one atomic, undoable step. |
-| `src/doc` | The document (model, guides, labels, materials), snapshots and undo history. |
+| `src/view` | [Three.js](https://threejs.org/) display: triangulation for drawing, picking that maps every triangle and line back to its model face or edge, display styles, camera navigation (perspective and parallel). |
+| `src/tools` | Every tool as a plain state machine, plus the inference/snapping engine, the right-click menu, and the controller that turns each operation into one atomic, undoable step. |
+| `src/doc` | The document (top-level geometry, groups, guides, labels, materials, scenes), snapshots and undo history. |
 | `src/io` | The `.vorm` file format, STL and OBJ export, and tessellation of curved surfaces from their true radii. |
-| `src/app` | The app shell: toolbar, panels, dialogs, icons. |
+| `src/app` | The app shell: toolbar, panels (Materials, Scenes, Entity Info), context menu, dialogs, icons. |
 | `src-tauri` | The Tauri desktop shell (native file dialogs and file access). |
-| `tests` | Vitest tests covering the kernel, tools, snapping, file format and display data. |
+| `tests` | Vitest tests covering the kernel, tools, groups, scenes, snapping, file format and display data. |
 
 Units are millimetres, and Z is up (red = X, green = Y, blue = Z). The full design spec is in [docs/SPEC.md](docs/SPEC.md).
 
@@ -150,8 +160,9 @@ Units are millimetres, and Z is up (red = X, green = Y, blue = Z). The full desi
 Features are added as real use calls for them. Ideas on the list:
 
 - Windows 11 installer on the Releases page
-- Dimensions, Section Planes, tags/layers, shadows (scenes will save these too)
-- Components (reusable, linked copies)
+- Dimensions, section planes, tags/layers, shadows (scenes will save these too)
+- Components (reusable, linked copies) and locking groups
+- A field-of-view control
 - STEP export (true curves, through OpenCascade)
 - Exporting materials with OBJ
 
