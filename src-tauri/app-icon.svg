@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <!-- Benup app icon: an isometric block with a face being pulled up (our own artwork). -->
+  <!-- VormCraft app icon: an isometric block with a face being pulled up (our own artwork). -->
   <rect x="32" y="32" width="960" height="960" rx="200" fill="#2f6fe4"/>
   <g stroke="#14254d" stroke-width="22" stroke-linejoin="round">
     <path d="M512 520 812 668 512 816 212 668Z" fill="#dfe8fb"/>

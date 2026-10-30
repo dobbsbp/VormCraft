@@ -1,10 +1,10 @@
-# Benup
+# VormCraft
 
 **A free, fast, direct 3D modeler: draw a shape, grab a face, push it.**
 
-Benup is a push/pull 3D modeling program for woodworking, architecture sketches, 3D printing and CAD/CAM handoff. There is no parametric timeline and no constraint solver. You draw on faces, push and pull them, and the model follows. It works much like SketchUp, but it is free and open source.
+VormCraft is a push/pull 3D modeling program for woodworking, architecture sketches, 3D printing and CAD/CAM handoff. There is no parametric timeline and no constraint solver. You draw on faces, push and pull them, and the model follows. It works much like SketchUp, but it is free and open source.
 
-![Benup with a painted sample model and the Materials panel open](docs/screenshot.jpg)
+![VormCraft with a painted sample model and the Materials panel open](docs/screenshot.jpg)
 
 > **Status:** early (v0.1) and under active development. The modeling core is solid and well tested. New features are added as the program gets used. A Windows 11 installer will be published on the [Releases](../../releases) page. Until then, run it from source (see below).
 
@@ -38,7 +38,7 @@ Benup is a push/pull 3D modeling program for woodworking, architecture sketches,
 - Paint follows the geometry: split, pushed and moved faces keep their paint.
 
 ### Files and export
-- Saves to its own `.benup` file format. Older files keep opening as the format evolves.
+- Saves to its own `.vorm` file format. Older files keep opening as the format evolves, including `.benup` files from before the rename.
 - **STL** (binary) export with a watertight check and adjustable curve resolution, for 3D printing.
 - **OBJ** export.
 - Unlimited undo and redo.
@@ -83,8 +83,8 @@ Standard views (top, front, iso, …), Zoom Window, Previous View and back-edge 
 You need [Node.js](https://nodejs.org/) 20.19+ or 22.12+.
 
 ```bash
-git clone https://github.com/dobbsbp/benup.git
-cd benup
+git clone https://github.com/dobbsbp/VormCraft.git
+cd VormCraft
 npm install
 npm run dev          # then open the address it prints (http://localhost:5173)
 ```
@@ -110,7 +110,7 @@ npm run desktop:build    # installer in src-tauri/target/release/bundle/nsis/
 
 ## How it works
 
-Benup's own geometry kernel is the source of truth. The 3D view only displays it.
+VormCraft's own geometry kernel is the source of truth. The 3D view only displays it.
 
 | Folder | What's in it |
 | --- | --- |
@@ -118,7 +118,7 @@ Benup's own geometry kernel is the source of truth. The 3D view only displays it
 | `src/view` | [Three.js](https://threejs.org/) display: triangulation for drawing, picking that maps every triangle and line back to its model face or edge, camera navigation. |
 | `src/tools` | Every tool as a plain state machine, plus the inference/snapping engine and the controller that turns each operation into one atomic, undoable step. |
 | `src/doc` | The document (model, guides, labels, materials), snapshots and undo history. |
-| `src/io` | The `.benup` file format, STL and OBJ export, and tessellation of curved surfaces from their true radii. |
+| `src/io` | The `.vorm` file format, STL and OBJ export, and tessellation of curved surfaces from their true radii. |
 | `src/app` | The app shell: toolbar, panels, dialogs, icons. |
 | `src-tauri` | The Tauri desktop shell (native file dialogs and file access). |
 | `tests` | Vitest tests covering the kernel, tools, snapping, file format and display data. |
@@ -145,4 +145,4 @@ Bug reports and suggestions are welcome in [Issues](../../issues).
 
 [MIT](LICENSE). Free to use, change and share, including commercially.
 
-Benup is an independent project and is not affiliated with or endorsed by Trimble or SketchUp.
+VormCraft is an independent project and is not affiliated with or endorsed by Trimble or SketchUp.

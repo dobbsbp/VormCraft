@@ -62,7 +62,7 @@ export class ToolController {
   private lockDir: Vec3 | null = null;
   /** Error from the last action, shown in the status bar until the next action. */
   error: string | null = null;
-  /** Information (e.g. "Saved part.benup"), shown until the next action. */
+  /** Information (e.g. "Saved part.vorm"), shown until the next action. */
   notice: string | null = null;
   /** Called after the model or guides changed (rebuild display). */
   onModelChanged: () => void = () => {};

@@ -1,9 +1,9 @@
 {
-  "name": "benup-modeler",
+  "name": "vormcraft",
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
-  "description": "SketchUp-style direct modeler: half-edge geometry core, Three.js display, Manifold booleans.",
+  "description": "VormCraft: free push/pull 3D modeler with a half-edge geometry core, Three.js display, Manifold booleans.",
   "type": "module",
   "scripts": {
     "dev": "vite",

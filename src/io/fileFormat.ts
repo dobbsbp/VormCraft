@@ -6,18 +6,21 @@ import { Labels } from '../doc/Labels';
 import { Materials, type Material } from '../doc/Materials';
 
 /** File extension of our own format. */
-export const FILE_EXTENSION = 'benup';
+export const FILE_EXTENSION = 'vorm';
+/** Extensions of files saved before the app was renamed (they still open). */
+export const OLD_FILE_EXTENSIONS = ['benup'];
 export const FORMAT_VERSION = 2;
 
 /**
- * Benup document (JSON, millimetres). The boundary representation is stored exactly: vertices,
+ * VormCraft document (JSON, millimetres). The boundary representation is stored exactly: vertices,
  * faces as vertex-id loops (outer first, then holes), every edge with its true-curve tag, the
  * curves themselves, and the guides. Ids are kept so a reload is identical.
  * Version 2 adds edge smoothing (a fourth entry per edge) and materials (colours and textures,
- * with each face's material). Version 1 files still open.
+ * with each face's material). Version 1 files still open, and so do files from before the app was
+ * renamed (format tag 'benup').
  */
 interface FileV2 {
-  format: 'benup';
+  format: 'vormcraft' | 'benup';
   version: 1 | 2;
   units: 'mm';
   vertices: [number, number, number, number][];
@@ -38,7 +41,7 @@ interface FileV2 {
 export function serializeDocument(doc: Document): string {
   const m = doc.model;
   const file: FileV2 = {
-    format: 'benup',
+    format: 'vormcraft',
     version: 2,
     units: 'mm',
     vertices: [...m.vertices.values()].map((v) => [v.id, ...v.pos]),
@@ -61,18 +64,18 @@ export function serializeDocument(doc: Document): string {
 
 export class FileFormatError extends Error {}
 
-/** Parse a Benup file. Throws FileFormatError with a readable message for bad or newer files. */
+/** Parse a VormCraft file. Throws FileFormatError with a readable message for bad or newer files. */
 export function parseDocument(text: string): Document {
   let raw: unknown;
   try {
     raw = JSON.parse(text);
   } catch {
-    throw new FileFormatError('This is not a Benup file (it is not valid JSON).');
+    throw new FileFormatError('This is not a VormCraft file (it is not valid JSON).');
   }
   const f = raw as Partial<FileV2> & { version?: unknown };
-  if (!f || typeof f !== 'object' || f.format !== 'benup') throw new FileFormatError('This is not a Benup file.');
+  if (!f || typeof f !== 'object' || (f.format !== 'vormcraft' && f.format !== 'benup')) throw new FileFormatError('This is not a VormCraft file.');
   if (typeof f.version !== 'number') throw new FileFormatError('The file has no version number.');
-  if (f.version > FORMAT_VERSION) throw new FileFormatError(`This file was saved by a newer version of Benup (format ${f.version}); please update the app.`);
+  if (f.version > FORMAT_VERSION) throw new FileFormatError(`This file was saved by a newer version of VormCraft (format ${f.version}); please update the app.`);
   if (f.units !== 'mm') throw new FileFormatError(`Unsupported units "${String(f.units)}".`);
 
   const model = new Model();

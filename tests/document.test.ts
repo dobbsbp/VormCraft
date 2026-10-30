@@ -163,12 +163,14 @@ describe('file format', () => {
     expect([soft(a, b), soft(b, c), soft(c, d)]).toEqual([true, false, undefined]);
     const v1 = { format: 'benup', version: 1, units: 'mm', vertices: [[1, 0, 0, 0], [2, 5, 0, 0]], curves: [], faces: [], edges: [[1, 2, null]], guides: { visible: true, lines: [], points: [] } };
     expect([...parseDocument(JSON.stringify(v1)).model.edges()]).toHaveLength(1);
+    // Files saved before the rename (format tag 'benup') still open; new files carry the new tag.
+    expect(JSON.parse(text).format).toBe('vormcraft');
   });
 
   it('rejects files that are not ours, newer, or damaged with clear messages', () => {
     expect(() => parseDocument('not json')).toThrow(FileFormatError);
-    expect(() => parseDocument('{"format":"other"}')).toThrow(/not a Benup file/);
-    expect(() => parseDocument('{"format":"benup","version":99,"units":"mm"}')).toThrow(/newer version/);
+    expect(() => parseDocument('{"format":"other"}')).toThrow(/not a VormCraft file/);
+    expect(() => parseDocument('{"format":"vormcraft","version":99,"units":"mm"}')).toThrow(/newer version/);
     const doc = new Document();
     drawRectangle(doc.model, GROUND_PLANE, [0, 0, 0], 10, 10);
     const bad = JSON.parse(serializeDocument(doc));

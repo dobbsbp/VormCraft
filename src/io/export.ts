@@ -34,7 +34,7 @@ export function exportStl(model: Model, opts: ExportOptions = {}): { data: Array
   const n = mesh.triangles.length / 3;
   const buf = new ArrayBuffer(84 + n * 50);
   const view = new DataView(buf);
-  const header = 'Benup binary STL, units: mm';
+  const header = 'VormCraft binary STL, units: mm';
   for (let i = 0; i < 80; i++) view.setUint8(i, i < header.length ? header.charCodeAt(i) : 0x20);
   view.setUint32(80, n, true);
   let o = 84;
@@ -56,7 +56,7 @@ export function exportStl(model: Model, opts: ExportOptions = {}): { data: Array
 export function exportObj(model: Model, opts: TessellationOptions = {}, name = 'model'): string {
   const mesh = tessellate(model, model.faces.keys(), opts);
   const fmt = (x: number) => String(Math.round(x * 1e6) / 1e6);
-  const lines = ['# Benup OBJ export', '# units: mm', `o ${name.replace(/\s+/g, '_')}`];
+  const lines = ['# VormCraft OBJ export', '# units: mm', `o ${name.replace(/\s+/g, '_')}`];
   for (let i = 0; i < mesh.positions.length; i += 3) lines.push(`v ${fmt(mesh.positions[i])} ${fmt(mesh.positions[i + 1])} ${fmt(mesh.positions[i + 2])}`);
   for (let i = 0; i < mesh.triangles.length; i += 3) lines.push(`f ${mesh.triangles[i] + 1} ${mesh.triangles[i + 1] + 1} ${mesh.triangles[i + 2] + 1}`);
   return lines.join('\n') + '\n';

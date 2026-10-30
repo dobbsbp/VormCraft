@@ -1,12 +1,16 @@
 import { checkWatertight } from '../core/check/watertight';
 import { Document } from '../doc/Document';
 import { exportObj, exportStl } from '../io/export';
-import { FILE_EXTENSION, parseDocument, serializeDocument } from '../io/fileFormat';
+import { FILE_EXTENSION, OLD_FILE_EXTENSIONS, parseDocument, serializeDocument } from '../io/fileFormat';
 import type { ToolController } from '../tools/ToolController';
 import { confirmDialog, showExportDialog } from './dialogs';
 import type { FileFilter, FileHost } from './files';
 
-const BENUP_FILTER: FileFilter = { name: 'Benup model', extensions: [FILE_EXTENSION] };
+const MODEL_FILTER: FileFilter = { name: 'VormCraft model', extensions: [FILE_EXTENSION] };
+/** Opening also accepts files saved before the app was renamed. */
+const OPEN_FILTER: FileFilter = { name: 'VormCraft model', extensions: [FILE_EXTENSION, ...OLD_FILE_EXTENSIONS] };
+/** Any of our extensions at the end of a file name. */
+const EXTENSION = new RegExp(`\\.(${[FILE_EXTENSION, ...OLD_FILE_EXTENSIONS].join('|')})$`, 'i');
 const STL_FILTER: FileFilter = { name: 'STL (binary)', extensions: ['stl'] };
 const OBJ_FILTER: FileFilter = { name: 'Wavefront OBJ', extensions: ['obj'] };
 
@@ -23,7 +27,7 @@ export class FileCommands {
   ) {}
 
   title(): string {
-    return `${this.name}${this.controller.dirty ? ' •' : ''} — Benup`;
+    return `${this.name}${this.controller.dirty ? ' •' : ''} — VormCraft`;
   }
 
   /** True if it is fine to drop the current document (saved, or the user agreed to discard). */
@@ -43,11 +47,12 @@ export class FileCommands {
   async open(): Promise<void> {
     if (!(await this.confirmDiscard())) return;
     await this.guard(async () => {
-      const file = await this.host.open(BENUP_FILTER);
+      const file = await this.host.open(OPEN_FILTER);
       if (!file) return;
       this.controller.replaceDocument(parseDocument(file.text));
-      this.name = file.name.replace(new RegExp(`\\.${FILE_EXTENSION}$`, 'i'), '');
-      this.path = file.path;
+      this.name = file.name.replace(EXTENSION, '');
+      // A file from before the rename is saved as a new .vorm file, not over the old one.
+      this.path = EXTENSION.exec(file.name)?.[1].toLowerCase() === FILE_EXTENSION ? file.path : undefined;
       this.controller.notify(`Opened ${file.name}`);
       this.onTitleChange();
     });
@@ -56,9 +61,9 @@ export class FileCommands {
   async save(saveAs = false): Promise<void> {
     await this.guard(async () => {
       const text = serializeDocument(this.controller.doc);
-      const written = await this.host.save(text, `${this.name}.${FILE_EXTENSION}`, BENUP_FILTER, saveAs ? undefined : this.path);
+      const written = await this.host.save(text, `${this.name}.${FILE_EXTENSION}`, MODEL_FILTER, saveAs ? undefined : this.path);
       if (!written) return;
-      this.name = written.name.replace(new RegExp(`\\.${FILE_EXTENSION}$`, 'i'), '');
+      this.name = written.name.replace(EXTENSION, '');
       this.path = written.path;
       this.controller.markSaved();
       this.controller.notify(this.host.native ? `Saved ${written.name}` : `Downloaded ${written.name}`);

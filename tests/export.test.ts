@@ -124,7 +124,7 @@ describe('STL export', () => {
     const back = readStl(data);
     expect(back.n).toBe(triangles);
     expect(openMeshEdges(back.mesh)).toBe(0);
-    expect(new TextDecoder().decode(data.slice(0, 26))).toBe('Benup binary STL, units: m');
+    expect(new TextDecoder().decode(data.slice(0, 30))).toBe('VormCraft binary STL, units: m');
   });
 
   it('refuses a model that is not watertight, unless told to export anyway', () => {

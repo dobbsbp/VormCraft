@@ -1,13 +1,13 @@
 [package]
-name = "benup"
+name = "vormcraft"
 version = "0.1.0"
-description = "Benup: a SketchUp-style direct 3D modeler"
-authors = ["Benup"]
+description = "VormCraft: a free push/pull 3D modeler"
+authors = ["Ben Dobbs"]
 edition = "2024"
 rust-version = "1.90"
 
 [lib]
-name = "benup_lib"
+name = "vormcraft_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

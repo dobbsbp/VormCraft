@@ -10,7 +10,7 @@ const PRESETS: { id: string; label: string; value: number | undefined }[] = [
   { id: 'normal', label: 'Normal (0.05 mm)', value: 0.05 },
   { id: 'fine', label: 'Fine (0.01 mm)', value: 0.01 },
 ];
-const STORAGE_KEY = 'benup.export.resolution';
+const STORAGE_KEY = 'vormcraft.export.resolution';
 
 function remembered(): string {
   try {

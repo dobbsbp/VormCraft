@@ -312,7 +312,7 @@ function buildToolbar(viewer: Viewer, controller: ToolController, files: FileCom
   const bar = document.getElementById('toolbar')!;
   const brand = document.createElement('span');
   brand.className = 'brand';
-  brand.textContent = 'Benup';
+  brand.textContent = 'VormCraft';
   bar.append(brand);
   const sep = () => bar.append(Object.assign(document.createElement('span'), { className: 'sep' }));
 

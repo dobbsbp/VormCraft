@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "Benup",
+  "productName": "VormCraft",
   "version": "0.1.0",
-  "identifier": "app.benup.modeler",
+  "identifier": "app.vormcraft.modeler",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5317",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Benup",
+        "title": "VormCraft",
         "width": 1400,
         "height": 900,
         "minWidth": 800,
