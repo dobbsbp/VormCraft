@@ -83,7 +83,7 @@ Standard views (top, front, iso, …), Zoom Window, Previous View and back-edge 
 You need [Node.js](https://nodejs.org/) 20.19+ or 22.12+.
 
 ```bash
-git clone https://github.com/<your-account>/benup.git
+git clone https://github.com/dobbsbp/benup.git
 cd benup
 npm install
 npm run dev          # then open the address it prints (http://localhost:5173)
