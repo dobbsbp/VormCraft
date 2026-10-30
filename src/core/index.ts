@@ -14,8 +14,9 @@ export { triangulateFace, triangulateFaces, type TriangleMesh } from './triangul
 export { findFaceAt } from './model/query';
 export { offsetFace, offsetFaceRings, offsetRing2D, offsetRingValid, type OffsetRing } from './ops/offset';
 export { erase } from './ops/erase';
+export { chainPlane, edgeChain, offsetChain, offsetChainPoints, offsetEdges, offsetPolyline2D, type EdgeChain } from './ops/offsetEdges';
 export { drawEdges, insertSegment, type DrawEdgesResult } from './ops/edges';
-export { arcAroundCenter, arcFromBulge, arcPoints, arcThroughPoints, drawArc, DEFAULT_ARC_SEGMENTS, type Arc } from './ops/arcs';
+export { arcAroundCenter, arcFromBulge, arcPoints, arcThroughPoints, drawArc, drawPie, DEFAULT_ARC_SEGMENTS, type Arc } from './ops/arcs';
 export { connectedVertices, scalePieces } from './ops/scale';
 export { applyAffine, BendError, duplicateVertices, rotation, scaling, selectionVertices, transformVertices, translation, type Affine } from './ops/transform';
 export { facesWithCurveEdges, isSoftEdge, smoothSurface, surfaceOutline } from './model/surfaces';

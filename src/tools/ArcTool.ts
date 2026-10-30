@@ -1,7 +1,7 @@
 import { toPlane2D, type Plane } from '../core/math/plane';
 import { TOL } from '../core/math/tolerance';
 import { add, distance, normalize, scale, sub, type Vec3 } from '../core/math/vec3';
-import { arcAroundCenter, arcFromBulge, arcPoints, arcThroughPoints, DEFAULT_ARC_SEGMENTS, drawArc, type Arc } from '../core/ops/arcs';
+import { arcAroundCenter, arcFromBulge, arcPoints, arcThroughPoints, DEFAULT_ARC_SEGMENTS, drawArc, drawPie, type Arc } from '../core/ops/arcs';
 import type { DocumentSnapshot } from '../doc/Document';
 import { pointOnPlane } from './geom';
 import { lineColor } from './LineTool';
@@ -9,9 +9,9 @@ import { placementAt } from './placement';
 import type { InferenceHints, Preview, PreviewLines, Snap, Tool, ToolContext, ToolEvent, ToolId } from './types';
 import { formatLength, parseLength, parseSegments } from './units';
 
-export type ArcMode = 'arc2' | 'arc3' | 'arc';
+export type ArcMode = 'arc2' | 'arc3' | 'arc' | 'pie';
 
-const NAMES: Record<ArcMode, string> = { arc2: '2-Point Arc', arc3: '3-Point Arc', arc: 'Arc' };
+const NAMES: Record<ArcMode, string> = { arc2: '2-Point Arc', arc3: '3-Point Arc', arc: 'Arc', pie: 'Pie' };
 
 /**
  * The three arc tools.
@@ -20,6 +20,7 @@ const NAMES: Record<ArcMode, string> = { arc2: '2-Point Arc', arc3: '3-Point Arc
  * - 3-Point Arc: click the start, a point the arc passes through, and the end.
  * - Arc: click the centre, click the start (or type the radius), then click the end (or type the
  *   angle in degrees).
+ * - Pie: as Arc, and the two radii close it into a slice-shaped face.
  * Type e.g. "16s" at any time to set the number of segments. Typing after finishing changes the
  * arc just drawn. Arcs keep their true radius (for STEP and fine STL export).
  */
@@ -46,6 +47,11 @@ export class ArcTool implements Tool {
     return this.mode;
   }
 
+  /** Arc and Pie start from the centre. */
+  private get centred(): boolean {
+    return this.mode === 'arc' || this.mode === 'pie';
+  }
+
   hint(): string {
     const n = this.points.length;
     const segs = ` Type e.g. ${this.segments}s to change the segments.`;
@@ -59,7 +65,7 @@ export class ArcTool implements Tool {
   vcbLabel(): string {
     const n = this.points.length;
     if (this.mode === 'arc2') return n === 2 || (n === 0 && this.last) ? 'Bulge' : n === 1 ? 'Length' : 'Segments';
-    if (this.mode === 'arc') return n === 2 || (n === 0 && this.last) ? 'Angle' : n === 1 ? 'Radius' : 'Segments';
+    if (this.centred) return n === 2 || (n === 0 && this.last) ? 'Angle' : n === 1 ? 'Radius' : 'Segments';
     return 'Segments';
   }
 
@@ -67,8 +73,8 @@ export class ArcTool implements Tool {
     const n = this.points.length;
     if (n === 1 && this.cursor) return formatLength(distance(this.points[0], this.cursor));
     if (n === 2 && this.mode === 'arc2') return formatLength(Math.abs(this.bulgeAt()));
-    if (n === 2 && this.mode === 'arc') return `${Math.round((this.sweep * 180) / Math.PI * 10) / 10}°`;
-    if (n === 0 && this.last) return this.mode === 'arc' ? `${Math.round(((this.last.value * 180) / Math.PI) * 10) / 10}°` : this.mode === 'arc2' ? formatLength(Math.abs(this.last.value)) : String(this.segments);
+    if (n === 2 && this.centred) return `${Math.round((this.sweep * 180) / Math.PI * 10) / 10}°`;
+    if (n === 0 && this.last) return this.centred ? `${Math.round(((this.last.value * 180) / Math.PI) * 10) / 10}°` : this.mode === 'arc2' ? formatLength(Math.abs(this.last.value)) : String(this.segments);
     return String(this.segments);
   }
 
@@ -90,7 +96,7 @@ export class ArcTool implements Tool {
     this.snap = e.snap;
     const p = this.pointFor(e);
     if (!p) return;
-    if (this.mode === 'arc' && this.points.length === 2 && this.cursor) {
+    if (this.centred && this.points.length === 2 && this.cursor) {
       // Follow the angle continuously from the previous cursor position.
       const step = this.angleOf(p) - this.angleOf(this.cursor);
       this.sweep += Math.atan2(Math.sin(step), Math.cos(step));
@@ -131,7 +137,7 @@ export class ArcTool implements Tool {
     if (n === 1) {
       this.points.push(p);
       this.sweep = 0;
-      if (this.mode === 'arc') this.cursor = p;
+      if (this.centred) this.cursor = p;
       return;
     }
     const arc = this.arcFor(p);
@@ -157,7 +163,7 @@ export class ArcTool implements Tool {
     const points = [...this.points];
     this.points = [];
     this.plane = null;
-    const before = this.ctx.apply(() => drawArc(this.ctx.doc.model, arc, this.segments), base);
+    const before = this.ctx.apply(() => (this.mode === 'pie' ? drawPie : drawArc)(this.ctx.doc.model, arc, this.segments), base);
     this.last = { base: before, plane, points, value, segments: this.segments };
   }
 
@@ -199,7 +205,7 @@ export class ArcTool implements Tool {
   }
 
   private parseValue(text: string): number {
-    if (this.mode === 'arc') {
+    if (this.centred) {
       const deg = Number(text.replace(/°|deg$/i, '').trim());
       if (!Number.isFinite(deg) || deg === 0 || Math.abs(deg) > 360) throw new Error('Type the angle in degrees (e.g. 90)');
       return deg;
@@ -217,7 +223,7 @@ export class ArcTool implements Tool {
     const arc =
       this.mode === 'arc2'
         ? arcFromBulge(last.plane, last.points[0], last.points[1], value)
-        : this.mode === 'arc'
+        : this.centred
           ? arcAroundCenter(last.plane, last.points[0], last.points[1], value)
           : arcThroughPoints(last.points[0], last.points[1], last.points[2]);
     this.commit(arc, value, last.base);
@@ -238,16 +244,17 @@ export class ArcTool implements Tool {
     if (n === 0 || !this.cursor) return {};
     const lines: PreviewLines[] = [];
     if (n === 1) {
-      lines.push({ points: [this.points[0], this.cursor], color: this.mode === 'arc' ? 'preview' : lineColor(this.snap), dashed: this.mode === 'arc', width: 2 });
+      lines.push({ points: [this.points[0], this.cursor], color: this.centred ? 'preview' : lineColor(this.snap), dashed: this.centred, width: 2 });
       return { lines };
     }
     try {
-      const arc = this.mode === 'arc' ? arcAroundCenter(this.plane!, this.points[0], this.points[1], this.sweep) : this.arcPreview();
+      const arc = this.centred ? arcAroundCenter(this.plane!, this.points[0], this.points[1], this.sweep) : this.arcPreview();
       if (Math.abs(arc.sweep) > 1e-6) {
         const pts = arcPoints(arc, this.segments);
         lines.push({ points: pts.slice(1).flatMap((p, i) => [pts[i], p]), color: 'preview', width: 2 });
+        if (this.mode === 'pie') lines.push({ points: [this.points[0], pts[0], this.points[0], pts[pts.length - 1]], color: 'preview', width: 2 });
       }
-      if (this.mode === 'arc') lines.push({ points: [this.points[0], this.points[1]], color: 'preview', dashed: true });
+      if (this.centred) lines.push({ points: [this.points[0], this.points[1]], color: 'preview', dashed: true });
     } catch {
       // Not an arc yet (e.g. no bulge): show the chord.
       lines.push({ points: [this.points[0], this.mode === 'arc3' ? this.cursor : this.points[1]], color: 'preview', dashed: true });

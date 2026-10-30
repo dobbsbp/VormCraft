@@ -119,6 +119,11 @@ export interface ToolContext {
    * and the error is thrown. Returns the snapshot from before the change.
    */
   apply(change: () => void, base?: DocumentSnapshot): DocumentSnapshot;
+  /**
+   * Ask the user to confirm (a dialog in the app) and run `action` if they agree. In tests the
+   * answer is yes, immediately. Errors from `action` are reported like any tool error.
+   */
+  confirm(message: string, action: () => void): void;
   projector(): Projector;
 }
 
@@ -130,7 +135,10 @@ export type ToolId =
   | 'arc3'
   | 'arc'
   | 'rectangle'
+  | 'rectangle3'
   | 'circle'
+  | 'polygon'
+  | 'pie'
   | 'pushpull'
   | 'offset'
   | 'scale'
@@ -141,7 +149,8 @@ export type ToolId =
   | 'eraser'
   | 'orbit'
   | 'pan'
-  | 'zoom';
+  | 'zoom'
+  | 'zoomWindow';
 
 export interface Tool {
   readonly id: ToolId;

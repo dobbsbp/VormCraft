@@ -223,12 +223,12 @@ function closeLoops(model: Model, fresh: HalfEdgeId[]): FaceId[] {
 /**
  * Draw a path of edges through `points` (Line and Arc tools). Where the path lies on a face the
  * face is split (once the path divides it); elsewhere the edges are loose, and any closed planar
- * loop they complete becomes a face.
+ * loop they complete becomes a face. `curve` tags every segment; `curves` tags segment i (points i → i+1).
  */
-export function drawEdges(model: Model, points: readonly Vec3[], opts: { curve?: CurveId | null } = {}): DrawEdgesResult {
+export function drawEdges(model: Model, points: readonly Vec3[], opts: { curve?: CurveId | null; curves?: readonly (CurveId | null)[] } = {}): DrawEdgesResult {
   const curve = opts.curve ?? null;
   const inserted: HalfEdgeId[] = [];
-  for (let i = 0; i + 1 < points.length; i++) inserted.push(...insertSegment(model, points[i], points[i + 1], curve));
+  for (let i = 0; i + 1 < points.length; i++) inserted.push(...insertSegment(model, points[i], points[i + 1], opts.curves?.[i] ?? curve));
   const ends = new Set<VertexId>(inserted.flatMap((h) => [model.he(h).origin, model.dest(h)]));
   const canonical = () => [...new Set(inserted.filter((h) => model.halfEdges.has(h)).map((h) => Math.min(h, model.he(h).twin)))];
 

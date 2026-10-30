@@ -103,3 +103,16 @@ export function drawArc(model: Model, arc: Arc, segments = DEFAULT_ARC_SEGMENTS)
   });
   return drawEdges(model, arcPoints(arc, n), { curve });
 }
+
+/**
+ * A pie (sector): the arc plus the two radii back to its centre, closed into a face (splitting a
+ * face it is drawn on). The arc keeps its true circle.
+ */
+export function drawPie(model: Model, arc: Arc, segments = DEFAULT_ARC_SEGMENTS): DrawEdgesResult {
+  if (Math.abs(arc.sweep) >= 2 * Math.PI - 1e-9) throw new Error('A pie must be less than a full circle');
+  const n = Math.max(1, Math.round(segments));
+  const pts = arcPoints(arc, n);
+  const a = drawArc(model, arc, n);
+  const b = drawEdges(model, [pts[n], arc.plane.origin, pts[0]]);
+  return { edges: [...new Set([...a.edges, ...b.edges])].filter((e) => model.halfEdges.has(e)), faces: [...new Set([...a.faces, ...b.faces])].filter((f) => model.faces.has(f)) };
+}

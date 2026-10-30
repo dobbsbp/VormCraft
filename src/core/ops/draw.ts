@@ -24,12 +24,12 @@ export function rectanglePoints(plane: Plane, corner: Vec3, width: number, lengt
   return width * length < 0 ? pts.reverse() : pts;
 }
 
-/** Regular polygon inscribed in a circle, CCW about the plane normal, first vertex along u. */
-export function circlePoints(plane: Plane, center: Vec3, radius: number, segments: number): Vec3[] {
+/** Regular polygon inscribed in a circle, CCW about the plane normal, first vertex `startAngle` from u. */
+export function circlePoints(plane: Plane, center: Vec3, radius: number, segments: number, startAngle = 0): Vec3[] {
   const [cx, cy] = toPlane2D(plane, center);
   const pts: Vec3[] = [];
   for (let i = 0; i < segments; i++) {
-    const a = (2 * Math.PI * i) / segments;
+    const a = startAngle + (2 * Math.PI * i) / segments;
     pts.push(fromPlane2D(plane, [cx + radius * Math.cos(a), cy + radius * Math.sin(a)]));
   }
   return pts;
@@ -71,4 +71,16 @@ export function drawCircle(model: Model, plane: Plane, center: Vec3, radius: num
   if (segments < 3) throw new Error('A circle needs at least 3 segments');
   const curve = model.addCurve({ kind: 'circle', center, normal: plane.normal, radius, segments });
   return drawPolygon(model, plane, circlePoints(plane, center, radius, segments), { hostFace, curve });
+}
+
+export const DEFAULT_POLYGON_SIDES = 6;
+
+/**
+ * A regular polygon (straight sides, no true curve) inscribed in a circle of `radius`, with its
+ * first corner `startAngle` radians from the plane's u axis.
+ */
+export function drawRegularPolygon(model: Model, plane: Plane, center: Vec3, radius: number, sides: number, startAngle = 0, hostFace?: FaceId): DrawResult {
+  if (radius <= TOL) throw new Error('Polygon radius must be positive');
+  if (sides < 3) throw new Error('A polygon needs at least 3 sides');
+  return drawPolygon(model, plane, circlePoints(plane, center, radius, sides, startAngle), { hostFace });
 }

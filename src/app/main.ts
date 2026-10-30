@@ -6,6 +6,7 @@ import type { ToolId } from '../tools/types';
 import type { StandardView } from '../view/navigation';
 import { Viewer } from '../view/Viewer';
 import { FileCommands } from './fileCommands';
+import { confirmDialog } from './dialogs';
 import { createFileHost, isTauri } from './files';
 import { ICONS } from './icons';
 import type { Command } from './commands';
@@ -21,10 +22,13 @@ const TOOLS: { id: ToolId; icon: string; label: string }[] = [
   { id: 'eraser', icon: ICONS.eraser, label: 'Eraser' },
   { id: 'line', icon: ICONS.line, label: 'Line' },
   { id: 'rectangle', icon: ICONS.rectangle, label: 'Rectangle' },
+  { id: 'rectangle3', icon: ICONS.rectangle3, label: 'Rotated Rectangle' },
   { id: 'circle', icon: ICONS.circle, label: 'Circle' },
+  { id: 'polygon', icon: ICONS.polygon, label: 'Polygon' },
   { id: 'arc', icon: ICONS.arc, label: 'Arc (centre)' },
   { id: 'arc2', icon: ICONS.arc2, label: '2-Point Arc' },
   { id: 'arc3', icon: ICONS.arc3, label: '3-Point Arc' },
+  { id: 'pie', icon: ICONS.pie, label: 'Pie' },
   { id: 'pushpull', icon: ICONS.pushpull, label: 'Push/Pull' },
   { id: 'offset', icon: ICONS.offset, label: 'Offset' },
   { id: 'move', icon: ICONS.move, label: 'Move' },
@@ -35,6 +39,7 @@ const TOOLS: { id: ToolId; icon: string; label: string }[] = [
   { id: 'orbit', icon: ICONS.orbit, label: 'Orbit' },
   { id: 'pan', icon: ICONS.pan, label: 'Pan' },
   { id: 'zoom', icon: ICONS.zoom, label: 'Zoom' },
+  { id: 'zoomWindow', icon: ICONS.zoomWindow, label: 'Zoom Window' },
 ];
 
 async function start(): Promise<void> {
@@ -95,11 +100,13 @@ async function start(): Promise<void> {
       selectedLabels: controller.selection.labels,
       selectedGuides: controller.selection.guides,
       preview: controller.preview(),
-      snap: tool.id === 'select' || tool.id === 'lasso' ? null : controller.snap,
+      snap: tool.id === 'select' || tool.id === 'lasso' || tool.id === 'zoomWindow' ? null : controller.snap,
     });
   };
   controller.onUpdate = update;
   controller.onModelChanged = () => viewer.refresh();
+  controller.onZoomWindow = (from, to) => viewer.zoomWindow(from, to);
+  controller.ask = (message) => confirmDialog('Resize model', message, 'Resize');
 
   viewer.onLabelClick = (id, shift) => {
     typing = null;
@@ -236,6 +243,11 @@ async function guardUnsavedChanges(controller: ToolController, files: FileComman
   });
 }
 
+/** Back to the view before the last orbit, pan, zoom or standard view. */
+function previousView(viewer: Viewer, controller: ToolController): void {
+  if (!viewer.previousView()) controller.notify('No previous view');
+}
+
 /** Everything the Search box can run: all tools, then file, edit, view and guide actions. */
 function commandList(viewer: Viewer, controller: ToolController, files: FileCommands, setTool: (id: ToolId) => void): Command[] {
   const keyOf = (pred: (b: (typeof KEY_BINDINGS)[number]) => boolean) => KEY_BINDINGS.find(pred)?.label;
@@ -265,6 +277,7 @@ function commandList(viewer: Viewer, controller: ToolController, files: FileComm
     { id: 'edit:selectall', name: 'Select All', keywords: ['edit', 'selection'], run: () => controller.selectAll() },
     { id: 'edit:delete', name: 'Delete Selection', keywords: ['edit', 'erase', 'remove'], shortcut: 'Delete', run: () => controller.deleteSelection() },
     { id: 'view:extents', name: 'Zoom Extents', keywords: ['camera', 'fit'], shortcut: 'Shift+Z', run: () => viewer.zoomExtents() },
+    { id: 'view:previous', name: 'Previous View', keywords: ['camera', 'back', 'undo view'], run: () => previousView(viewer, controller) },
     ...views,
     { id: 'view:backedges', name: 'Back Edges', keywords: ['hidden', 'x-ray', 'view'], shortcut: 'K', run: () => controller.notify(viewer.toggleBackEdges() ? 'Back edges shown (K to hide)' : 'Back edges hidden') },
     { id: 'guides:toggle', name: 'Show/Hide Guides', keywords: ['guide', 'construction'], run: () => controller.toggleGuides() },
@@ -305,6 +318,7 @@ function buildToolbar(viewer: Viewer, controller: ToolController, files: FileCom
   );
   sep();
   bar.append(iconButton(ICONS.zoomExtents, withShortcut('Zoom Extents'), () => viewer.zoomExtents()));
+  bar.append(iconButton(ICONS.previousView, 'Previous view', () => previousView(viewer, controller)));
   const views: [Exclude<StandardView, 'bottom'>, string][] = [
     ['iso', 'Iso'],
     ['top', 'Top'],

@@ -110,6 +110,30 @@ export class Navigator {
     this.camera.updateMatrixWorld();
   }
 
+  /**
+   * Zoom Window: `target` is the point under the middle of the box, `fraction` how much of the
+   * screen the box covers (its larger share of width or height). The camera keeps its direction
+   * and moves so the box fills the view, centred on the target.
+   */
+  zoomWindow(target: THREE.Vector3, fraction: number): void {
+    const f = this.forward();
+    const depth = Math.max(target.clone().sub(this.camera.position).dot(f), this.camera.near);
+    const k = THREE.MathUtils.clamp(fraction, 1e-4, 1);
+    this.camera.position.copy(target).addScaledVector(f, -depth * k);
+    this.camera.updateMatrixWorld();
+  }
+
+  state(): CameraState {
+    return { position: this.camera.position.clone(), quaternion: this.camera.quaternion.clone() };
+  }
+
+  setState(s: CameraState): void {
+    this.camera.position.copy(s.position);
+    this.camera.quaternion.copy(s.quaternion);
+    this.camera.up.copy(Z);
+    this.camera.updateMatrixWorld();
+  }
+
   /** Move back along the current view direction until the sphere fills the view. */
   zoomExtents(sphere: THREE.Sphere, aspect = this.camera.aspect): void {
     const vFov = THREE.MathUtils.degToRad(this.camera.fov) / 2;
@@ -133,6 +157,35 @@ export class Navigator {
     this.camera.far = far;
     this.camera.near = Math.max(far / 1e5, Math.min(d - sphere.radius, far / 50), 0.01);
     this.camera.updateProjectionMatrix();
+  }
+}
+
+/** Where the camera is and which way it looks. */
+export interface CameraState {
+  position: THREE.Vector3;
+  quaternion: THREE.Quaternion;
+}
+
+/** Earlier camera positions for Previous View: one is recorded before each navigation. */
+export class ViewHistory {
+  private readonly states: CameraState[] = [];
+
+  constructor(readonly limit = 50) {}
+
+  get size(): number {
+    return this.states.length;
+  }
+
+  /** Remember a view (unless it is the same as the last one remembered). */
+  push(s: CameraState): void {
+    const top = this.states[this.states.length - 1];
+    if (top && top.position.distanceTo(s.position) < 1e-6 && Math.abs(top.quaternion.dot(s.quaternion)) > 1 - 1e-9) return;
+    this.states.push({ position: s.position.clone(), quaternion: s.quaternion.clone() });
+    if (this.states.length > this.limit) this.states.shift();
+  }
+
+  pop(): CameraState | undefined {
+    return this.states.pop();
   }
 }
 

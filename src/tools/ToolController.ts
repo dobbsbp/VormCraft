@@ -19,6 +19,8 @@ import { infer } from './inference';
 import { OffsetTool } from './OffsetTool';
 import { PushPullTool } from './PushPullTool';
 import { RectangleTool } from './RectangleTool';
+import { RotatedRectangleTool } from './RotatedRectangleTool';
+import { ZoomWindowTool } from './ZoomWindowTool';
 import { SelectTool } from './SelectTool';
 import { Selection } from './Selection';
 import { TapeMeasureTool } from './TapeMeasureTool';
@@ -62,6 +64,10 @@ export class ToolController {
   onModelChanged: () => void = () => {};
   /** Called after anything visible changed (overlay, status bar, Measurements box). */
   onUpdate: () => void = () => {};
+  /** Zoom Window finished: zoom the view to this screen box. */
+  onZoomWindow: (from: [number, number], to: [number, number]) => void = () => {};
+  /** Ask a yes/no question (the app shows a dialog). Tests answer yes. */
+  ask: (message: string) => boolean | Promise<boolean> = () => true;
 
   readonly history = new History();
   /** True when the document changed since it was last saved or opened. */
@@ -78,12 +84,20 @@ export class ToolController {
       doc,
       selection: this.selection,
       apply: (change, base) => this.apply(change, base, this.tool),
+      confirm: (message, action) => {
+        const answer = this.ask(message);
+        if (answer === true) action();
+        else if (answer !== false) void answer.then((ok) => ok && this.run(action));
+      },
       projector,
     };
     this.tools = {
       select: new SelectTool(this.ctx),
       rectangle: new RectangleTool(this.ctx),
+      rectangle3: new RotatedRectangleTool(this.ctx),
       circle: new CircleTool(this.ctx),
+      polygon: new CircleTool(this.ctx, 'polygon'),
+      pie: new ArcTool(this.ctx, 'pie'),
       pushpull: new PushPullTool(this.ctx),
       offset: new OffsetTool(this.ctx),
       tape: new TapeMeasureTool(this.ctx),
@@ -100,6 +114,7 @@ export class ToolController {
       orbit: new NavigationTool('orbit'),
       pan: new NavigationTool('pan'),
       zoom: new NavigationTool('zoom'),
+      zoomWindow: new ZoomWindowTool((from, to) => this.onZoomWindow(from, to)),
     };
     this.tool = this.tools.select;
     this.selection.onChange(() => this.onUpdate());

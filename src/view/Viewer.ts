@@ -10,7 +10,7 @@ import type { PointerSample } from '../tools/ToolController';
 import type { Preview, PreviewColor, PreviewLines, Projector, Snap } from '../tools/types';
 import { surfaceOutline } from '../core/model/surfaces';
 import { buildDisplayData, edgeSegment, faceTriangles, type DisplayData } from './displayData';
-import { dragModeFor, Navigator, type DragMode, type StandardView } from './navigation';
+import { dragModeFor, Navigator, ViewHistory, type CameraState, type DragMode, type StandardView } from './navigation';
 import { pickHits } from './picking';
 import { cameraProjector, screenRay } from './projector';
 import { SNAP_LABELS, THEME } from './theme';
@@ -76,6 +76,10 @@ export class Viewer {
   /** Last right-button press, to detect a double right-click (re-centre). */
   private lastOrbitPress: { time: number; x: number; y: number } | null = null;
   private recenterAnimation = 0;
+  /** Views to go back to (Previous View). */
+  private readonly views = new ViewHistory();
+  /** When the wheel last zoomed: a burst of wheel steps counts as one view change. */
+  private lastWheel = 0;
   private renderQueued = false;
   private readonly resizeObserver: ResizeObserver;
 
@@ -123,7 +127,7 @@ export class Viewer {
     this.bindInput();
     this.resize();
     this.refresh();
-    this.setView('iso');
+    this.nav.setView('iso', this.sceneSphere()); // the starting view: nothing to go back to
   }
 
   /** Rebuild the display copy from the model and guides. Call after every model change. */
@@ -165,29 +169,58 @@ export class Viewer {
 
   /** Smoothly slide the camera so `point` ends up in the middle of the screen. */
   recenterOn(point: THREE.Vector3): void {
-    const from = this.camera.position.clone();
-    const to = this.nav.recenterPosition(point);
+    this.rememberView();
+    this.animateTo({ position: this.nav.recenterPosition(point), quaternion: this.camera.quaternion.clone() });
+  }
+
+  /** Glide the camera to a view. */
+  private animateTo(to: CameraState): void {
+    const from = this.nav.state();
     const start = performance.now();
     const id = ++this.recenterAnimation;
     const step = () => {
-      if (id !== this.recenterAnimation) return; // a newer re-centre took over
+      if (id !== this.recenterAnimation) return; // a newer animation took over
       const t = Math.min(1, (performance.now() - start) / 180);
       const ease = 1 - Math.pow(1 - t, 3);
-      this.camera.position.lerpVectors(from, to, ease);
-      this.camera.updateMatrixWorld();
+      this.nav.setState({ position: from.position.clone().lerp(to.position, ease), quaternion: from.quaternion.clone().slerp(to.quaternion, ease) });
       this.requestRender();
       if (t < 1) requestAnimationFrame(step);
     };
     requestAnimationFrame(step);
   }
 
+  /** Record the current view for Previous View (before the camera changes). */
+  private rememberView(): void {
+    this.recenterAnimation++; // stop a glide in progress where it is
+    this.views.push(this.nav.state());
+  }
+
+  /** Go back to the view before the last navigation. Returns false when there is none. */
+  previousView(): boolean {
+    const s = this.views.pop();
+    if (!s) return false;
+    this.animateTo(s);
+    return true;
+  }
+
   setView(view: StandardView): void {
+    this.rememberView();
     this.nav.setView(view, this.sceneSphere());
     this.requestRender();
   }
 
   zoomExtents(): void {
+    this.rememberView();
     this.nav.zoomExtents(this.sceneSphere());
+    this.requestRender();
+  }
+
+  /** Zoom so the screen box `from`–`to` fills the view. */
+  zoomWindow(from: [number, number], to: [number, number]): void {
+    const { width, height } = this.viewport();
+    const target = this.focusPoint([(from[0] + to[0]) / 2, (from[1] + to[1]) / 2]);
+    this.rememberView();
+    this.nav.zoomWindow(target, Math.max(Math.abs(to[0] - from[0]) / width, Math.abs(to[1] - from[1]) / height));
     this.requestRender();
   }
 
@@ -496,6 +529,7 @@ export class Viewer {
       const mode = dragModeFor(e.button, this.leftDragNavigation);
       if (!mode) return;
       e.preventDefault();
+      this.rememberView();
       const pivot = this.focusPoint(screen);
       const depth = Math.max(pivot.clone().sub(this.camera.position).dot(this.nav.forward()), this.camera.near);
       this.drag = { mode, x: e.clientX, y: e.clientY, pivot, depth, pointerId: e.pointerId };
@@ -544,6 +578,9 @@ export class Viewer {
         // Normalise lines/pages to pixels, then about one zoom step per notch (100px).
         const px = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaMode === 2 ? e.deltaY * el.clientHeight : e.deltaY;
         const screen = this.local(e);
+        const now = performance.now();
+        if (now - this.lastWheel > 700) this.rememberView();
+        this.lastWheel = now;
         this.nav.zoomToward(this.focusPoint(screen), -px / 100);
         this.requestRender();
         this.onPointer('move', this.sample(screen, e, this.leftDown));
