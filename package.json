@@ -2,6 +2,7 @@
   "name": "benup-modeler",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "description": "SketchUp-style direct modeler: half-edge geometry core, Three.js display, Manifold booleans.",
   "type": "module",
   "scripts": {
