@@ -2,7 +2,7 @@
 
 ## Goal
 A free, fast, direct-modeling 3D app that feels like SketchUp, for commercial work, 3D printing and CAD/CAM handoff. Built by Claude Code. No parametric timeline, no constraints: you grab faces and push them.
-The SketchUp screenshot is for layout reference only. Use our own icons and assets, and copy nothing from SketchUp.
+Use our own icons and assets, and copy nothing from SketchUp.
 
 ## Tech Stack
 - Language: TypeScript (strict mode)
@@ -73,4 +73,3 @@ Parametric history, constraints, components and groups (revisit in v2), SKP impo
 - Read this spec before every task.
 - Never use the Three.js mesh as the source of truth.
 - Run all tests before finishing a task. Do not break existing tools.
-- The reference screenshot is at /docs/reference-toolbar.png.

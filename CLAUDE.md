@@ -6,7 +6,7 @@
 - The half-edge model in `src/core/model` is the only source of truth. Never treat a Three.js mesh as the model.
 - `src/core` must never import Three.js, DOM or Tauri APIs; it must run under plain Node/Vitest.
 - Every geometry operation needs Vitest tests before it is done. Run `npm test` and `npm run typecheck` before finishing any task; do not break existing tools.
-- `docs/reference-toolbar.png` is a layout reference only. Use our own icons and assets.
+- Use our own icons and assets; copy nothing from SketchUp.
 
 ## Layout
 - `src/core` — geometry kernel (half-edge model, ops, booleans, checks). Pure TypeScript.
