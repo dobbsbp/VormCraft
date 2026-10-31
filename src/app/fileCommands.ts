@@ -3,7 +3,10 @@ import { checkWatertightAll, exportObj, exportStl } from '../io/export';
 import { FILE_EXTENSION, fileFormatVersion, FORMAT_VERSION, NewerFormatError, OLD_FILE_EXTENSIONS, parseDocument, serializeDocument } from '../io/fileFormat';
 import type { ToolController } from '../tools/ToolController';
 import type { AutoSaver } from './autosave';
-import { confirmDialog, showExportDialog } from './dialogs';
+import { importMesh } from '../core/ops/importMesh';
+import { convertMesh, parseMeshFile } from '../io/meshFiles';
+import { confirmDialog, progressDialog, showExportDialog } from './dialogs';
+import { showImportDialog } from './importDialog';
 import type { FileFilter, FileHost, OpenedFile } from './files';
 import type { Settings } from './settings';
 
@@ -14,6 +17,9 @@ const OPEN_FILTER: FileFilter = { name: 'VormCraft model', extensions: [FILE_EXT
 const EXTENSION = new RegExp(`\\.(${[FILE_EXTENSION, ...OLD_FILE_EXTENSIONS].join('|')})$`, 'i');
 const STL_FILTER: FileFilter = { name: 'STL (binary)', extensions: ['stl'] };
 const OBJ_FILTER: FileFilter = { name: 'Wavefront OBJ', extensions: ['obj'] };
+const IMPORT_FILTER: FileFilter = { name: '3D models (OBJ, STL)', extensions: ['obj', 'stl'] };
+/** Above this many polygons an import asks first (it can take a while). */
+const LARGE_IMPORT = 300_000;
 
 export interface FileOptions {
   settings: () => Settings;
@@ -143,6 +149,41 @@ export class FileCommands {
       const text = serializeDocument(this.controller.doc, { history: false });
       const written = await this.host.save(text, `${this.name} (copy).${FILE_EXTENSION}`, MODEL_FILTER);
       if (written) this.controller.notify(`Saved a copy without history: ${written.name}`);
+    });
+  }
+
+  /**
+   * Import an OBJ or STL file: each object comes in as a group (flat areas merged into faces,
+   * curved surfaces smoothed), selected and zoomed to. One undo step.
+   */
+  async importModel(): Promise<void> {
+    this.controller.endPreview();
+    await this.guard(async () => {
+      const file = await this.host.openBinary(IMPORT_FILTER);
+      if (!file) return;
+      const objects = parseMeshFile(file.name, file.bytes);
+      const polygons = objects.reduce((n, o) => n + o.polygons.length, 0);
+      if (polygons > LARGE_IMPORT && !(await confirmDialog('Large model', `${file.name} has ${polygons.toLocaleString()} polygons. Importing it may take a while and make VormCraft slower.`, 'Import anyway'))) return;
+      const choice = await showImportDialog(file.name, objects);
+      if (!choice) return;
+      const progress = progressDialog('Importing', `Reading ${file.name}…`);
+      // Let the window show before the work starts.
+      await new Promise((r) => setTimeout(r, 30));
+      let skipped = 0;
+      let faces = 0;
+      try {
+        const parts = convertMesh(objects, choice.unit, choice.yUp).map((o) => {
+          const r = importMesh(o.polygons, { smoothAngle: choice.smooth ? 20 : 0 });
+          skipped += r.skipped;
+          faces += r.model.faces.size;
+          return { name: o.name, model: r.model };
+        });
+        this.controller.importGroups(parts, `Import ${file.name}`);
+      } finally {
+        progress.close();
+      }
+      const groups = objects.length === 1 ? 'a group' : `${objects.length} groups`;
+      this.controller.notify(`Imported ${file.name}: ${faces.toLocaleString()} faces in ${groups}${skipped ? `; ${skipped.toLocaleString()} broken or duplicate polygons were left out` : ''}.`);
     });
   }
 

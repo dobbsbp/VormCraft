@@ -29,6 +29,8 @@ class MemoryHost implements FileHost {
   files = new Map<string, string>();
   next: { text: string; name: string; path: string } | null = null;
   open = async () => this.next;
+  nextBinary: { name: string; bytes: Uint8Array } | null = null;
+  openBinary = async () => this.nextBinary;
   async save(data: string | Uint8Array, suggestedName: string, _f: unknown, path?: string) {
     const target = path ?? `C:/Saved/${suggestedName}`;
     this.files.set(target, typeof data === 'string' ? data : '<binary>');

@@ -1,4 +1,4 @@
-import type { FaceId, HalfEdgeId, MaterialId } from '../core/model/Model';
+import type { FaceId, HalfEdgeId, MaterialId, Model } from '../core/model/Model';
 import { erase } from '../core/ops/erase';
 import { inheritMaterials, unpaintMaterial } from '../core/ops/materials';
 import type { Document, DocumentSnapshot } from '../doc/Document';
@@ -754,6 +754,29 @@ export class ToolController {
         'Explode',
       ),
     );
+  }
+
+  /**
+   * Add imported models, each as a group of its own inside the group being edited (one undo
+   * step), select them and zoom to them. Returns the new groups.
+   */
+  importGroups(parts: readonly { name: string; model: Model }[], label = 'Import'): GroupId[] {
+    const ids: GroupId[] = [];
+    this.run(() =>
+      this.apply(
+        () => {
+          for (const p of parts) if (p.model.faces.size || p.model.halfEdges.size) ids.push(this.doc.groups.add(p.model, this.doc.editing, { name: p.name }));
+        },
+        undefined,
+        null,
+        label,
+      ),
+    );
+    if (ids.length) {
+      this.selection.set([], [], [], ids);
+      this.zoomSelection();
+    }
+    return ids;
   }
 
   /** Zoom the view to a box (Zoom Selection). */

@@ -85,6 +85,7 @@ Right-click anything to select it and get a menu for it:
 
 ### Files and export
 - Saves to its own `.vorm` file format, including groups, materials, scenes and history. Files from every earlier version keep opening (each format version is tested), including `.benup` files from before the rename. The first save over an older-format file keeps a backup of the original.
+- **Import OBJ and STL** (Ctrl+I, or the Import button). Each object comes in as a group; flat areas are joined back into single faces (a triangulated box becomes six faces you can push and pull) and curved surfaces are smoothed. You choose the file's units (with a live size preview) and whether Y or Z is up. Broken or duplicate triangles are left out and counted.
 - **STL** (binary) export with a watertight check and adjustable curve resolution, for 3D printing.
 - **OBJ** export.
 - Unlimited undo and redo.
@@ -123,6 +124,7 @@ Standard views (top, front, iso, …), Zoom Window, Previous View, display style
 | Shift+Z | Zoom Extents | Shift+V | Previous View |
 | K | Back Edges | Shift+S | Search commands |
 | Ctrl+G | Make Group | Esc | Cancel / clear selection / close group |
+| Ctrl+I | Import OBJ or STL | | |
 | Delete | Erase selection | Page Down / Page Up | Next / previous scene |
 | Ctrl+Z / Ctrl+Y | Undo / Redo | Ctrl+N / O / S | New / Open / Save |
 | Ctrl+Shift+S | Save As | Esc | Leave an earlier version (History) |

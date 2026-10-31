@@ -317,6 +317,7 @@ async function start(): Promise<void> {
         o: () => void files.open(),
         n: () => void files.newDocument(),
         g: () => controller.makeGroup(),
+        i: () => void files.importModel(),
       };
       if (command[lower]) {
         e.preventDefault();
@@ -484,6 +485,7 @@ function commandList(viewer: Viewer, controller: ToolController, files: FileComm
     { id: 'help:new', name: 'What’s New in This Version', keywords: ['release notes', 'changelog', 'help'], run: () => void openLink(LINKS.releaseNotes) },
     { id: 'help:issue', name: 'Report a Problem or Idea', keywords: ['bug', 'feedback', 'issue', 'help'], run: () => void openLink(LINKS.newIssue) },
     { id: 'app:about', name: 'About VormCraft', keywords: ['version', 'graphics', 'gpu', 'help'], run: keep.about },
+    { id: 'file:import', name: 'Import OBJ or STL…', keywords: ['file', 'open', 'mesh', '3d print', 'load'], shortcut: 'Ctrl+I', run: () => void files.importModel() },
     { id: 'file:stl', name: 'Export STL…', keywords: ['export', '3d print', 'mesh'], run: () => void files.exportStl() },
     { id: 'file:obj', name: 'Export OBJ…', keywords: ['export', 'mesh'], run: () => void files.exportObj() },
     { id: 'edit:undo', name: 'Undo', keywords: ['edit'], shortcut: 'Ctrl+Z', run: () => controller.undo() },
@@ -546,6 +548,7 @@ function buildToolbar(viewer: Viewer, controller: ToolController, files: FileCom
     iconButton(ICONS.newDoc, 'New (Ctrl+N)', () => void files.newDocument()),
     iconButton(ICONS.open, 'Open (Ctrl+O)', () => void files.open()),
     iconButton(ICONS.save, 'Save (Ctrl+S) · Save As (Ctrl+Shift+S)', () => void files.save()),
+    textButton(ICONS.importFile, 'Import', 'Import an OBJ or STL file (Ctrl+I)', () => void files.importModel()),
   );
   sep();
   const undoButton = iconButton(ICONS.undo, 'Undo (Ctrl+Z)', () => controller.undo());

@@ -22,6 +22,8 @@ export interface FileHost {
    * the user cancelled.
    */
   save(data: string | Uint8Array, suggestedName: string, filter: FileFilter, path?: string): Promise<{ name: string; path?: string } | null>;
+  /** Pick a file and read it as bytes (importing binary formats such as STL). */
+  openBinary(filter: FileFilter): Promise<{ name: string; path?: string; bytes: Uint8Array } | null>;
   /** Read a file by path (desktop only: a file opened from Explorer). */
   readPath?(path: string): Promise<OpenedFile>;
 }
@@ -51,6 +53,11 @@ async function tauriHost(): Promise<FileHost> {
       else await fs.writeFile(target, data);
       return { name: baseName(target), path: target };
     },
+    async openBinary(filter) {
+      const path = await dialog.open({ multiple: false, directory: false, filters: [filter] });
+      if (typeof path !== 'string') return null;
+      return { name: baseName(path), path, bytes: await fs.readFile(path) };
+    },
     async readPath(path) {
       return { name: baseName(path), path, text: await fs.readTextFile(path) };
     },
@@ -68,6 +75,19 @@ function browserHost(): FileHost {
         input.addEventListener('change', async () => {
           const file = input.files?.[0];
           resolve(file ? { name: file.name, text: await file.text() } : null);
+        });
+        input.addEventListener('cancel', () => resolve(null));
+        input.click();
+      });
+    },
+    openBinary(filter) {
+      return new Promise((resolve) => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = filter.extensions.map((e) => `.${e}`).join(',');
+        input.addEventListener('change', async () => {
+          const file = input.files?.[0];
+          resolve(file ? { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) } : null);
         });
         input.addEventListener('cancel', () => resolve(null));
         input.click();
