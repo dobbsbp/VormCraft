@@ -96,7 +96,7 @@ export function showExportDialog(format: 'STL' | 'OBJ', report: WatertightReport
 }
 
 /** A small modal question (our own, not window.confirm). Resolves true for the confirming button. */
-export function confirmDialog(title: string, message: string, confirmLabel: string, cancelLabel = 'Cancel'): Promise<boolean> {
+export function confirmDialog(title: string, message: string, confirmLabel: string, cancelLabel = 'Cancel', extra: Node[] = []): Promise<boolean> {
   const dlg = document.createElement('dialog');
   dlg.className = 'modal';
   dlg.innerHTML = `
@@ -113,6 +113,8 @@ export function confirmDialog(title: string, message: string, confirmLabel: stri
   dlg.querySelector('button[value="ok"]')!.textContent = confirmLabel;
   dlg.querySelector('button[value="cancel"]')!.textContent = cancelLabel;
   dlg.querySelector('p')!.classList.add('pre');
+  // More content under the message (e.g. formatted release notes).
+  dlg.querySelector('p')!.after(...extra);
   document.body.append(dlg);
   return new Promise((resolve) => {
     const finish = (v: boolean) => {

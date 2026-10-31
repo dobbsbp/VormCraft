@@ -1,7 +1,8 @@
 # Changelog
 
 What changed in each version of VormCraft. The section for a version is also shown in the app's
-update prompt, so it is written for people using the app.
+update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
+bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
 ## 0.2.0
 

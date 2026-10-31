@@ -1083,3 +1083,37 @@ body {
     left: 100%;
   }
 }
+
+/* Release notes in the update window: scrolls if long. */
+.release-notes {
+  max-height: 340px;
+  overflow-y: auto;
+  padding: 8px 12px;
+  border: 1px solid var(--chrome-border);
+  border-radius: 6px;
+  background: var(--chrome);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.release-notes p,
+.release-notes h3 {
+  margin: 0 0 6px;
+}
+
+.release-notes h3 {
+  font-size: 13px;
+}
+
+.release-notes ul {
+  margin: 0 0 6px;
+  padding-left: 18px;
+}
+
+.release-notes li {
+  margin: 2px 0;
+}
+
+.release-notes code {
+  font-size: 12px;
+}

@@ -1,4 +1,5 @@
 import { confirmDialog, messageDialog, progressDialog } from './dialogs';
+import { renderNotes } from './releaseNotes';
 import { isTauri } from './files';
 
 export const APP_VERSION = __APP_VERSION__;
@@ -41,11 +42,14 @@ export async function checkForUpdates(hooks: UpdateHooks, quiet = false): Promis
       return;
     }
     const notes = (update.body ?? '').trim();
+    const after = document.createElement('p');
+    after.textContent = 'VormCraft will close, update and open again.';
     const install = await confirmDialog(
       `VormCraft ${update.version} is available`,
-      `You have ${APP_VERSION}.${notes ? `\n\nWhat's new:\n${notes}` : ''}\n\nVormCraft will close, update and open again.`,
+      `You have ${APP_VERSION}.${notes ? ' What’s new:' : ''}`,
       'Install and restart',
       'Later',
+      [...(notes ? [renderNotes(notes)] : []), after],
     );
     if (!install || !(await hooks.beforeInstall())) return;
     progress = progressDialog(`Updating to ${update.version}`, 'Downloading…');

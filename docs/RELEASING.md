@@ -12,7 +12,9 @@ offer to install it.
    npm run version:set -- 0.3.0
    ```
 3. Add a `## 0.3.0` section at the top of `CHANGELOG.md`. Write it for the people using the app:
-   it is what the update prompt shows them.
+   it is what the update prompt shows them. Keep it to plain sentences and `- ` bullet lines, with
+   no `**bold**` or other formatting: VormCraft 0.2.0 and older show the notes as plain text, so
+   formatting marks would appear as stray symbols there.
 4. Commit, tag and push:
    ```bash
    git commit -am "Release 0.3.0"
