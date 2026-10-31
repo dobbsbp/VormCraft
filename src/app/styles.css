@@ -1117,3 +1117,40 @@ body {
 .release-notes code {
   font-size: 12px;
 }
+
+/* Keyboard and mouse reference. */
+.modal.shortcuts {
+  width: min(720px, calc(100vw - 32px));
+}
+
+.shortcut-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 4px 24px;
+}
+
+.shortcut-columns table {
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.shortcut-columns td {
+  padding: 2px 6px 2px 0;
+  vertical-align: top;
+}
+
+.shortcut-columns td:first-child {
+  white-space: nowrap;
+  width: 1%;
+}
+
+kbd {
+  display: inline-block;
+  padding: 0 5px;
+  border: 1px solid var(--chrome-border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--chrome);
+  font: inherit;
+  font-size: 11px;
+}

@@ -19,6 +19,7 @@ import { EntityInfoPanel } from './entityInfoPanel';
 import { contextMenuItems } from '../tools/contextMenu';
 import { createBackupStore } from './backups';
 import { HistoryPanel } from './historyPanel';
+import { helpMenu, LINKS, openLink, showShortcuts } from './help';
 import { Lifecycle } from './lifecycle';
 import type { FaceStyle } from '../doc/Scenes';
 import { SearchBox } from './searchBox';
@@ -238,6 +239,10 @@ async function start(): Promise<void> {
     checkUpdates: () => void lifecycle.checkForUpdates(),
     about: () => void lifecycle.about(),
     saveCopy: () => void files.saveCopyWithoutHistory(),
+    help: (anchor) => {
+      const r = anchor.getBoundingClientRect();
+      menu.open(helpMenu({ checkForUpdates: keep.checkUpdates, about: keep.about }), r.left - 2, r.bottom);
+    },
   };
 
   // Right-click: select what is under the cursor (unless already selected), then the menu.
@@ -349,6 +354,11 @@ async function start(): Promise<void> {
       else controller.escape();
       return;
     }
+    if (key === 'F1') {
+      e.preventDefault();
+      showShortcuts();
+      return;
+    }
     if (key === 'PageDown' || key === 'PageUp') {
       e.preventDefault();
       player.stop();
@@ -441,6 +451,8 @@ interface KeepActions {
   checkUpdates(): void;
   about(): void;
   saveCopy(): void;
+  /** The Help menu, under its toolbar button. */
+  help(anchor: HTMLElement): void;
 }
 
 function commandList(viewer: Viewer, controller: ToolController, files: FileCommands, setTool: (id: ToolId) => void, toggleMaterials: () => void, view: ViewActions, showEntityInfo: () => void, keep: KeepActions): Command[] {
@@ -468,6 +480,9 @@ function commandList(viewer: Viewer, controller: ToolController, files: FileComm
     { id: 'file:history', name: 'History (earlier versions)', keywords: ['versions', 'restore', 'backup', 'go back', 'revert'], run: keep.toggleHistory },
     { id: 'app:settings', name: 'Settings', keywords: ['preferences', 'options', 'autosave', 'backup folder'], run: keep.settings },
     { id: 'app:update', name: 'Check for Updates', keywords: ['version', 'upgrade', 'new version'], run: keep.checkUpdates },
+    { id: 'help:keys', name: 'Keyboard and Mouse', keywords: ['shortcuts', 'keys', 'help'], shortcut: 'F1', run: showShortcuts },
+    { id: 'help:new', name: 'What’s New in This Version', keywords: ['release notes', 'changelog', 'help'], run: () => void openLink(LINKS.releaseNotes) },
+    { id: 'help:issue', name: 'Report a Problem or Idea', keywords: ['bug', 'feedback', 'issue', 'help'], run: () => void openLink(LINKS.newIssue) },
     { id: 'app:about', name: 'About VormCraft', keywords: ['version', 'graphics', 'gpu', 'help'], run: keep.about },
     { id: 'file:stl', name: 'Export STL…', keywords: ['export', '3d print', 'mesh'], run: () => void files.exportStl() },
     { id: 'file:obj', name: 'Export OBJ…', keywords: ['export', 'mesh'], run: () => void files.exportObj() },
@@ -578,7 +593,9 @@ function buildToolbar(viewer: Viewer, controller: ToolController, files: FileCom
   const history = iconButton(ICONS.history, 'History: earlier versions of this design', keep.toggleHistory);
   bar.append(history);
   sep();
-  bar.append(iconButton(ICONS.settings, 'Settings (autosave, backups, history, updates)', keep.settings));
+  bar.append(iconButton(ICONS.settings, 'Settings (autosave, backups, graphics card, history, updates)', keep.settings));
+  const help = iconButton(ICONS.help, 'Help: shortcuts, updates, report a problem, about', () => keep.help(help));
+  bar.append(help);
   const viewButtons: ViewButtons = { styles, projection, scenes, history };
   return { undoButton, redoButton, materialsButton, viewButtons };
 }

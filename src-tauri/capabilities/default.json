@@ -15,6 +15,14 @@
     "process:allow-restart",
     "updater:default",
     {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        {
+          "url": "https://github.com/dobbsbp/VormCraft*"
+        }
+      ]
+    },
+    {
       "identifier": "fs:allow-read-text-file",
       "allow": [
         {

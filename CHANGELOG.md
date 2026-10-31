@@ -4,6 +4,13 @@ What changed in each version of VormCraft. The section for a version is also sho
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
+## 0.2.1
+
+- Graphics card: VormCraft now uses the faster graphics card on laptops that have two. Choose High performance, Power saving or Let Windows decide in Settings.
+- Help button on the toolbar: keyboard and mouse shortcuts (also F1), what's new, check for updates, report a problem, and About.
+- Check for Updates now shows that it is checking, and says clearly what it found.
+- Update notes are shown neatly formatted.
+
 ## 0.2.0
 
 The first Windows release.

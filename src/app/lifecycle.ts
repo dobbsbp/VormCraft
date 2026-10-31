@@ -9,6 +9,7 @@ import { isTauri } from './files';
 import { loadSettings, saveSettings, type Settings } from './settings';
 import { showSettingsDialog } from './settingsDialog';
 import { APP_VERSION, checkForUpdates, type UpdateHooks } from './updater';
+import { graphicsChoice, setGraphicsChoice } from './graphics';
 
 /**
  * Keeping work safe and the app current: settings, autosave and recovery after a crash, update
@@ -65,16 +66,27 @@ export class Lifecycle {
   }
 
   async openSettings(): Promise<void> {
-    const next = await showSettingsDialog(this.settings, {
+    const graphics = await graphicsChoice().catch(() => null);
+    const result = await showSettingsDialog(this.settings, {
       defaultFolder: isTauri() ? await this.backups.describe() : 'This browser’s storage',
       version: APP_VERSION,
       checkForUpdates: () => void this.checkForUpdates(),
+      graphics,
+      graphicsInUse: this.viewer.graphicsInfo().renderer,
     });
-    if (!next) return;
-    this.settings = next;
-    saveSettings(next);
+    if (!result) return;
+    this.settings = result.settings;
+    saveSettings(result.settings);
     this.autosave.start();
     this.controller.notify('Settings saved');
+    if (result.graphics && result.graphics !== graphics) {
+      await setGraphicsChoice(result.graphics);
+      const now = await confirmDialog('Restart to switch graphics card', 'VormCraft needs to restart to use the other graphics card.', 'Restart now', 'Later');
+      if (now && (await this.updateHooks.beforeInstall())) {
+        const { relaunch } = await import('@tauri-apps/plugin-process');
+        await relaunch();
+      }
+    }
   }
 
   async about(): Promise<void> {
