@@ -22,7 +22,9 @@ offer to install it.
    git push && git push --tags
    ```
 5. Watch the **Actions** tab on GitHub. In about 15 minutes the release appears under
-   **Releases** with the installer (`VormCraft_0.3.0_x64-setup.exe`) and `latest.json`.
+   **Releases** with the installer (`VormCraft_0.3.0_x64-setup.exe`) and `latest.json`, and then
+   the same version is published as the web app at https://dobbsbp.github.io/VormCraft/.
+   Installed web apps pick it up the next time they open (they ask before switching).
 
 The release workflow refuses to build if the tag and the app version differ, or if any test fails.
 

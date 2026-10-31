@@ -10,11 +10,15 @@ VormCraft is a push/pull 3D modeling program for woodworking, architecture sketc
 
 ## Download
 
-Get the Windows installer (`VormCraft_x.y.z_x64-setup.exe`) from the [Releases](../../releases) page. It installs for your user account (no administrator rights needed) and makes `.vorm` files open with a double-click. Windows 11 has everything it needs; on Windows 10 the installer fetches Microsoft's WebView2 if it is missing.
+**Windows:** get the installer (`VormCraft_x.y.z_x64-setup.exe`) from the [Releases](../../releases) page. It installs for your user account (no administrator rights needed) and makes `.vorm` files open with a double-click. Windows 11 has everything it needs; on Windows 10 the installer fetches Microsoft's WebView2 if it is missing.
 
 The installer is not code-signed yet, so the first time Windows may say "Windows protected your PC": click **More info → Run anyway**.
 
-VormCraft checks for a new version when it starts and installs it with one click (**Install and restart**). You can also use **Check for Updates** in Settings or the Search box.
+VormCraft checks for a new version when it starts and installs it with one click (**Install and restart**). You can also use **Check for Updates** in the Help menu (the ? button).
+
+**Everywhere else (Android tablets and folding phones, Chromebooks, Mac, Linux):** open **https://dobbsbp.github.io/VormCraft/** in Chrome or Edge and choose **Install** (Chrome menu → *Add to home screen* / *Install app*). It then opens in its own window like any app, works fully offline, and updates itself, asking before it restarts into a new version. Your models never leave your device. A keyboard and mouse are recommended. In the web version, Save downloads the `.vorm` file (instead of saving over it), and autosave copies are kept in the app's own storage.
+
+Both versions have the same version number and open the same `.vorm` files.
 
 ---
 

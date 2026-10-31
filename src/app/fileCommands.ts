@@ -76,6 +76,12 @@ export class FileCommands {
     await this.guard(async () => this.load(await this.host.readPath!(path)));
   }
 
+  /** Open a file handed over by the system (the installed web app opening a .vorm file). */
+  async openText(name: string, text: string): Promise<void> {
+    if (!(await this.confirmDiscard())) return;
+    await this.guard(async () => this.load({ name, text }));
+  }
+
   private load(file: OpenedFile): void {
     let doc: Document;
     try {

@@ -1,6 +1,6 @@
 [package]
 name = "vormcraft"
-version = "0.2.1"
+version = "0.3.0"
 description = "VormCraft: a free push/pull 3D modeler"
 authors = ["Ben Dobbs"]
 edition = "2024"

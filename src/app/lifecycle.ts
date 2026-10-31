@@ -10,6 +10,7 @@ import { loadSettings, saveSettings, type Settings } from './settings';
 import { showSettingsDialog } from './settingsDialog';
 import { APP_VERSION, checkForUpdates, type UpdateHooks } from './updater';
 import { graphicsChoice, setGraphicsChoice } from './graphics';
+import { installedWebApp, startOffline } from './webApp';
 
 /**
  * Keeping work safe and the app current: settings, autosave and recovery after a crash, update
@@ -98,7 +99,7 @@ export class Lifecycle {
         'A free, open-source push/pull 3D modeler.',
         '',
         `Graphics: ${gpu.renderer}${gpu.software ? ' (software: no hardware acceleration)' : ''}`,
-        `Running as: ${isTauri() ? 'desktop app' : 'web app'}`,
+        `Running as: ${isTauri() ? 'desktop app' : installedWebApp() ? 'installed web app (works offline)' : 'web page'}`,
         '',
         'https://github.com/dobbsbp/VormCraft',
         'MIT licence.',
@@ -118,11 +119,27 @@ export class Lifecycle {
         `VormCraft is drawing without the graphics card (${gpu.renderer}), so it will be slow.\n\nUpdating your graphics drivers usually fixes this. On a laptop with two graphics chips, you can also set VormCraft to "High performance" in Windows Settings → System → Display → Graphics.`,
       );
     }
+    await startOffline();
     const launched = await this.launchFile();
     if (launched) await this.files.openPath(launched);
     else await this.offerRecovery();
+    this.listenForOpenedFiles();
     this.autosave.start();
     if (this.settings.checkUpdates) setTimeout(() => void this.checkForUpdates(true), 3000);
+  }
+
+  /**
+   * The installed web app on a computer (Chrome, Edge) can open .vorm files from the file manager:
+   * the browser hands them over through `launchQueue`.
+   */
+  private listenForOpenedFiles(): void {
+    const queue = (window as unknown as { launchQueue?: { setConsumer(fn: (p: { files: { getFile(): Promise<File> }[] }) => void): void } }).launchQueue;
+    queue?.setConsumer(async (params) => {
+      const handle = params.files[0];
+      if (!handle) return;
+      const file = await handle.getFile();
+      await this.files.openText(file.name, await file.text());
+    });
   }
 
   /** The .vorm file double-clicked in Explorer to start the app (desktop), if any. */

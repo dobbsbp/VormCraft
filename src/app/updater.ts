@@ -1,9 +1,9 @@
 import { confirmDialog, messageDialog, progressDialog } from './dialogs';
 import { renderNotes } from './releaseNotes';
 import { isTauri } from './files';
+import { checkWebUpdate } from './webApp';
 
 export const APP_VERSION = __APP_VERSION__;
-const RELEASES = 'https://github.com/dobbsbp/VormCraft/releases';
 
 export interface UpdateHooks {
   notify(message: string): void;
@@ -27,10 +27,8 @@ export function updateErrorMessage(err: unknown): string {
  * otherwise the check shows a progress window and always says what it found.
  */
 export async function checkForUpdates(hooks: UpdateHooks, quiet = false): Promise<void> {
-  if (!isTauri()) {
-    if (!quiet) await messageDialog('Updates', `Updates come with the desktop app. Download it from:\n${RELEASES}`);
-    return;
-  }
+  // The web version updates from its website instead.
+  if (!isTauri()) return checkWebUpdate(hooks, APP_VERSION, quiet);
   let progress = quiet ? null : progressDialog('Checking for updates', 'Looking for a newer version of VormCraft on GitHub…');
   try {
     const { check } = await import('@tauri-apps/plugin-updater');

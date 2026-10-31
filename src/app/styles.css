@@ -34,12 +34,16 @@ body {
     'palette viewport panel'
     'status status status';
   height: 100vh;
+  /* Phones and tablets: the visible height, not counting browser bars that come and go. */
+  height: 100dvh;
 }
 
 .toolbar {
   grid-area: toolbar;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  min-width: 0;
   gap: 2px;
   padding: 4px 8px;
   border-bottom: 1px solid var(--chrome-border);
@@ -343,6 +347,8 @@ body {
 }
 
 .modal {
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
   border: 1px solid var(--chrome-border);
   border-radius: 8px;
   padding: 0;
@@ -1153,4 +1159,53 @@ kbd {
   background: var(--chrome);
   font: inherit;
   font-size: 11px;
+}
+
+/* Smaller screens (tablets, a folding phone opened up): panels float over the view instead of
+   narrowing it, and the status bar keeps only what matters. */
+@media (max-width: 900px) {
+  .side-panel {
+    grid-area: viewport;
+    justify-self: end;
+    width: min(272px, 85vw);
+    z-index: 6;
+    background: var(--chrome);
+    box-shadow: -6px 0 18px rgba(0, 0, 0, 0.15);
+  }
+
+  .status-hover {
+    display: none;
+  }
+
+  .status-hint {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .toolbar .brand {
+    margin-right: 4px;
+  }
+}
+
+/* Phone-sized screens (a folding phone closed): smaller tool buttons. */
+@media (max-width: 520px) {
+  .icon-button {
+    width: 32px;
+    height: 32px;
+  }
+
+  .palette {
+    grid-template-columns: repeat(2, 32px);
+    grid-auto-rows: 32px;
+    padding: 4px;
+  }
+
+  .toolbar .sep {
+    margin: 0 2px;
+  }
+
+  .measurements input {
+    width: 90px;
+  }
 }

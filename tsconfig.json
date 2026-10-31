@@ -12,7 +12,8 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "types": ["node"],
-    "noEmit": true
+    "noEmit": true,
+    "allowImportingTsExtensions": true
   },
-  "include": ["src", "tests", "vitest.config.ts", "vite.config.ts"]
+  "include": ["src", "tests", "scripts/*.ts", "vitest.config.ts", "vite.config.ts"]
 }

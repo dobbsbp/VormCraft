@@ -4,6 +4,13 @@ What changed in each version of VormCraft. The section for a version is also sho
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
+## 0.3.0
+
+- VormCraft now also runs as a web app: open https://dobbsbp.github.io/VormCraft/ in Chrome or Edge and choose Install to get it in its own window, with its own icon, on tablets, folding phones, Chromebooks and computers.
+- The web app works fully offline once it has been opened, and updates itself like the Windows version (it asks before restarting into a new version).
+- Smaller screens: the toolbar wraps onto more rows, and panels float over the view instead of squeezing it.
+- The same version number and the same .vorm files on Windows and on the web.
+
 ## 0.2.1
 
 - Graphics card: VormCraft now uses the faster graphics card on laptops that have two. Choose High performance, Power saving or Let Windows decide in Settings.
