@@ -77,7 +77,11 @@ Right-click anything to select it and get a menu for it:
 - **History:** every design keeps its earlier versions (recorded at each autosave and save, compressed, inside the `.vorm` file). Open **History**, click a version to look at it, then **Restore this version** or go **Back to now**. Restoring never loses anything: what you had stays in the list, and Undo works too.
 - Older versions are thinned out over time (everything from the last day, one per hour for a week, then one per day) and the history has a size limit.
 - **Save a Copy Without History** for sending a design to someone.
-- **Settings** (gear button): autosave on/off and how often, the backup folder, how long unrecovered backups are kept, history on/off and its size limit, update checks.
+- **Settings** (gear button): autosave on/off and how often, the backup folder, how long unrecovered backups are kept, history on/off and its size limit, the graphics card, update checks.
+
+### Graphics and help
+- Uses the graphics card through WebGL (Direct3D 11 on Windows). On laptops with two graphics chips, the Windows app uses the faster one by default; **Settings → Graphics card** switches between High performance, Power saving and Let Windows decide. If a computer can only draw without the graphics card, VormCraft says so.
+- **Help** (the ? button): Keyboard and Mouse reference (also **F1**), What's New, Check for Updates, Report a Problem or Idea, and About (version and graphics card in use).
 
 ### Files and export
 - Saves to its own `.vorm` file format, including groups, materials, scenes and history. Files from every earlier version keep opening (each format version is tested), including `.benup` files from before the rename. The first save over an older-format file keeps a backup of the original.
@@ -122,6 +126,7 @@ Standard views (top, front, iso, …), Zoom Window, Previous View, display style
 | Delete | Erase selection | Page Down / Page Up | Next / previous scene |
 | Ctrl+Z / Ctrl+Y | Undo / Redo | Ctrl+N / O / S | New / Open / Save |
 | Ctrl+Shift+S | Save As | Esc | Leave an earlier version (History) |
+| F1 | Keyboard and mouse reference | | |
 
 ---
 
@@ -169,8 +174,9 @@ VormCraft's own geometry kernel is the source of truth. The 3D view only display
 | `src/doc` | The document (top-level geometry, groups, guides, labels, materials, scenes), snapshots and undo history. |
 | `src/io` | The `.vorm` file format, STL and OBJ export, and tessellation of curved surfaces from their true radii. |
 | `src/app` | The app shell: toolbar, panels (Materials, Scenes, Entity Info), context menu, dialogs, icons. |
-| `src-tauri` | The Tauri desktop shell (native file dialogs and file access). |
-| `tests` | Vitest tests covering the kernel, tools, groups, scenes, snapping, file format and display data. |
+| `src-tauri` | The Tauri desktop shell: native file dialogs and file access, the updater, opening double-clicked `.vorm` files, and the graphics card choice. |
+| `public`, `scripts/offline.ts` | The web app: its manifest and icons, and the build step that makes it work offline and update itself. |
+| `tests` | Vitest tests covering the kernel, tools, groups, scenes, history, autosave, snapping, display data, and every file format version ever saved. |
 
 Units are millimetres, and Z is up (red = X, green = Y, blue = Z). The full design spec is in [docs/SPEC.md](docs/SPEC.md).
 
@@ -185,6 +191,7 @@ Features are added as real use calls for them. Ideas on the list:
 - A field-of-view control
 - STEP export (true curves, through OpenCascade)
 - Exporting materials with OBJ
+- A native Android app (if the web app's saving is not enough on phones and tablets)
 
 Bug reports and suggestions are welcome in [Issues](../../issues).
 
