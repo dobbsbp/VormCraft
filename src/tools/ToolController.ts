@@ -411,6 +411,12 @@ export class ToolController {
     this.run(() => this.tool.typed(text.trim()));
   }
 
+  /** Enter with nothing typed. */
+  enter(): void {
+    this.error = null;
+    this.run(() => this.tool.enter?.());
+  }
+
   escape(): void {
     this.error = null;
     this.lock = null;

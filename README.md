@@ -28,6 +28,7 @@ Both versions have the same version number and open the same `.vorm` files.
 - **Line**, **Rectangle**, **Rotated Rectangle**, **Circle**, **Polygon**, **2-Point Arc**, **3-Point Arc**, **Arc**, **Pie**
 - Draw on any face, or on the ground. New edges split the face they are drawn on automatically.
 - Every tool takes typed input. Type a length, `width,length` or a radius and press Enter, for example `1200,600`, `2.5m`, `3'6"`. Lengths are in millimetres by default; cm, m, in and ft are also accepted.
+- **Circle**: click the centre, type the number of sides and press Enter (or just Enter for 24), then type the radius and press Enter. Or click to set the radius.
 
 ### Modeling
 - **Push/Pull**: extrude a face out to add material, or in to remove it.
@@ -99,7 +100,7 @@ Right-click anything to select it and get a menu for it:
 | Use the active tool | Left button |
 | Context menu | Right-click |
 | Orbit | Middle-drag (about the point under the cursor) |
-| Re-centre the view | Double right-click |
+| Re-centre the view | Double middle-click |
 | Pan | Right-drag |
 | Zoom | Mouse wheel (toward the cursor) |
 | Zoom extents | Shift+Z |

@@ -24,7 +24,7 @@ import { Lifecycle } from './lifecycle';
 import type { FaceStyle } from '../doc/Scenes';
 import { SearchBox } from './searchBox';
 
-const NAV_HINT = 'Orbit: middle-drag · Pan: right-drag · Re-centre: double right-click · Zoom: wheel · Lock axis: arrow keys';
+const NAV_HINT = 'Orbit: middle-drag · Pan: right-drag · Re-centre: double middle-click · Zoom: wheel · Lock axis: arrow keys';
 
 /** Palette order (pairs per row, like the reference layout). Shortcuts come from the keymap. */
 const TOOLS: { id: ToolId; icon: string; label: string }[] = [
@@ -346,6 +346,11 @@ async function start(): Promise<void> {
     if (key === 'Enter' && typing !== null) {
       submitTyped();
       e.preventDefault();
+      return;
+    }
+    if (key === 'Enter') {
+      controller.enter();
+      update();
       return;
     }
     if (key === 'Escape') {

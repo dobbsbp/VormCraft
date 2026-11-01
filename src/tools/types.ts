@@ -189,6 +189,8 @@ export interface Tool {
   doubleClick?(e: ToolEvent): void;
   /** Value typed in the Measurements box (Enter). Throws with a message for bad input. */
   typed(text: string): void;
+  /** Enter with nothing typed: accept the value the Measurements box shows. */
+  enter?(): void;
   /** Escape: abandon the current operation. */
   cancel(): void;
   /**

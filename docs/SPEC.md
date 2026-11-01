@@ -29,6 +29,7 @@ Use our own icons and assets, and copy nothing from SketchUp.
 - Draws on the face under the cursor, or on the ground plane. Splits the host face.
 ### Circle
 - Click the centre, move, click to set the radius, or type the radius and press Enter.
+- After the centre click the Measurements box asks for the number of sides first (default 24): type it and press Enter (or press Enter to keep it), then type the radius and press Enter. "32s" sets the sides at any time.
 - Segment count can be set (default 24). The true radius is stored for later STEP export.
 - Drawn on a face, it splits the face into an outer face with a hole plus an inner circle face.
 ### Push/Pull
@@ -44,7 +45,7 @@ Use our own icons and assets, and copy nothing from SketchUp.
 - Click a point and drag to create a guide point.
 - Guides act as snap targets for all drawing tools and can be hidden or deleted in bulk.
 ### Right-click menu
-- Right-click (press and release without dragging; right-drag still pans, double right-click still re-centres) selects what is under the cursor unless it is already selected, then opens a menu for the selection. Items that do not apply are greyed out.
+- Right-click (press and release without dragging; right-drag still pans) selects what is under the cursor unless it is already selected, then opens a menu for the selection. Items that do not apply are greyed out.
 - Entity Info, Erase, Hide (groups), Unhide All · Edit Group, Close Group, Explode, Make Group · Select ▸ (Bounding Edges, Connected Faces, All Connected, All with Same Material, Select All, Select None) · Reverse Faces, Flip Along ▸ (Red/Green/Blue, about the selection's centre), Soften / Unsoften Edges (selected edges, or edges between selected faces), Zoom Selection.
 - Entity Info panel: a group's name (editable), contents, size and paint; faces' area and paint; edges' length and smoothing.
 - Not included: Lock, Make Component, Unglue, Reset Scale/Skew, Intersect Faces (no components or locking yet; booleans already cut automatically).

@@ -4,6 +4,11 @@ What changed in each version of VormCraft. The section for a version is also sho
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
+## Unreleased
+
+- Circle: after clicking the centre, type the number of sides and press Enter (or just Enter to keep 24), then type the radius and press Enter.
+- Mouse: a double middle-click now re-centres the view (it was a double right-click).
+
 ## 0.4.1
 
 - Fixed: importing SketchUp, OBJ and STL files in the Windows app failed with a permission error.

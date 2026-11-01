@@ -35,7 +35,7 @@ const MOUSE: [string, string][] = [
   ['Middle-drag', 'Orbit'],
   ['Right-drag', 'Pan'],
   ['Right-click', 'Menu for what is under the cursor'],
-  ['Double right-click', 'Re-centre the view'],
+  ['Double middle-click', 'Re-centre the view'],
   ['Wheel', 'Zoom toward the cursor'],
 ];
 

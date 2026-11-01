@@ -250,6 +250,7 @@ describe('Circle tool', () => {
     controller.typed('12s');
     expect(t.vcbValue()).toBe('12');
     t.pointerDown(ev(doc, [0, 0, 0]));
+    controller.enter(); // keep 12 sides
     controller.typed('25');
     expect([...model.curves.values()].map((c) => [c.radius, c.segments])).toEqual([[25, 12]]);
     controller.typed('40');
@@ -259,10 +260,40 @@ describe('Circle tool', () => {
     expect(model.faceVertexLoops([...model.faces.keys()][0])[0]).toHaveLength(48);
   });
 
+  it('after the centre click, asks for the sides (default 24), then the radius', () => {
+    const { doc, model, controller } = harness();
+    const t = use(controller, 'circle');
+    t.pointerDown(ev(doc, [0, 0, 0]));
+    expect([t.vcbLabel(), t.vcbValue()]).toEqual(['Sides', '24']);
+    controller.typed('8');
+    expect(model.faces.size).toBe(0);
+    expect(t.vcbLabel()).toBe('Radius');
+    controller.typed('30');
+    expect([...model.curves.values()].map((c) => [c.radius, c.segments])).toEqual([[30, 8]]);
+    // A bad count is refused (and, as in every tool, the step is abandoned).
+    t.pointerDown(ev(doc, [200, 0, 0]));
+    controller.typed('2.5');
+    expect(controller.error).toMatch(/number of sides/);
+    t.pointerDown(ev(doc, [200, 0, 0]));
+    controller.typed('2');
+    expect(controller.error).toMatch(/between 3 and 999/);
+    // Next circle: the count shown is the last one used; Enter keeps it.
+    t.pointerDown(ev(doc, [200, 0, 0]));
+    expect([t.vcbLabel(), t.vcbValue()]).toEqual(['Sides', '8']);
+    controller.enter();
+    controller.typed('10');
+    expect([...model.curves.values()].map((c) => [c.radius, c.segments])).toContainEqual([10, 8]);
+    // Clicking still sets the radius straight away, while it asks for the sides.
+    t.pointerDown(ev(doc, [0, 300, 0]));
+    t.pointerDown(ev(doc, [0, 320, 0]));
+    expect(model.curves.size).toBe(3);
+  });
+
   it('a circle on a face splits it into a face with a hole and a disc', () => {
     const { doc, model, controller } = boxHarness();
     const t = use(controller, 'circle');
     t.pointerDown(ev(doc, [50, 50, 20]));
+    controller.enter();
     controller.typed('10');
     const top = findFaceAt(model, [5, 5, 20])!;
     expect(model.face(top).holes).toHaveLength(1);

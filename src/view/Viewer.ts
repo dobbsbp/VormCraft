@@ -121,7 +121,7 @@ export class Viewer implements SceneView {
 
   private drag: { mode: DragMode; x: number; y: number; startX: number; startY: number; button: number; viewsBefore: number; pivot: THREE.Vector3; depth: number; pointerId: number } | null = null;
   private leftDown = false;
-  /** Last right-button press, to detect a double right-click (re-centre). */
+  /** Last middle-button press, to detect a double middle-click (re-centre). */
   private lastOrbitPress: { time: number; x: number; y: number } | null = null;
   private recenterAnimation = 0;
   /** Views to go back to (Previous View). */
@@ -853,9 +853,9 @@ export class Viewer implements SceneView {
         this.onPointer('down', this.sample(screen, e, true));
         return;
       }
-      // Double-click with the right button: re-centre on the point under the cursor.
+      // Double-click with the middle button: re-centre on the point under the cursor.
       // Browsers only report dblclick for the left button, so detect two quick presses here.
-      if (e.button === 2) {
+      if (e.button === 1) {
         const now = performance.now();
         const last = this.lastOrbitPress;
         this.lastOrbitPress = { time: now, x: e.clientX, y: e.clientY };
