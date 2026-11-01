@@ -4,6 +4,10 @@ What changed in each version of VormCraft. The section for a version is also sho
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
+## 0.4.1
+
+- Fixed: importing SketchUp, OBJ and STL files in the Windows app failed with a permission error.
+
 ## 0.4.0
 
 - Import SketchUp files (.skp): models come in with their groups and components (as groups), paint and textures, smooth surfaces, and optionally their scenes and guides. SketchUp 2018 and later read well; some older files cannot be read yet.
