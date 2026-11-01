@@ -4,6 +4,13 @@ What changed in each version of VormCraft. The section for a version is also sho
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
+## 0.4.0
+
+- Import SketchUp files (.skp): models come in with their groups and components (as groups), paint and textures, smooth surfaces, and optionally their scenes and guides. SketchUp 2018 and later read well; some older files cannot be read yet.
+- Import OBJ and STL files: each object becomes a group, flat areas become single faces you can push and pull, and curved surfaces are smoothed. Choose the file's units (with a size preview) and which way is up.
+- Import is on the toolbar and on Ctrl+I.
+- Mouse: middle-drag now orbits and right-drag pans. Right-click still opens the menu, and a double right-click still re-centres the view.
+
 ## 0.3.0
 
 - VormCraft now also runs as a web app: open https://dobbsbp.github.io/VormCraft/ in Chrome or Edge and choose Install to get it in its own window, with its own icon, on tablets, folding phones, Chromebooks and computers.

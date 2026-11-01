@@ -24,7 +24,7 @@
 - File format changes: bump `FORMAT_VERSION`, keep reading older versions, add `tests/fixtures/format-vN.vorm` and its case in `tests/compatibility.test.ts`. Never edit or delete existing fixtures.
 - Never change the app identifier `app.vormcraft.modeler`.
 - `src/app/lifecycle.ts` owns settings, autosave/recovery, updates and About; `src/io/versions.ts` the design history.
-- Import: `src/io/meshFiles.ts` (OBJ/STL readers, units/axes), `src/core/ops/importMesh.ts` (polygons → faces), `FileCommands.importModel` + `src/app/importDialog.ts`.
+- Import: `src/io/meshFiles.ts` (OBJ/STL readers, units/axes), `src/core/ops/importMesh.ts` (polygons → faces), `FileCommands.importModel` + `src/app/importDialog.ts`. SketchUp: `openskp` pinned to exactly 1.4.0 (its code was reviewed; review again before any upgrade), read in `src/app/skpWorker.ts`, converted in `src/io/skpImport.ts`, added by `ToolController.importSkp`. Keep THIRD_PARTY_NOTICES.md current when adding shipped libraries.
 - Web version: `scripts/offline.ts` (Vite plugin: service worker + version.json), `src/app/webApp.ts` (registration, web updates), `public/manifest.webmanifest`. The release workflow's `web` job publishes it to GitHub Pages after the Windows build. Builds use `base: './'`, so the same output works on Pages, at a root and in Tauri.
 
 ## Commands

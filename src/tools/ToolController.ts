@@ -5,6 +5,7 @@ import type { Document, DocumentSnapshot } from '../doc/Document';
 import type { GroupId } from '../doc/Groups';
 import type { VersionKind } from '../doc/Versions';
 import { openVersion, recordVersion } from '../io/versions';
+import type { SkpImport, SkpPart } from '../io/skpImport';
 import { ALL_PARTS, applyScene, captureScene, type SceneId, type SceneParts, type SceneView } from '../doc/Scenes';
 import { extractGeometry, mergeGeometry, modelBounds, scaleModel } from '../core/ops/group';
 import { reverseFaces } from '../core/ops/orient';
@@ -777,6 +778,48 @@ export class ToolController {
       this.zoomSelection();
     }
     return ids;
+  }
+
+  /**
+   * Add an imported SketchUp file as one undo step: its materials (renamed if a name is taken),
+   * the file as a group with its groups nested inside (paint and hidden state kept), and its
+   * scenes and guides if they were imported. Selects the new group and zooms to it.
+   */
+  importSkp(r: SkpImport, label: string): GroupId | null {
+    let top: GroupId | null = null;
+    this.run(() =>
+      this.apply(
+        () => {
+          const ids = new Map<string, MaterialId>();
+          for (const [key, fields] of r.materials) ids.set(key, this.doc.materials.add({ ...fields, name: this.doc.materials.uniqueName(fields.name) }));
+          const place = (part: SkpPart, parent: GroupId | null): GroupId => {
+            for (const f of part.model.faces.values()) {
+              if (f.material === undefined) continue;
+              const id = ids.get(f.material);
+              if (id === undefined) delete f.material;
+              else f.material = id;
+            }
+            const g = this.doc.groups.add(part.model, parent, { name: part.name, material: part.material === undefined ? undefined : ids.get(part.material) });
+            if (part.hidden) this.doc.groups.get(g)!.hidden = true;
+            for (const c of part.children) place(c, g);
+            return g;
+          };
+          top = place(r.root, this.doc.editing);
+          for (const s of r.scenes) this.doc.scenes.add(s);
+          for (const l of r.guides.lines) this.doc.guides.addLine(l.point, l.dir);
+          for (const p of r.guides.points) this.doc.guides.addPoint(p);
+        },
+        undefined,
+        null,
+        label,
+        false,
+      ),
+    );
+    if (top !== null) {
+      this.selection.set([], [], [], [top]);
+      this.zoomSelection();
+    }
+    return top;
   }
 
   /** Zoom the view to a box (Zoom Selection). */

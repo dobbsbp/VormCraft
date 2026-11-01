@@ -85,6 +85,7 @@ Right-click anything to select it and get a menu for it:
 
 ### Files and export
 - Saves to its own `.vorm` file format, including groups, materials, scenes and history. Files from every earlier version keep opening (each format version is tested), including `.benup` files from before the rename. The first save over an older-format file keeps a backup of the original.
+- **Import SketchUp (.skp) files** (Ctrl+I, or the Import button). The file comes in as a group, with its groups and components inside it as groups of their own (each placement of a component becomes its own copy, as VormCraft has no components yet), keeping faces and holes, true circles and arcs, soft edges, paint (colours, transparency and textures at their real size), and, if you choose, its scenes and guides. Faces that SketchUp allows but VormCraft's solids do not are turned round or kept on edges of their own, and the import reports how many. Files are read by [OpenSKP](https://github.com/iamahsanmehmood/openskp), an independent open-source reader; SketchUp 2018 and later read well, some older files cannot be read yet.
 - **Import OBJ and STL** (Ctrl+I, or the Import button). Each object comes in as a group; flat areas are joined back into single faces (a triangulated box becomes six faces you can push and pull) and curved surfaces are smoothed. You choose the file's units (with a live size preview) and whether Y or Z is up. Broken or duplicate triangles are left out and counted.
 - **STL** (binary) export with a watertight check and adjustable curve resolution, for 3D printing.
 - **OBJ** export.
@@ -124,7 +125,7 @@ Standard views (top, front, iso, …), Zoom Window, Previous View, display style
 | Shift+Z | Zoom Extents | Shift+V | Previous View |
 | K | Back Edges | Shift+S | Search commands |
 | Ctrl+G | Make Group | Esc | Cancel / clear selection / close group |
-| Ctrl+I | Import OBJ or STL | | |
+| Ctrl+I | Import SketchUp, OBJ or STL | | |
 | Delete | Erase selection | Page Down / Page Up | Next / previous scene |
 | Ctrl+Z / Ctrl+Y | Undo / Redo | Ctrl+N / O / S | New / Open / Save |
 | Ctrl+Shift+S | Save As | Esc | Leave an earlier version (History) |
@@ -201,6 +202,6 @@ Bug reports and suggestions are welcome in [Issues](../../issues).
 
 ## License
 
-[MIT](LICENSE). Free to use, change and share, including commercially.
+[MIT](LICENSE). Free to use, change and share, including commercially. VormCraft includes open-source libraries under their own licences: see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 VormCraft is an independent project and is not affiliated with or endorsed by Trimble or SketchUp.

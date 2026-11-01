@@ -93,6 +93,7 @@ Use our own icons and assets, and copy nothing from SketchUp.
 - OBJ (text: v/f with v/vt/vn and negative indices; objects, else groups, become separate groups) and STL (binary or text, detected). Units chosen on import (mm, cm, m, in, ft; live size preview), Y-up or Z-up, remembered per format.
 - Mesh to model (`src/core/ops/importMesh.ts`): corners welded; polygons with no area dropped; non-flat polygons fanned; neighbouring coplanar polygons with consistent winding merged into one face (outer loop + holes; if the outline is ambiguous the pieces are added singly); polygons that cannot join a valid 2-manifold (flipped, more than two faces on an edge) skipped and counted; collinear vertices removed; edges between faces under 20° softened (optional).
 - Each object is added as a group in the current context (one undo step), selected and zoomed to. Files over 300,000 polygons ask first.
+- SketchUp (.skp): read by OpenSKP (MIT, pinned to 1.4.0, reviewed; read in a Web Worker, `src/app/skpWorker.ts`), converted by `src/io/skpImport.ts`. The file becomes one group; each placed group/component becomes a nested group with its transform baked in (13-number placement: row-major 3×3, translation, overall scale; inches → mm). Faces keep loops/holes and paint (front, else back); soft/smooth/hidden edges are soft; arcs become true curves where the placement keeps them circles; mirrored placements reverse loops. A face that clashes with its neighbours is turned round, else given vertices of its own, else skipped; counts are reported. Materials (colour, opacity, textures sized from inches, images shrunk to 1024 px), group paint, hidden placements, scenes (camera only) and root guides come in; layers/tags, texts, dimensions, section planes and positioned texture mapping do not. A file with no placed geometry says so; over 300,000 placed faces warns first.
 ### Export
 - STL (binary): watertight check before export, with adjustable curve resolution.
 - OBJ
@@ -105,7 +106,7 @@ Use our own icons and assets, and copy nothing from SketchUp.
 - **Phase 4: Export and App** — STL and OBJ export, save and open in our own file format, undo and redo, Tauri desktop build.
 
 ## Out of Scope (v1)
-Parametric history, constraints, components (revisit in v2), SKP import, exporting materials.
+Parametric history, constraints, components (revisit in v2), exporting SKP or materials.
 
 ## Notes for Claude Code
 - Read this spec before every task.

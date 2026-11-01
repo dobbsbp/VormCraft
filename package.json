@@ -1,6 +1,6 @@
 {
   "name": "vormcraft",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "license": "MIT",
   "description": "VormCraft: free push/pull 3D modeler with a half-edge geometry core, Three.js display, Manifold booleans.",
@@ -27,6 +27,7 @@
     "earcut": "^3.2.4",
     "fflate": "^0.8.3",
     "manifold-3d": "^3.5.4",
+    "openskp": "1.4.0",
     "three": "^0.186.1"
   },
   "devDependencies": {

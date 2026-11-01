@@ -184,6 +184,22 @@ export const LIBRARY = { colours: COLOURS, textures: TEXTURES };
  * An image file as a texture: scaled down to at most 1024 pixels (to keep documents small) and
  * sized 1 m across by default, keeping the picture's proportions.
  */
+/** An image (data URL) scaled down to at most 1024 pixels, to keep documents small; unchanged if smaller or unreadable. */
+export async function shrinkImage(dataUrl: string): Promise<string> {
+  try {
+    const img = new Image();
+    img.src = dataUrl;
+    await img.decode();
+    const k = 1024 / Math.max(img.naturalWidth, img.naturalHeight);
+    if (k >= 1) return dataUrl;
+    const [c, ctx] = canvas(Math.max(1, Math.round(img.naturalWidth * k)), Math.max(1, Math.round(img.naturalHeight * k)));
+    ctx.drawImage(img, 0, 0, c.width, c.height);
+    return dataUrl.startsWith('data:image/png') ? c.toDataURL('image/png') : c.toDataURL('image/jpeg', 0.9);
+  } catch {
+    return dataUrl;
+  }
+}
+
 export async function textureFromFile(file: File): Promise<{ name: string; image: string; width: number; height: number }> {
   const url = URL.createObjectURL(file);
   try {

@@ -7,6 +7,10 @@ import { importMesh } from '../core/ops/importMesh';
 import { convertMesh, parseMeshFile } from '../io/meshFiles';
 import { confirmDialog, progressDialog, showExportDialog } from './dialogs';
 import { showImportDialog } from './importDialog';
+import { convertSkp, summarizeSkp } from '../io/skpImport';
+import { shrinkImage } from './materialLibrary';
+import { showSkpDialog } from './skpDialog';
+import { readSkp } from './skpReader';
 import type { FileFilter, FileHost, OpenedFile } from './files';
 import type { Settings } from './settings';
 
@@ -17,7 +21,7 @@ const OPEN_FILTER: FileFilter = { name: 'VormCraft model', extensions: [FILE_EXT
 const EXTENSION = new RegExp(`\\.(${[FILE_EXTENSION, ...OLD_FILE_EXTENSIONS].join('|')})$`, 'i');
 const STL_FILTER: FileFilter = { name: 'STL (binary)', extensions: ['stl'] };
 const OBJ_FILTER: FileFilter = { name: 'Wavefront OBJ', extensions: ['obj'] };
-const IMPORT_FILTER: FileFilter = { name: '3D models (OBJ, STL)', extensions: ['obj', 'stl'] };
+const IMPORT_FILTER: FileFilter = { name: '3D models (SketchUp, OBJ, STL)', extensions: ['skp', 'obj', 'stl'] };
 /** Above this many polygons an import asks first (it can take a while). */
 const LARGE_IMPORT = 300_000;
 
@@ -161,6 +165,7 @@ export class FileCommands {
     await this.guard(async () => {
       const file = await this.host.openBinary(IMPORT_FILTER);
       if (!file) return;
+      if (file.name.toLowerCase().endsWith('.skp')) return this.importSketchUp(file.name, file.bytes);
       const objects = parseMeshFile(file.name, file.bytes);
       const polygons = objects.reduce((n, o) => n + o.polygons.length, 0);
       if (polygons > LARGE_IMPORT && !(await confirmDialog('Large model', `${file.name} has ${polygons.toLocaleString()} polygons. Importing it may take a while and make VormCraft slower.`, 'Import anyway'))) return;
@@ -185,6 +190,41 @@ export class FileCommands {
       const groups = objects.length === 1 ? 'a group' : `${objects.length} groups`;
       this.controller.notify(`Imported ${file.name}: ${faces.toLocaleString()} faces in ${groups}${skipped ? `; ${skipped.toLocaleString()} broken or duplicate polygons were left out` : ''}.`);
     });
+  }
+
+  /**
+   * A SketchUp file: read in the background, summarised, then brought in as one group (its groups
+   * and components inside), with its materials and, if chosen, its scenes and guides.
+   */
+  private async importSketchUp(fileName: string, bytes: Uint8Array): Promise<void> {
+    const name = fileName.split(/[\\/]/).pop()!.replace(/\.skp$/i, '');
+    let progress = progressDialog('Importing', `Reading ${fileName.split(/[\\/]/).pop()}…`);
+    let skp;
+    try {
+      skp = await readSkp(bytes);
+    } finally {
+      progress.close();
+    }
+    const stats = summarizeSkp(skp);
+    if (stats.placedFaces === 0) {
+      this.controller.notify(`${name}.skp has no geometry placed in the model (only unused components), so there is nothing to import.`);
+      return;
+    }
+    const choice = await showSkpDialog(fileName, stats);
+    if (!choice) return;
+    progress = progressDialog('Importing', `Building ${stats.placedFaces.toLocaleString()} faces…`);
+    try {
+      await new Promise((r) => setTimeout(r, 30));
+      const result = convertSkp(skp, { name, scenes: choice.scenes, guides: choice.guides });
+      progress.set('Preparing textures…');
+      for (const [key, m] of result.materials) if (m.texture) result.materials.set(key, { ...m, texture: { ...m.texture, image: await shrinkImage(m.texture.image) } });
+      this.controller.importSkp(result, `Import ${name}.skp`);
+      const f = result.faces;
+      const notes = [f.turned ? `${n(f.turned)} turned round to fit` : '', f.detached ? `${n(f.detached)} kept on edges of their own` : '', f.skipped ? `${n(f.skipped)} broken faces left out` : ''].filter(Boolean);
+      this.controller.notify(`Imported ${name}.skp: ${n(f.total - f.skipped)} faces${notes.length ? ` (${notes.join(', ')})` : ''}${result.scenes.length ? `, ${result.scenes.length} scenes` : ''}.`);
+    } finally {
+      progress.close();
+    }
   }
 
   async exportStl(): Promise<void> {
@@ -220,3 +260,5 @@ export class FileCommands {
     }
   }
 }
+
+const n = (x: number) => x.toLocaleString();
