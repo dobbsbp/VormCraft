@@ -4,7 +4,7 @@ What changed in each version of VormCraft. The section for a version is also sho
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
-## Unreleased
+## 0.4.2
 
 - Circle: after clicking the centre, type the number of sides and press Enter (or just Enter to keep 24), then type the radius and press Enter.
 - Tools: the bar above the tool icons hides them into a narrow tab, giving more room to model; click the tab to bring them back (also "Show / Hide Tools" in search). VormCraft remembers your choice.
