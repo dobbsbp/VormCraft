@@ -853,7 +853,7 @@ export class Viewer implements SceneView {
         this.onPointer('down', this.sample(screen, e, true));
         return;
       }
-      // Double-click with the orbit (right) button: re-centre on the point under the cursor.
+      // Double-click with the right button: re-centre on the point under the cursor.
       // Browsers only report dblclick for the left button, so detect two quick presses here.
       if (e.button === 2) {
         const now = performance.now();

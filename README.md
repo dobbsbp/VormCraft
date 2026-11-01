@@ -97,9 +97,9 @@ Right-click anything to select it and get a menu for it:
 | --- | --- |
 | Use the active tool | Left button |
 | Context menu | Right-click |
-| Orbit | Right-drag (about the point under the cursor) |
+| Orbit | Middle-drag (about the point under the cursor) |
 | Re-centre the view | Double right-click |
-| Pan | Middle-drag |
+| Pan | Right-drag |
 | Zoom | Mouse wheel (toward the cursor) |
 | Zoom extents | Shift+Z |
 

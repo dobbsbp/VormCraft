@@ -223,13 +223,13 @@ export class ViewHistory {
 export type DragMode = 'orbit' | 'pan' | 'zoom';
 
 /**
- * Which camera drag a mouse button starts: right-drag orbits, middle-drag pans. The left button
+ * Which camera drag a mouse button starts: middle-drag orbits, right-drag pans. The left button
  * belongs to the active tool, so it only navigates when that tool is Orbit, Pan or Zoom
  * (`leftTool`).
  */
 export function dragModeFor(button: number, leftTool: DragMode | null): DragMode | null {
   if (button === 0) return leftTool;
-  if (button === 2) return 'orbit';
-  if (button === 1) return 'pan';
+  if (button === 1) return 'orbit';
+  if (button === 2) return 'pan';
   return null;
 }

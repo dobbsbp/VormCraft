@@ -160,9 +160,9 @@ describe('picking', () => {
 });
 
 describe('mouse buttons', () => {
-  it('right drag orbits, middle drag pans', () => {
-    expect(dragModeFor(2, null)).toBe('orbit');
-    expect(dragModeFor(1, null)).toBe('pan');
+  it('middle drag orbits, right drag pans', () => {
+    expect(dragModeFor(1, null)).toBe('orbit');
+    expect(dragModeFor(2, null)).toBe('pan');
   });
 
   it('the left button belongs to the active tool (navigates only with Orbit/Pan/Zoom active)', () => {

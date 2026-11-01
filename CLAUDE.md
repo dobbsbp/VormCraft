@@ -42,5 +42,5 @@
 - Units: millimetres. Z is up (red = X, green = Y, blue = Z).
 - Geometric tolerance: `TOL` in `src/core/math/tolerance.ts` (0.001 mm). Compare positions with it, never with `===`.
 - Face loops are counter-clockwise about the face normal; hole loops are clockwise. Each directed edge (a→b) belongs to at most one loop, so solids are oriented 2-manifolds.
-- Mouse: the left button always belongs to the active tool (Select by default). Right-drag orbits about the point under the cursor; double right-click re-centres the view on the point clicked; middle-drag pans; the wheel zooms toward the cursor; Shift+Z zooms extents. The Orbit/Pan/Zoom tools (O/H/Z) make the left button navigate.
+- Mouse: the left button always belongs to the active tool (Select by default). Middle-drag orbits about the point under the cursor; right-drag pans; a right-click without dragging opens the context menu; double right-click re-centres the view on the point clicked; the wheel zooms toward the cursor; Shift+Z zooms extents. The Orbit/Pan/Zoom tools (O/H/Z) make the left button navigate.
 - Booleans go through `src/core/boolean/manifold.ts`. Call `await initBooleanKernel()` once at startup; core ops are synchronous after that.

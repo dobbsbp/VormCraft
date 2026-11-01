@@ -32,10 +32,10 @@ const OTHER_KEYS: [string, string][] = [
 
 const MOUSE: [string, string][] = [
   ['Left button', 'The active tool'],
+  ['Middle-drag', 'Orbit'],
+  ['Right-drag', 'Pan'],
   ['Right-click', 'Menu for what is under the cursor'],
-  ['Right-drag', 'Orbit'],
   ['Double right-click', 'Re-centre the view'],
-  ['Middle-drag', 'Pan'],
   ['Wheel', 'Zoom toward the cursor'],
 ];
 
