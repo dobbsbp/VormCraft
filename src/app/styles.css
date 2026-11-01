@@ -66,6 +66,7 @@ body {
   grid-area: palette;
   display: grid;
   grid-template-columns: repeat(2, 36px);
+  grid-template-rows: 20px; /* the hide bar */
   grid-auto-rows: 36px;
   gap: 2px;
   align-content: start;
@@ -75,6 +76,45 @@ body {
 
 .palette:empty {
   display: none;
+}
+
+/* The bar across the top of the palette that tucks it away; when tucked, it is the whole tab. */
+.palette-toggle {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.palette-toggle:hover {
+  background: var(--button-hover);
+  color: var(--text);
+}
+
+.palette-toggle svg {
+  width: 16px;
+  height: 16px;
+}
+
+.palette.collapsed {
+  grid-template-columns: 18px;
+  grid-template-rows: auto;
+  padding: 6px 2px;
+}
+
+.palette.collapsed > :not(.palette-toggle) {
+  display: none;
+}
+
+.palette.collapsed .palette-toggle {
+  height: 64px;
 }
 
 .icon-button {

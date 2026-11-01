@@ -267,12 +267,13 @@ async function start(): Promise<void> {
       input.click();
     },
     toggleScenes,
+    toggleTools: () => toggleTools(),
     player,
   };
   // Any click in the viewport stops a running slideshow.
   document.getElementById('viewport')!.addEventListener('pointerdown', () => player.stop(), true);
 
-  buildPalette(toolButtons, setTool);
+  const toggleTools = buildPalette(toolButtons, setTool);
   const search = new SearchBox(document.getElementById('viewport')!, () => commandList(viewer, controller, files, setTool, toggleMaterials, view, showEntityInfo, keep));
   ({ undoButton, redoButton, materialsButton, viewButtons } = buildToolbar(viewer, controller, files, toggleMaterials, view, keep));
 
@@ -433,6 +434,7 @@ interface ViewActions {
   toggleProjection(): void;
   chooseBackground(): void;
   toggleScenes(): void;
+  toggleTools(): void;
   player: ScenePlayer;
 }
 
@@ -509,6 +511,7 @@ function commandList(viewer: Viewer, controller: ToolController, files: FileComm
     ...FACE_STYLES.map(([f, label]) => ({ id: `style:${f}`, name: `Style: ${label}`, keywords: ['style', 'display', 'faces', 'view'], run: () => view.setFaces(f) })),
     { id: 'view:projection', name: 'Parallel / Perspective Projection', keywords: ['camera', 'orthographic', 'ortho', 'perspective', 'parallel'], run: view.toggleProjection },
     { id: 'view:background', name: 'Background Colour…', keywords: ['style', 'color', 'sky'], run: view.chooseBackground },
+    { id: 'view:tools', name: 'Show / Hide Tools', keywords: ['palette', 'toolbar', 'icons', 'collapse', 'tab', 'hide', 'room'], run: view.toggleTools },
     { id: 'scenes:panel', name: 'Scenes', keywords: ['scene', 'view', 'pages', 'tabs'], run: view.toggleScenes },
     { id: 'scenes:add', name: 'Add Scene', keywords: ['scene', 'save view'], run: () => controller.addScene() },
     { id: 'scenes:update', name: 'Update Scene', keywords: ['scene', 'overwrite'], run: () => (controller.currentScene !== null ? controller.updateScene(controller.currentScene) : controller.notify('Go to a scene first, then update it')) },
@@ -532,13 +535,49 @@ function commandList(viewer: Viewer, controller: ToolController, files: FileComm
   ];
 }
 
-function buildPalette(buttons: Map<ToolId, HTMLButtonElement>, setTool: (id: ToolId) => void): void {
+const PALETTE_KEY = 'vormcraft.palette.hidden';
+
+/**
+ * The tool palette, with a bar at the top that tucks it away into a narrow tab (for more room to
+ * model); clicking the tab brings the tools back. Remembered between sessions. Returns the toggle.
+ */
+function buildPalette(buttons: Map<ToolId, HTMLButtonElement>, setTool: (id: ToolId) => void): () => void {
   const palette = document.getElementById('palette')!;
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = 'palette-toggle';
+  const show = (hidden: boolean) => {
+    palette.classList.toggle('collapsed', hidden);
+    const title = hidden ? 'Show the tools' : 'Hide the tools';
+    toggle.title = title;
+    toggle.setAttribute('aria-label', title);
+    toggle.setAttribute('aria-expanded', String(!hidden));
+    toggle.innerHTML = hidden ? ICONS.expandRight : ICONS.collapseLeft;
+    try {
+      localStorage.setItem(PALETTE_KEY, hidden ? '1' : '0');
+    } catch {
+      // Not remembered.
+    }
+  };
+  const flip = () => show(!palette.classList.contains('collapsed'));
+  toggle.addEventListener('click', () => {
+    flip();
+    toggle.blur(); // keep keyboard input going to the viewport / Measurements box
+  });
+  palette.append(toggle);
   for (const t of TOOLS) {
     const b = iconButton(t.icon, withShortcut(t.label, t.id), () => setTool(t.id));
     buttons.set(t.id, b);
     palette.append(b);
   }
+  let hidden = false;
+  try {
+    hidden = localStorage.getItem(PALETTE_KEY) === '1';
+  } catch {
+    // Shown.
+  }
+  show(hidden);
+  return flip;
 }
 
 function buildToolbar(viewer: Viewer, controller: ToolController, files: FileCommands, toggleMaterials: () => void, view: ViewActions, keep: KeepActions) {

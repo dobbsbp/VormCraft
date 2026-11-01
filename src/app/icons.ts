@@ -25,6 +25,9 @@ export const ICONS = {
   history: svg('<path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/><path d="M12 8v4l3 2"/>'),
   // A cog: eight teeth round a ring.
   settings: svg('<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/><circle cx="12" cy="12" r="6.5"/>'),
+  // Chevrons for tucking the tool palette away and bringing it back.
+  collapseLeft: svg('<path d="M14 6l-6 6 6 6"/><path d="M19 6l-6 6 6 6" opacity="0.5"/>'),
+  expandRight: svg('<path d="M10 6l6 6-6 6"/><path d="M5 6l6 6-6 6" opacity="0.5"/>'),
   zoomExtents: svg('<rect x="7" y="7" width="10" height="10" rx="1"/><path d="M3 8V3h5M16 3h5v5M21 16v5h-5M8 21H3v-5"/>'),
   iso: cube(),
   top: cube(face('M12 3 20 7.5 12 12 4 7.5Z')),
