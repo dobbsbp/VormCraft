@@ -139,16 +139,20 @@ async function start(): Promise<void> {
     );
   };
 
+  let shownTitle = '';
   const updateTitle = async () => {
-    document.title = files.title();
+    const viewing = controller.previewing ? controller.doc.versions.get(controller.previewing.id) : undefined;
+    const title = files.title(viewing ? new Date(viewing.time).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : undefined);
+    if (title === shownTitle) return;
+    shownTitle = title;
+    document.title = title;
     if (isTauri()) {
       const { getCurrentWindow } = await import('@tauri-apps/api/window');
-      await getCurrentWindow().setTitle(files.title());
+      await getCurrentWindow().setTitle(title);
     }
   };
   files.onTitleChange = () => void updateTitle();
 
-  let lastDirty = controller.dirty;
   const update = () => {
     const tool = controller.tool;
     hint.textContent = controller.hint();
@@ -189,10 +193,7 @@ async function start(): Promise<void> {
       redoButton.disabled = !redoLabel;
       redoButton.title = redoLabel ? `Redo ${redoLabel} (Ctrl+Y)` : 'Redo (Ctrl+Y)';
     }
-    if (controller.dirty !== lastDirty) {
-      lastDirty = controller.dirty;
-      void updateTitle();
-    }
+    void updateTitle();
     viewer.setOverlay({
       selectedFaces: controller.selection.faces,
       selectedEdges: controller.selection.edges,

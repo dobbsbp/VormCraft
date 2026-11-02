@@ -7,6 +7,7 @@ bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 ## Unreleased
 
 - Fixed: in the web version on Android, saved files were named "Model.vorm.txt" instead of "Model.vorm" (and OBJ exports ".obj.txt").
+- The window and browser tab title now starts with VormCraft, then the file name: "VormCraft — Kitchen shelf", with • while there are unsaved changes, and the date when looking at an older version.
 - The web version now lives at https://vormcraft.app (the old address forwards there).
 
 ## 0.4.3

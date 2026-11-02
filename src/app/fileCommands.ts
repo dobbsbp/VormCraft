@@ -50,8 +50,9 @@ export class FileCommands {
     private readonly options: FileOptions = { settings: () => ({ history: false }) as Settings },
   ) {}
 
-  title(): string {
-    return `${this.name}${this.controller.dirty ? ' •' : ''} — VormCraft`;
+  /** The window/tab title; `viewing` names the older version being previewed, if any. */
+  title(viewing?: string): string {
+    return windowTitle(this.name, this.controller.dirty, viewing);
   }
 
   /** True if it is fine to drop the current document (saved, or the user agreed to discard). */
@@ -262,3 +263,11 @@ export class FileCommands {
 }
 
 const n = (x: number) => x.toLocaleString();
+
+/**
+ * "VormCraft — Kitchen shelf •": the app first, then the file name ("Untitled" until saved), a •
+ * while there are unsaved changes, and the time of an older version being previewed.
+ */
+export function windowTitle(name: string, dirty: boolean, viewing?: string): string {
+  return `VormCraft — ${name}${dirty ? ' •' : ''}${viewing ? ` (viewing ${viewing})` : ''}`;
+}
