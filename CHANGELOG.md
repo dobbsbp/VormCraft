@@ -4,6 +4,11 @@ What changed in each version of VormCraft. The section for a version is also sho
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
+## Unreleased
+
+- Fixed: in the web version on Android, saved files were named "Model.vorm.txt" instead of "Model.vorm" (and OBJ exports ".obj.txt").
+- The web version now lives at https://vormcraft.app (the old address forwards there).
+
 ## 0.4.3
 
 - The mouse pointer shows the icon of the tool you are using (for example a paint bucket for Paint Bucket), with a small triangle at the top left marking the exact point that is clicked.

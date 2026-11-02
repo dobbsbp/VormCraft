@@ -94,9 +94,9 @@ function browserHost(): FileHost {
       });
     },
     async save(data, suggestedName) {
-      const blob = new Blob([typeof data === 'string' ? data : (data.slice().buffer as ArrayBuffer)], {
-        type: typeof data === 'string' ? 'text/plain' : 'application/octet-stream',
-      });
+      // Always a generic binary type: Chrome on Android adds the type's own extension to names it
+      // does not recognise, so text/plain turned "Model.vorm" into "Model.vorm.txt".
+      const blob = new Blob([typeof data === 'string' ? data : (data.slice().buffer as ArrayBuffer)], { type: 'application/octet-stream' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;

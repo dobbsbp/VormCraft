@@ -16,7 +16,7 @@ The installer is not code-signed yet, so the first time Windows may say "Windows
 
 VormCraft checks for a new version when it starts and installs it with one click (**Install and restart**). You can also use **Check for Updates** in the Help menu (the ? button).
 
-**Everywhere else (Android tablets and folding phones, Chromebooks, Mac, Linux):** open **https://dobbsbp.github.io/VormCraft/** in Chrome or Edge and choose **Install** (Chrome menu → *Add to home screen* / *Install app*). It then opens in its own window like any app, works fully offline, and updates itself, asking before it restarts into a new version. Your models never leave your device. A keyboard and mouse are recommended. In the web version, Save downloads the `.vorm` file (instead of saving over it), and autosave copies are kept in the app's own storage.
+**Everywhere else (Android tablets and folding phones, Chromebooks, Mac, Linux):** open **https://vormcraft.app** in Chrome or Edge and choose **Install** (Chrome menu → *Add to home screen* / *Install app*). It then opens in its own window like any app, works fully offline, and updates itself, asking before it restarts into a new version. Your models never leave your device. A keyboard and mouse are recommended. In the web version, Save downloads the `.vorm` file (instead of saving over it), and autosave copies are kept in the app's own storage.
 
 Both versions have the same version number and open the same `.vorm` files.
 
