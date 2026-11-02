@@ -1,6 +1,6 @@
 {
   "name": "vormcraft",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "private": true,
   "license": "MIT",
   "description": "VormCraft: free push/pull 3D modeler with a half-edge geometry core, Three.js display, Manifold booleans.",

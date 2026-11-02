@@ -23,6 +23,7 @@ import { helpMenu, LINKS, openLink, showShortcuts } from './help';
 import { Lifecycle } from './lifecycle';
 import type { FaceStyle } from '../doc/Scenes';
 import { SearchBox } from './searchBox';
+import { toolCursor } from './toolCursors';
 
 const NAV_HINT = 'Orbit: middle-drag · Pan: right-drag · Re-centre: double middle-click · Zoom: wheel · Lock axis: arrow keys';
 
@@ -156,6 +157,7 @@ async function start(): Promise<void> {
     vcb.disabled = tool.vcbLabel() === '';
     if (typing === null) vcb.value = tool.vcbValue();
     for (const [id, b] of toolButtons) b.setAttribute('aria-pressed', String(id === tool.id));
+    setToolCursor(tool.id);
     materials.render();
     scenes.render();
     info.render();
@@ -533,6 +535,18 @@ function commandList(viewer: Viewer, controller: ToolController, files: FileComm
     { id: 'guides:toggle', name: 'Show/Hide Guides', keywords: ['guide', 'construction'], run: () => controller.toggleGuides() },
     { id: 'guides:delete', name: 'Delete All Guides', keywords: ['guide', 'construction'], run: () => controller.deleteGuides() },
   ];
+}
+
+const cursors = new Map<ToolId, string>();
+let shownCursor: ToolId | null = null;
+
+/** The viewport's mouse cursor shows the active tool's icon (`toolCursor`); orbiting and panning still override it. */
+function setToolCursor(id: ToolId): void {
+  const canvas = document.querySelector<HTMLElement>('.viewport-canvas');
+  if (shownCursor === id || !canvas) return;
+  shownCursor = id;
+  if (!cursors.has(id)) cursors.set(id, toolCursor(id, TOOLS.find((t) => t.id === id)?.icon ?? ''));
+  canvas.style.setProperty('--tool-cursor', cursors.get(id)!);
 }
 
 const PALETTE_KEY = 'vormcraft.palette.hidden';
