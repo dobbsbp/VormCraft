@@ -147,6 +147,39 @@ describe('arc tools', () => {
     expect(H.model.findVertex([-50, 0, 0])).toBeDefined();
   });
 
+  it('an arc from edge to edge of a box top is drawn on the top and splits it, whichever face the first click reports', () => {
+    const H = harness();
+    pushPull(H.model, drawRectangle(H.model, GROUND_PLANE, [0, 0, 0], 100, 100).inner!, 50);
+    const side = findFaceAt(H.model, [0, 50, 25])!;
+    const top = findFaceAt(H.model, [50, 50, 50])!;
+    const faces = H.model.faces.size;
+    use(H.controller, 'arc2');
+    click(H, [0, 50, 50], { kind: 'onEdge', face: side }); // the edge is shared with the left side
+    click(H, [50, 0, 50], { kind: 'onEdge', face: side });
+    move(H, [10, 10, 50], { face: top });
+    H.controller.typed('10');
+    expect(H.model.faces.size).toBe(faces + 1);
+    for (const e of H.model.edges()) {
+      const he = H.model.he(e);
+      if (he.curve !== null) expect(H.model.pos(he.origin)[2]).toBeCloseTo(50);
+    }
+    expect(checkWatertight(H.model).watertight).toBe(true);
+  });
+
+  it('arrow keys choose the plane: → draws upright, facing the red axis', () => {
+    const H = harness();
+    use(H.controller, 'arc2');
+    H.controller.toggleLock('x');
+    expect(H.controller.notice).toMatch(/upright, facing the red axis/);
+    click(H, [0, 0, 0]);
+    click(H, [0, 40, 0]);
+    move(H, [0, 20, 10]);
+    H.controller.typed('20');
+    expect(H.model.findVertex([0, 20, 20]) ?? H.model.findVertex([0, 20, -20])).toBeDefined();
+    H.controller.toggleLock('x');
+    expect(H.controller.notice).toMatch(/unlocked/);
+  });
+
   it('an arc closing a shape with a line makes a face', () => {
     const H = harness();
     use(H.controller, 'line');

@@ -4,6 +4,11 @@ What changed in each version of VormCraft. The section for a version is also sho
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
+## Unreleased
+
+- Fixed: arcs drawn from edge to edge of a face (for example across a corner of a box top) could be drawn on the wrong plane and not connect to the model. They now lie on the face and split it.
+- Arc tools: the arrow keys choose the plane the arc is drawn on (↑ flat, → upright facing red, ← upright facing green); press the same arrow again to unlock.
+
 ## 0.4.4
 
 - Fixed: in the web version on Android, saved files were named "Model.vorm.txt" instead of "Model.vorm" (and OBJ exports ".obj.txt").

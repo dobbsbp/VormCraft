@@ -73,7 +73,7 @@ Right-click anything to select it and get a menu for it:
 
 ### Inference snapping
 - Snaps to endpoints, midpoints, edges, faces, guide intersections and the red, green and blue axes, with a visual cue for each. Groups' corners and edges snap too.
-- Arrow keys lock to an axis (→ red, ← green, ↑ blue, ↓ parallel or perpendicular to the last edge).
+- Arrow keys lock to an axis (→ red, ← green, ↑ blue, ↓ parallel or perpendicular to the last edge). With the arc tools they choose the plane the arc is drawn on instead (↑ flat, → and ← upright, facing red or green).
 
 ### Autosave and history
 - **Autosave** every minute (when something changed) to a backup folder. Your own file only changes when you save. If VormCraft closes without saving, it offers your work back next time.

@@ -1,17 +1,20 @@
-import { toPlane2D, type Plane } from '../core/math/plane';
+import { projectToPlane, signedDistance, toPlane2D, type Plane } from '../core/math/plane';
 import { TOL } from '../core/math/tolerance';
 import { add, distance, normalize, scale, sub, type Vec3 } from '../core/math/vec3';
 import { arcAroundCenter, arcFromBulge, arcPoints, arcThroughPoints, DEFAULT_ARC_SEGMENTS, drawArc, drawPie, type Arc } from '../core/ops/arcs';
+import type { FaceId } from '../core/model/Model';
+import { findFaceAt } from '../core/model/query';
 import type { DocumentSnapshot } from '../doc/Document';
-import { pointOnPlane } from './geom';
+import { AXES, drawingPlane, pointOnPlane, rayPlane } from './geom';
 import { lineColor } from './LineTool';
 import { placementAt } from './placement';
-import type { InferenceHints, Preview, PreviewLines, Snap, Tool, ToolContext, ToolEvent, ToolId } from './types';
+import type { AxisLock, InferenceHints, Preview, PreviewLines, Snap, Tool, ToolContext, ToolEvent, ToolId } from './types';
 import { formatLength, parseLength, parseSegments } from './units';
 
 export type ArcMode = 'arc2' | 'arc3' | 'arc' | 'pie';
 
 const NAMES: Record<ArcMode, string> = { arc2: '2-Point Arc', arc3: '3-Point Arc', arc: 'Arc', pie: 'Pie' };
+const AXIS_NAMES = ['red', 'green', 'blue'];
 
 /**
  * The three arc tools.
@@ -23,6 +26,11 @@ const NAMES: Record<ArcMode, string> = { arc2: '2-Point Arc', arc3: '3-Point Arc
  * - Pie: as Arc, and the two radii close it into a slice-shaped face.
  * Type e.g. "16s" at any time to set the number of segments. Typing after finishing changes the
  * arc just drawn. Arcs keep their true radius (for STEP and fine STL export).
+ *
+ * The drawing plane: the face under the first click, then, at the second click, a face both
+ * points lie on (so an arc from edge to edge of a face is drawn on that face, even when the first
+ * click reported a neighbouring face). The arrow keys fix it instead: → red, ← green, ↑ blue
+ * (the axis the arc's plane faces).
  */
 export class ArcTool implements Tool {
   readonly name: string;
@@ -34,6 +42,8 @@ export class ArcTool implements Tool {
   private snap: Snap | null = null;
   /** For the centre arc: the sweep followed continuously, so it can pass 180°. */
   private sweep = 0;
+  /** Arrow keys: the normal of the plane to draw on, overriding the faces clicked. */
+  private axisLock: Vec3 | null = null;
   private last: { base: DocumentSnapshot; plane: Plane; points: Vec3[]; value: number; segments: number } | null = null;
 
   constructor(
@@ -83,13 +93,46 @@ export class ArcTool implements Tool {
     if (n === 0) return {};
     // 3-point arcs are not tied to one plane; the others stay on the plane of their first click.
     if (this.mode === 'arc3') return { reference: this.points[n - 1] };
-    return n === 1 ? { reference: this.points[0], plane: this.plane! } : { plane: this.plane! };
+    // The second point may still choose the plane (see `choosePlane`), so it snaps freely unless
+    // an arrow key fixed the plane.
+    if (n === 1) return this.axisLock ? { reference: this.points[0], plane: this.plane! } : { reference: this.points[0] };
+    return { plane: this.plane! };
   }
 
-  /** Where the cursor is, kept on the arc's plane when it has one. */
+  lockAxis(lock: AxisLock): string | null {
+    if (lock === 'parallel' || lock === 'perpendicular' || this.mode === 'arc3' || this.points.length >= 2) return null;
+    const i = { x: 0, y: 1, z: 2 }[lock];
+    const same = this.axisLock === AXES[i];
+    this.axisLock = same ? null : AXES[i];
+    if (this.axisLock && this.points.length === 1) this.plane = drawingPlane(this.points[0], this.axisLock);
+    if (same) return `${this.name}: plane unlocked (it follows the faces you click)`;
+    return `${this.name}: drawn ${i === 2 ? 'flat' : 'upright'}, facing the ${AXIS_NAMES[i]} axis (press the arrow again to unlock)`;
+  }
+
+  /** Where the cursor is, kept on the arc's plane when it has one (the second point: see `inference`). */
   private pointFor(e: ToolEvent): Vec3 | null {
     if (this.mode === 'arc3' || !this.plane) return e.snap?.point ?? null;
+    if (this.points.length === 1 && !this.axisLock) return e.snap?.point ?? rayPlane(e.ray, this.plane);
     return pointOnPlane(e.snap?.point, e.ray, this.plane);
+  }
+
+  /**
+   * The second click: draw on a face both points lie on (the face the chord crosses, else the one
+   * under the cursor) when the current plane does not hold the second point. Otherwise the point is
+   * brought onto the current plane.
+   */
+  private choosePlane(e: ToolEvent, p: Vec3): void {
+    const plane = this.plane!;
+    if (this.axisLock || Math.abs(signedDistance(plane, p)) <= TOL) return;
+    const model = this.ctx.doc.model;
+    const a = this.points[0];
+    const holds = (f: FaceId | null | undefined): f is FaceId => {
+      if (f === null || f === undefined || !model.faces.has(f)) return false;
+      const fp = model.facePlane(f);
+      return Math.abs(signedDistance(fp, a)) <= TOL && Math.abs(signedDistance(fp, p)) <= TOL;
+    };
+    const face = [findFaceAt(model, scale(add(a, p), 0.5)), e.snap?.face, e.face].find(holds);
+    if (face !== undefined) this.plane = drawingPlane(a, model.face(face).normal);
   }
 
   pointerMove(e: ToolEvent): void {
@@ -127,14 +170,19 @@ export class ArcTool implements Tool {
     if (n === 0) {
       const at = placementAt(this.ctx.doc.model, e);
       if (!at) return;
-      this.plane = at.plane;
+      this.plane = this.axisLock ? drawingPlane(at.point, this.axisLock) : at.plane;
       this.points = [at.point];
       this.cursor = at.point;
       return;
     }
-    const p = this.pointFor(e);
+    let p = this.pointFor(e);
     if (!p || distance(p, this.points[n - 1]) <= TOL) return;
     if (n === 1) {
+      if (this.mode !== 'arc3') {
+        this.choosePlane(e, p);
+        p = projectToPlane(this.plane!, p);
+        if (distance(p, this.points[0]) <= TOL) return;
+      }
       this.points.push(p);
       this.sweep = 0;
       if (this.centred) this.cursor = p;
@@ -181,7 +229,8 @@ export class ArcTool implements Tool {
       // Chord length (2-point) or radius (centre), in the direction of the mouse.
       const len = parseLength(text);
       if (len === undefined || len <= TOL) throw new Error(this.mode === 'arc2' ? 'Type the chord length' : 'Type the radius');
-      const dir = this.cursor && distance(this.cursor, this.points[0]) > TOL ? normalize(sub(this.cursor, this.points[0])) : this.plane!.u;
+      const toward = this.cursor && projectToPlane(this.plane!, this.cursor);
+      const dir = toward && distance(toward, this.points[0]) > TOL ? normalize(sub(toward, this.points[0])) : this.plane!.u;
       this.points.push(add(this.points[0], scale(dir, len)));
       this.sweep = 0;
       return;
