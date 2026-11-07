@@ -4,7 +4,7 @@ What changed in each version of VormCraft. The section for a version is also sho
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
-## Unreleased
+## 0.5.1
 
 - Lines drawn between corners of boxes (for example two boxes with flush fronts or tops) now close into a face, like any other closed shape of lines.
 - Closing an opening: after deleting a face (the end of a box, say), drawing a line over one of its edges fills it again, as in SketchUp. Tracing the edge of a hole in a face fills the hole.
