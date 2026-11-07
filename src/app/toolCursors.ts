@@ -10,10 +10,11 @@ const SIZE = 32;
 /**
  * The mouse cursor for a tool: a small triangle in the top-left corner whose tip is the exact
  * click point, with the tool's own icon beside it. The icon is drawn dark over a white outline so
- * it shows on light and dark backgrounds. Returns a CSS `cursor` value.
+ * it shows on light and dark backgrounds. With `copy` (copy mode in Move, Rotate, Push/Pull) a "+"
+ * sits at the bottom right, as in SketchUp. Returns a CSS `cursor` value.
  */
-export function toolCursor(id: ToolId, icon: string): string {
-  if (PLAIN.has(id)) return 'default';
+export function toolCursor(id: ToolId, icon: string, copy = false): string {
+  if (PLAIN.has(id) && !copy) return 'default';
   const body = /<svg[^>]*>([\s\S]*)<\/svg>/.exec(icon)?.[1] ?? '';
   const attrs = (width: number, color: string) => `fill="none" stroke="currentColor" stroke-width="${width}" stroke-linejoin="round" stroke-linecap="round" color="${color}"`;
   const svg =
@@ -23,6 +24,7 @@ export function toolCursor(id: ToolId, icon: string): string {
     `<g ${attrs(1.5, INK)}>${body}</g>` +
     `</g>` +
     `<path d="M1 1v9.5L10.5 1Z" fill="${INK}" stroke="${HALO}" stroke-width="1" stroke-linejoin="round"/>` +
+    (copy ? `<path d="M26 19v10M21 24h10" stroke="${HALO}" stroke-width="4.5" stroke-linecap="round"/><path d="M26 19v10M21 24h10" stroke="${INK}" stroke-width="2" stroke-linecap="round"/>` : '') +
     `</svg>`;
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 1 1, crosshair`;
 }

@@ -36,6 +36,15 @@ body {
   height: 100vh;
   /* Phones and tablets: the visible height, not counting browser bars that come and go. */
   height: 100dvh;
+  /* The app is not a page of text: dragging or Ctrl+A must not select its labels and buttons. */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.app input,
+.app textarea {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .toolbar {
@@ -50,9 +59,18 @@ body {
 }
 
 .toolbar .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-weight: 600;
   margin-right: 12px;
   letter-spacing: 0.02em;
+}
+
+.toolbar .brand img {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
 }
 
 .toolbar .sep {
@@ -487,7 +505,8 @@ body {
   gap: 8px;
 }
 
-.modal button {
+.modal button,
+.graphics-tip button {
   font: inherit;
   padding: 6px 14px;
   border: 1px solid var(--chrome-border);
@@ -496,7 +515,8 @@ body {
   cursor: pointer;
 }
 
-.modal button.primary {
+.modal button.primary,
+.graphics-tip button.primary {
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
@@ -1275,4 +1295,90 @@ kbd {
   .measurements input {
     width: 90px;
   }
+}
+
+.graphics-help p,
+.graphics-help ol {
+  margin: 6px 0;
+}
+
+.graphics-help ol {
+  padding-left: 20px;
+}
+
+.graphics-help a {
+  color: var(--accent);
+}
+
+/* The web version on built-in graphics: how to use the faster card (once). */
+.graphics-tip {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  width: min(460px, calc(100% - 32px));
+  padding: 10px 12px;
+  border: 1px solid var(--chrome-border);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.16);
+  z-index: 5;
+}
+
+.graphics-tip p {
+  margin: 0 0 8px;
+}
+
+.graphics-tip .buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Google Drive: something needs the person (sign in again). */
+.icon-button.attention {
+  color: var(--danger);
+}
+
+.modal.drive-open .drive-files {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--chrome-border);
+  border-radius: 4px;
+}
+
+.modal.drive-open .drive-files li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.modal.drive-open .drive-files li.picked {
+  background: var(--accent-soft);
+}
+
+.modal.drive-open .drive-files li.empty {
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.modal.drive-open .drive-files .meta {
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.modal .field {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0 12px;
+}
+
+.modal .field input {
+  font: inherit;
+  padding: 5px 8px;
 }

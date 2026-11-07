@@ -1,9 +1,23 @@
 import type { Document, DocumentSnapshot } from './Document';
 
-interface Step {
-  label: string;
-  snapshot: DocumentSnapshot;
+/**
+ * An undo step read from a saved file: the document is only rebuilt when the step is undone to
+ * (the file stores each step as just what changed). `text` is the step's document as file text.
+ */
+export interface SavedStep {
+  readonly saved: true;
+  snapshot(): DocumentSnapshot;
+  text(): string;
 }
+
+export type StepState = DocumentSnapshot | SavedStep;
+
+export interface Step {
+  label: string;
+  snapshot: StepState;
+}
+
+const resolve = (s: StepState): DocumentSnapshot => ('saved' in s ? s.snapshot() : s);
 
 /** Undo/redo as whole-document snapshots (cheap to reason about; models stay small). */
 export class History {
@@ -29,8 +43,16 @@ export class History {
   undo(doc: Document): string | null {
     const step = this.undoStack.pop();
     if (!step) return null;
+    let state: DocumentSnapshot;
+    try {
+      state = resolve(step.snapshot);
+    } catch (err) {
+      // A saved step that cannot be rebuilt: the steps before it are lost too.
+      this.undoStack.length = 0;
+      throw err;
+    }
     this.redoStack.push({ label: step.label, snapshot: doc.snapshot() });
-    doc.restore(step.snapshot);
+    doc.restore(state);
     return step.label;
   }
 
@@ -38,13 +60,24 @@ export class History {
     const step = this.redoStack.pop();
     if (!step) return null;
     this.undoStack.push({ label: step.label, snapshot: doc.snapshot() });
-    doc.restore(step.snapshot);
+    doc.restore(resolve(step.snapshot));
     return step.label;
   }
 
   clear(): void {
     this.undoStack.length = 0;
     this.redoStack.length = 0;
+  }
+
+  /** The undo steps, oldest first (to save them with the design). */
+  get steps(): readonly Step[] {
+    return this.undoStack;
+  }
+
+  /** Undo steps read from a file (oldest first), in place of any there are. */
+  load(steps: Step[]): void {
+    this.clear();
+    this.undoStack.push(...steps.slice(-this.limit));
   }
 
   get undoLabel(): string | null {

@@ -16,8 +16,9 @@ const AXIS_NAMES = ['red', 'green', 'blue'];
 /**
  * Rotate: click the centre (the face you click on sets the rotation axis, else the blue axis;
  * arrow keys pick the red/green/blue axis instead), click a point to measure the angle from,
- * then move and click, or type the angle in degrees. The angle snaps to 15° steps. Tap Ctrl to
- * copy; after a copy type "4x" for 4 copies at that angle each, or "/4" to spread 4 over it.
+ * then move and click, or type the angle in degrees. The angle snaps to 15° steps. Press Ctrl to
+ * copy (copy mode ends with the copy); after a copy type "4x" for 4 copies at that angle each, or
+ * "/4" to spread 4 over it.
  */
 export class RotateTool implements Tool {
   readonly id = 'rotate';
@@ -39,7 +40,7 @@ export class RotateTool implements Tool {
 
   hint(): string {
     const mode = this.copy ? 'Copy mode (Ctrl to switch off). ' : '';
-    if (!this.center) return `${mode}Click the centre of rotation (arrow keys pick the axis). Tap Ctrl to copy.`;
+    if (!this.center) return `${mode}Click the centre of rotation (arrow keys pick the axis). Press Ctrl to copy.`;
     if (!this.ref) return `${mode}Click a point to measure the angle from.`;
     return `${mode}Move and click to rotate, or type the angle in degrees.`;
   }
@@ -61,6 +62,10 @@ export class RotateTool implements Tool {
 
   toggleCopy(): boolean {
     this.copy = !this.copy;
+    return this.copy;
+  }
+
+  copying(): boolean {
     return this.copy;
   }
 
@@ -127,12 +132,13 @@ export class RotateTool implements Tool {
     const steps = Array.from({ length: copy ? count : 1 }, (_, i) => rotation(center, axis, angle * (divide ? (i + 1) / count : i + 1)));
     const before = this.ctx.apply(() => applyToTargets(this.ctx.doc, targets, steps, copy), base);
     this.last = { base: before, targets, center, axis, angle, copy, count, divide };
+    this.copy = false;
   }
 
   typed(text: string): void {
     const array = parseArray(text);
     if (array) {
-      if (!this.last?.copy || this.center) throw new Error('Make a copy first (tap Ctrl, then rotate), then type 4x or /4');
+      if (!this.last?.copy || this.center) throw new Error('Make a copy first (press Ctrl, then rotate), then type 4x or /4');
       const l = this.last;
       this.commit(l.targets, l.center, l.axis, l.angle, true, array.count, array.divide, l.base);
       return;
@@ -154,6 +160,7 @@ export class RotateTool implements Tool {
   reset(): void {
     this.cancel();
     this.last = null;
+    this.copy = false;
   }
 
   preview(): Preview {

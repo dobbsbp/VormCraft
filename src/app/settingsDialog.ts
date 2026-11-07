@@ -1,5 +1,6 @@
 import { isTauri } from './files';
 import { GRAPHICS_LABELS, type GraphicsChoice } from './graphics';
+import { classifyGpu, onWindows, switchHelp } from './graphicsTip';
 import { cleanSettings, DEFAULT_SETTINGS, type Settings } from './settings';
 
 export interface SettingsContext {
@@ -40,7 +41,7 @@ export function showSettingsDialog(current: Settings, ctx: SettingsContext): Pro
       <fieldset>
         <legend>History</legend>
         <label class="row"><input type="checkbox" name="history"> Keep a version history in each design, up to <input type="number" name="limit" min="1" max="1000" step="1"> MB</label>
-        <p class="note">Versions are kept each time the design is autosaved or saved, compressed, in the .vorm file. Older ones are thinned out (all of the last day, then one an hour, then one a day). Use History to go back to one; use “Save a Copy Without History” to share a design without it.</p>
+        <p class="note">Versions are kept each time the design is autosaved or saved, compressed, in the .vorm file. Older ones are thinned out (all of the last day, then one an hour, then one a day). The last 100 undo steps are kept in the file too, so Undo works after reopening. Use History to go back to a version; use “Save a Copy Without History” to share a design without either.</p>
       </fieldset>
       <fieldset class="graphics">
         <legend>Graphics card</legend>
@@ -79,7 +80,17 @@ export function showSettingsDialog(current: Settings, ctx: SettingsContext): Pro
   if (ctx.graphics === null) {
     // The web version: the browser picks the graphics card.
     graphicsBox.querySelectorAll('label').forEach((l) => l.remove());
-    graphicsBox.querySelector('.note')!.append(' In the web version the browser chooses the graphics card.');
+    const note = graphicsBox.querySelector<HTMLElement>('.note')!;
+    const kind = classifyGpu(ctx.graphicsInUse);
+    note.textContent = `In use now: ${ctx.graphicsInUse}${kind === 'integrated' ? ' (built-in graphics)' : kind === 'dedicated' ? ' (graphics card)' : ''}. In the web version the browser chooses the graphics card${onWindows() ? '; Windows decides which one the browser gets.' : '.'}`;
+    if (onWindows()) {
+      const intro = document.createElement('p');
+      intro.className = 'note';
+      intro.textContent = 'To use a faster graphics card:';
+      const help = switchHelp();
+      help.classList.add('note');
+      graphicsBox.append(intro, help);
+    }
   }
   const setGraphics = (g: GraphicsChoice | null) => {
     graphicsBox.querySelectorAll<HTMLInputElement>('input[name="graphics"]').forEach((r) => (r.checked = r.value === g));

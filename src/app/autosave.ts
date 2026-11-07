@@ -80,7 +80,7 @@ export class AutoSaver {
       const time = this.now();
       const name = this.fileName();
       const info: AutosaveInfo = { ...this.design(), time };
-      const file = JSON.parse(serializeDocument(c.doc, { history: s.history }));
+      const file = JSON.parse(serializeDocument(c.doc, { history: s.history, undo: s.history ? c.history.steps : undefined }));
       file.autosave = info;
       await this.store.write(name, JSON.stringify(file));
       // Renamed or saved elsewhere since the last copy: the old copy is not needed any more.

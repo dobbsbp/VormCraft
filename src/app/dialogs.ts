@@ -132,18 +132,19 @@ export function confirmDialog(title: string, message: string, confirmLabel: stri
   });
 }
 
-/** A message with a single OK button. `body` may hold a few lines (shown as written). */
-export function messageDialog(title: string, body: string): Promise<void> {
+/** A message with a single OK button. `body` may hold a few lines (shown as written); `extra` goes under it. */
+export function messageDialog(title: string, body: string, extra: Node[] = []): Promise<void> {
   const dlg = document.createElement('dialog');
   dlg.className = 'modal';
   dlg.innerHTML = `
     <form method="dialog">
       <h2></h2>
       <p class="pre"></p>
-      <div class="buttons"><button type="submit" class="primary">OK</button></div>
+      <div class="buttons"><button type="submit" class="primary" autofocus>OK</button></div>
     </form>`;
   dlg.querySelector('h2')!.textContent = title;
   dlg.querySelector('p')!.textContent = body;
+  dlg.querySelector('p')!.after(...extra);
   document.body.append(dlg);
   return new Promise((resolve) => {
     const finish = () => {
@@ -179,4 +180,72 @@ export function progressDialog(title: string, message: string): { set(message: s
       dlg.remove();
     },
   };
+}
+
+/** Ask for a line of text (a name). Resolves to the trimmed text, or null if cancelled. */
+export function promptDialog(title: string, label: string, value: string, okLabel = 'OK'): Promise<string | null> {
+  const dlg = document.createElement('dialog');
+  dlg.className = 'modal';
+  dlg.innerHTML = `
+    <form method="dialog">
+      <h2></h2>
+      <label class="field"><span></span><input type="text" required spellcheck="false" /></label>
+      <div class="buttons">
+        <button type="button" value="cancel">Cancel</button>
+        <button type="submit" value="ok" class="primary"></button>
+      </div>
+    </form>`;
+  dlg.querySelector('h2')!.textContent = title;
+  dlg.querySelector('label span')!.textContent = label;
+  const input = dlg.querySelector('input')!;
+  input.value = value;
+  dlg.querySelector('button[value="ok"]')!.textContent = okLabel;
+  document.body.append(dlg);
+  return new Promise((resolve) => {
+    const finish = (v: string | null) => {
+      dlg.close();
+      dlg.remove();
+      resolve(v);
+    };
+    dlg.querySelector('button[value="cancel"]')!.addEventListener('click', () => finish(null));
+    dlg.addEventListener('cancel', () => finish(null));
+    dlg.querySelector('form')!.addEventListener('submit', (e) => {
+      e.preventDefault();
+      finish(input.value.trim() || null);
+    });
+    dlg.showModal();
+    input.select();
+  });
+}
+
+/** A question with several answers (the last is the main one). Resolves to the chosen value, or null if cancelled. */
+export function choiceDialog<T extends string>(title: string, message: string, choices: { label: string; value: T }[]): Promise<T | null> {
+  const dlg = document.createElement('dialog');
+  dlg.className = 'modal';
+  dlg.innerHTML = `<form method="dialog"><h2></h2><p class="pre"></p><div class="buttons"><button type="button" value="">Cancel</button></div></form>`;
+  dlg.querySelector('h2')!.textContent = title;
+  dlg.querySelector('p')!.textContent = message;
+  const row = dlg.querySelector('.buttons')!;
+  choices.forEach((c, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.value = c.value;
+    b.textContent = c.label;
+    if (i === choices.length - 1) b.className = 'primary';
+    row.append(b);
+  });
+  document.body.append(dlg);
+  return new Promise((resolve) => {
+    const finish = (v: T | null) => {
+      dlg.close();
+      dlg.remove();
+      resolve(v);
+    };
+    row.addEventListener('click', (e) => {
+      const b = (e.target as HTMLElement).closest('button');
+      if (b) finish((b.value || null) as T | null);
+    });
+    dlg.addEventListener('cancel', () => finish(null));
+    dlg.showModal();
+  });
 }

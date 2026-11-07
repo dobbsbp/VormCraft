@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { buildDemoModel } from '../src/app/demoModel';
 import { checkWatertight, drawRectangle, findFaceAt, GROUND_PLANE, initBooleanKernel, volume } from '../src/core';
 import { Document } from '../src/doc/Document';
-import { FileFormatError, parseDocument, serializeDocument } from '../src/io/fileFormat';
+import { FileFormatError, FORMAT_VERSION, parseDocument, serializeDocument } from '../src/io/fileFormat';
 import { ev, harness, use } from './helpers/tools';
 
 beforeAll(async () => {
@@ -157,7 +157,7 @@ describe('file format', () => {
     doc.model.setEdgeSoft(a, b, true);
     doc.model.setEdgeSoft(b, c, false);
     const text = serializeDocument(doc);
-    expect(JSON.parse(text).version).toBe(5);
+    expect(JSON.parse(text).version).toBe(FORMAT_VERSION);
     const back = parseDocument(text).model;
     const soft = (p: number, q: number) => back.he(back.halfEdgeBetween(p, q)!).soft;
     expect([soft(a, b), soft(b, c), soft(c, d)]).toEqual([true, false, undefined]);

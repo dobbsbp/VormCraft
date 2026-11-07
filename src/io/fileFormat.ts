@@ -1,18 +1,22 @@
+import { gunzipSync, gzipSync, strFromU8, strToU8 } from 'fflate';
 import type { Vec3 } from '../core/math/vec3';
 import { Model } from '../core/model/Model';
-import { Document } from '../doc/Document';
+import { Document, type DocumentSnapshot } from '../doc/Document';
+import type { SavedStep, Step, StepState } from '../doc/History';
 import { Groups } from '../doc/Groups';
 import { Guides } from '../doc/Guides';
 import { Labels } from '../doc/Labels';
 import { Materials, type Material } from '../doc/Materials';
 import { ALL_PARTS, DEFAULT_STYLE, Scenes, type Scene } from '../doc/Scenes';
 import type { Version } from '../doc/Versions';
+import { hashText } from './hash';
+import { applyPatch, diffLines, type Patch } from './lineDiff';
 
 /** File extension of our own format. */
 export const FILE_EXTENSION = 'vorm';
 /** Extensions of files saved before the app was renamed (they still open). */
 export const OLD_FILE_EXTENSIONS = ['benup'];
-export const FORMAT_VERSION = 5;
+export const FORMAT_VERSION = 6;
 
 /**
  * Geometry as stored: vertices, faces as vertex-id loops (outer first, then holes), every edge with
@@ -34,12 +38,13 @@ interface GeometryData {
  * and groups.
  * Version 2 adds edge smoothing (a fourth entry per edge) and materials (colours and textures,
  * with each face's material). Version 3 adds groups, each with geometry of its own; version 4
- * hidden groups and scenes (saved views); version 5 the design's version history (compressed).
+ * hidden groups and scenes (saved views); version 5 the design's version history (compressed);
+ * version 6 the last undo steps (each stored as only what changed: see `encodeUndo`).
  * Older versions still open, and so do files from before the app was renamed (format tag 'benup').
  */
 interface FileV3 extends GeometryData {
   format: 'vormcraft' | 'benup';
-  version: 1 | 2 | 3 | 4 | 5;
+  version: 1 | 2 | 3 | 4 | 5 | 6;
   units: 'mm';
   guides: { visible: boolean; lines: { point: Vec3; dir: Vec3 }[]; points: { pos: Vec3 }[] };
   /** Text labels (optional: files saved before labels existed have none). */
@@ -52,6 +57,18 @@ interface FileV3 extends GeometryData {
   scenes?: { transition: number; delay: number; items: Scene[] };
   /** The version history (version 5): compressed documents, and the texture images they use. */
   history?: { versions: Version[]; textures: Record<string, string> };
+  /** The last undo steps (version 6), newest first: see `encodeUndo`. */
+  undo?: FileUndo;
+}
+
+/**
+ * Undo steps as saved: `base` is the hash of the design's own text (without history and undo,
+ * written by `linedJson`); each step is a patch (gzip, base64) from the text of the step after it
+ * (the design itself for the newest) to its own, or, with `full`, its whole text.
+ */
+interface FileUndo {
+  base: string;
+  steps: { label: string; data: string; full?: 1 }[];
 }
 
 function geometryData(m: Model): GeometryData {
@@ -69,14 +86,21 @@ function geometryData(m: Model): GeometryData {
 export interface SerializeOptions {
   /** Include the version history (default true). */
   history?: boolean;
+  /** Undo steps to keep with the design (oldest first): the newest `UNDO_STEPS` are saved. */
+  undo?: readonly Step[];
 }
 
-export function serializeDocument(doc: Document, opts: SerializeOptions = {}): string {
+/** How many undo steps a file keeps, and the most space they may take (compressed). */
+export const UNDO_STEPS = 100;
+export const UNDO_LIMIT_BYTES = 8 * 1024 * 1024;
+
+/** The design itself as a file object (no history, no undo). */
+function documentFile(doc: Document): FileV3 {
   // Parents first, so a reader can create groups in order.
   const ordered = doc.groups.children(null).flatMap((g) => doc.groups.subtree(g.id));
-  const file: FileV3 = {
+  return {
     format: 'vormcraft',
-    version: 5,
+    version: 6,
     units: 'mm',
     ...geometryData(doc.root),
     guides: {
@@ -89,10 +113,125 @@ export function serializeDocument(doc: Document, opts: SerializeOptions = {}): s
     groups: ordered.map((g) => ({ id: g.id, name: g.name, parent: g.parent, ...(g.material !== undefined ? { material: g.material } : {}), ...(g.hidden ? { hidden: true } : {}), ...geometryData(g.model) })),
     scenes: { transition: doc.scenes.transition, delay: doc.scenes.delay, items: doc.scenes.items },
   };
+}
+
+export function serializeDocument(doc: Document, opts: SerializeOptions = {}): string {
+  const file = documentFile(doc);
+  const undo = opts.undo?.length ? encodeUndo(linedJson(file), opts.undo) : undefined;
   if (opts.history !== false && doc.versions.items.length) {
     file.history = { versions: doc.versions.items, textures: Object.fromEntries(doc.versions.textures) };
   }
+  if (undo) file.undo = undo;
   return JSON.stringify(file);
+}
+
+const isScalar = (v: unknown) => v === null || typeof v !== 'object';
+const isFlat = (v: unknown): boolean => isScalar(v) || (Array.isArray(v) && v.every(isScalar));
+
+/**
+ * JSON with a line per record (vertex, edge, face loop, material...), so two versions of a design
+ * can be compared line by line. Parses as ordinary JSON.
+ */
+export function linedJson(v: unknown): string {
+  if (Array.isArray(v)) return v.every(isScalar) ? JSON.stringify(v) : `[\n${v.map(linedJson).join(',\n')}\n]`;
+  if (v !== null && typeof v === 'object') {
+    const entries = Object.entries(v).filter(([, x]) => x !== undefined);
+    if (entries.every(([, x]) => isFlat(x))) return JSON.stringify(v);
+    return `{\n${entries.map(([k, x]) => `${JSON.stringify(k)}:${linedJson(x)}`).join(',\n')}\n}`;
+  }
+  return JSON.stringify(v);
+}
+
+function pack(value: unknown): string {
+  const bytes = gzipSync(strToU8(JSON.stringify(value)), { level: 6 });
+  let s = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+
+function unpack<T>(data: string): T {
+  const s = atob(data);
+  const bytes = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) bytes[i] = s.charCodeAt(i);
+  return JSON.parse(strFromU8(gunzipSync(bytes))) as T;
+}
+
+/** A step's saved form, remembered so each save only works out the steps that are new. */
+const encoded = new WeakMap<StepState, { newer: unknown; data: string; full: boolean }>();
+
+/** The design text of an undo step. */
+function stepText(s: StepState): string {
+  if ('saved' in s) return s.text();
+  return linedJson(documentFile(new Document(s.model, s.guides, s.labels, s.materials, s.groups, s.scenes)));
+}
+
+/**
+ * The newest undo steps, each as a patch from the step after it (so each takes only as much room
+ * as its change), up to `UNDO_STEPS` and `UNDO_LIMIT_BYTES`.
+ */
+function encodeUndo(base: string, steps: readonly Step[]): FileUndo {
+  const out: FileUndo = { base: hashText(base), steps: [] };
+  // What the step being encoded is compared with: the design for the newest, then each step in turn.
+  let newer: unknown = null;
+  let newerLines: () => string[] = () => base.split('\n');
+  let bytes = 0;
+  for (let i = steps.length - 1; i >= 0 && out.steps.length < UNDO_STEPS; i--) {
+    const state = steps[i].snapshot;
+    let lines: string[] | null = null;
+    const ownLines = () => (lines ??= stepText(state).split('\n'));
+    let e = encoded.get(state);
+    // The newest step's patch depends on the design as it is now, so it is always worked out.
+    if (!e || newer === null || e.newer !== newer) {
+      const patch = diffLines(newerLines(), ownLines());
+      e = patch ? { newer, data: pack(patch), full: false } : { newer, data: pack(ownLines().join('\n')), full: true };
+      if (newer !== null) encoded.set(state, e);
+    }
+    bytes += e.data.length;
+    if (bytes > UNDO_LIMIT_BYTES) break;
+    out.steps.push({ label: steps[i].label, data: e.data, ...(e.full ? { full: 1 as const } : {}) });
+    newer = state;
+    newerLines = ownLines;
+  }
+  return out;
+}
+
+/**
+ * Undo steps from a file, oldest first. Each is rebuilt only when it is needed (undone to, or
+ * saved again), from the design's own text and the patches before it.
+ */
+function decodeUndo(base: string, undo: FileUndo): Step[] {
+  const steps = undo.steps;
+  // The last step worked out (undo goes back one step at a time, so it is usually the one before).
+  let index = -1;
+  let current = base.split('\n');
+  const linesAt = (wanted: number): string[] => {
+    if (index > wanted) {
+      index = -1;
+      current = base.split('\n');
+    }
+    while (index < wanted) {
+      const step: FileUndo['steps'][number] = steps[index + 1];
+      current = step.full ? unpack<string>(step.data).split('\n') : applyPatch(current, unpack<Patch>(step.data));
+      index++;
+    }
+    return current;
+  };
+  const saved: SavedStep[] = steps.map((_, i) => {
+    const text = () => linesAt(i).join('\n');
+    return {
+      saved: true as const,
+      text,
+      snapshot(): DocumentSnapshot {
+        const d = parseDocument(text());
+        return { model: d.root, groups: d.groups, guides: d.guides, labels: d.labels, materials: d.materials, scenes: d.scenes };
+      },
+    };
+  });
+  // Saving again reuses the stored patches where the steps still follow each other.
+  saved.forEach((s, i) => {
+    if (i > 0) encoded.set(s, { newer: saved[i - 1], data: steps[i].data, full: !!steps[i].full });
+  });
+  return saved.map((s, i) => ({ label: steps[i].label, snapshot: s as StepState })).reverse();
 }
 
 export class FileFormatError extends Error {}
@@ -205,6 +344,13 @@ export function parseDocument(text: string): Document {
     labels.add(l.anchor, l.position, l.text);
   }
   const doc = new Document(model, guides, labels, materials, groups, scenes);
+  // Undo steps: left out if they do not belong to this exact design (or are damaged).
+  const u = f.undo;
+  if (u && typeof u.base === 'string' && Array.isArray(u.steps) && u.steps.every((s) => typeof s.data === 'string' && typeof s.label === 'string')) {
+    const { history: _history, undo: _undo, ...design } = f as FileV3;
+    const base = linedJson(design);
+    if (hashText(base) === u.base) doc.savedUndo = decodeUndo(base, u);
+  }
   // A damaged history must not stop the design itself from opening: it is left out instead.
   const h = f.history;
   if (h && Array.isArray(h.versions) && h.textures && typeof h.textures === 'object') {

@@ -18,6 +18,7 @@ describe('files from every format version open', () => {
     ['format-v3.vorm', 3],
     ['format-v4.vorm', 4],
     ['format-v5.vorm', 5],
+    ['format-v6.vorm', 6],
   ])('%s', (name, version) => {
     const text = fixture(name);
     expect(JSON.parse(text).version).toBe(version);
@@ -51,6 +52,13 @@ describe('files from every format version open', () => {
       ]);
       expect(openVersion(doc.versions, doc.versions.items[0].id).labels.items.size).toBe(1);
     }
+    if (version >= 6) {
+      // Two undo steps saved with it: before the second label, and before that, before the guide.
+      expect(doc.savedUndo.map((s) => s.label)).toEqual(['Guide', 'Text']);
+      const before = doc.savedUndo.map((s) => ('saved' in s.snapshot ? s.snapshot.snapshot() : s.snapshot));
+      expect(before[1].labels.items.size).toBe(1);
+      expect(before[0].guides.lines()).toHaveLength(0);
+    }
     // Opened and saved again, it is in the current format and still opens.
     const again = parseDocument(serializeDocument(doc));
     expect(JSON.parse(serializeDocument(again)).version).toBe(FORMAT_VERSION);
@@ -58,7 +66,7 @@ describe('files from every format version open', () => {
   });
 
   it('there is a fixture for the current format version', () => {
-    const names = ['format-v1.benup', 'format-v2.vorm', 'format-v3.vorm', 'format-v4.vorm', 'format-v5.vorm'];
+    const names = ['format-v1.benup', 'format-v2.vorm', 'format-v3.vorm', 'format-v4.vorm', 'format-v5.vorm', 'format-v6.vorm'];
     expect(names.some((n) => n.includes(`v${FORMAT_VERSION}.`))).toBe(true);
   });
 });

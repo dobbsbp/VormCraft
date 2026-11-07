@@ -3,6 +3,15 @@ import { toolCursor } from '../src/app/toolCursors';
 
 const icon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M1 2h3"/></svg>';
 
+describe('copy mode cursor', () => {
+  it('adds a + at the bottom right', () => {
+    const plain = decodeURIComponent(toolCursor('move', icon));
+    const copy = decodeURIComponent(toolCursor('move', icon, true));
+    expect(plain).not.toContain('M26 19v10');
+    expect(copy).toContain('M26 19v10');
+  });
+});
+
 describe('tool cursors', () => {
   it('Select keeps the normal arrow', () => {
     expect(toolCursor('select', icon)).toBe('default');

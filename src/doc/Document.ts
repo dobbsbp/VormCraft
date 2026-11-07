@@ -5,6 +5,7 @@ import { Labels } from './Labels';
 import { Materials } from './Materials';
 import { Scenes } from './Scenes';
 import { Versions } from './Versions';
+import type { Step } from './History';
 
 export interface DocumentSnapshot {
   /** The top-level geometry (outside every group). */
@@ -32,6 +33,8 @@ export class Document {
   readonly versions = new Versions();
   /** The group being edited (opened with a double-click), or null at the top level. Not saved. */
   editing: GroupId | null = null;
+  /** Undo steps read from the file (oldest first), taken over by the undo history when it opens. */
+  savedUndo: Step[] = [];
 
   constructor(model = new Model(), guides = new Guides(), labels = new Labels(), materials = new Materials(), groups = new Groups(), scenes = new Scenes()) {
     this.root = model;

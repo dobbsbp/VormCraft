@@ -24,6 +24,7 @@ import { Lifecycle } from './lifecycle';
 import type { FaceStyle } from '../doc/Scenes';
 import { SearchBox } from './searchBox';
 import { showSupport } from './supportDialog';
+import { DriveCommands } from './drive/driveCommands';
 import { toolCursor } from './toolCursors';
 
 const NAV_HINT = 'Orbit: middle-drag · Pan: right-drag · Re-centre: double middle-click · Zoom: wheel · Lock axis: arrow keys';
@@ -72,6 +73,8 @@ async function start(): Promise<void> {
     onNewerFile: () => void lifecycle.checkForUpdates(),
   });
   lifecycle.attach(files);
+  // Google Drive (web version for now).
+  const drive = DriveCommands.available() ? new DriveCommands(files, controller, () => lifecycle.settings) : null;
   const materials = new MaterialsPanel(document.getElementById('materials-panel')!, controller, () => setTool('paint'));
   controller.sceneView = viewer;
   const player = new ScenePlayer(controller);
@@ -112,6 +115,7 @@ async function start(): Promise<void> {
   let undoButton: HTMLButtonElement | undefined;
   let redoButton: HTMLButtonElement | undefined;
   let materialsButton: HTMLButtonElement | undefined;
+  let driveButton: HTMLButtonElement | null = null;
   let viewButtons: ViewButtons | undefined;
   const tabs = document.getElementById('scene-tabs')!;
   let tabsShown = '';
@@ -162,7 +166,7 @@ async function start(): Promise<void> {
     vcb.disabled = tool.vcbLabel() === '';
     if (typing === null) vcb.value = tool.vcbValue();
     for (const [id, b] of toolButtons) b.setAttribute('aria-pressed', String(id === tool.id));
-    setToolCursor(tool.id);
+    setToolCursor(tool.id, tool.copying?.() ?? false);
     materials.render();
     scenes.render();
     info.render();
@@ -170,7 +174,10 @@ async function start(): Promise<void> {
     const viewing = controller.previewing ? controller.doc.versions.get(controller.previewing.id) : undefined;
     previewBar.hidden = !viewing;
     if (viewing) previewText.textContent = `Looking at the version from ${new Date(viewing.time).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })} · ${viewing.label} (read-only)`;
-    autosaved.textContent = lifecycle.lastAutosave ? `Autosaved ${new Date(lifecycle.lastAutosave).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}` : '';
+    const local = lifecycle.lastAutosave ? `Autosaved ${new Date(lifecycle.lastAutosave).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}` : '';
+    drive?.changed();
+    autosaved.textContent = [local, drive?.statusText() ?? ''].filter(Boolean).join(' · ');
+    driveButton?.classList.toggle('attention', drive?.needsAttention ?? false);
     viewButtons?.history.setAttribute('aria-pressed', String(history.isOpen));
     renderTabs();
     if (viewButtons) {
@@ -247,6 +254,12 @@ async function start(): Promise<void> {
       const r = anchor.getBoundingClientRect();
       menu.open(helpMenu({ checkForUpdates: keep.checkUpdates, about: keep.about, support: showSupport }), r.left - 2, r.bottom);
     },
+    drive,
+    driveMenu: (anchor) => {
+      if (!drive) return;
+      const r = anchor.getBoundingClientRect();
+      menu.open(drive.menu(), r.left - 2, r.bottom);
+    },
   };
 
   // Right-click: select what is under the cursor (unless already selected), then the menu.
@@ -279,7 +292,7 @@ async function start(): Promise<void> {
 
   const toggleTools = buildPalette(toolButtons, setTool);
   const search = new SearchBox(document.getElementById('viewport')!, () => commandList(viewer, controller, files, setTool, toggleMaterials, view, showEntityInfo, keep));
-  ({ undoButton, redoButton, materialsButton, viewButtons } = buildToolbar(viewer, controller, files, toggleMaterials, view, keep));
+  ({ undoButton, redoButton, materialsButton, viewButtons, driveButton } = buildToolbar(viewer, controller, files, toggleMaterials, view, keep));
 
   const submitTyped = () => {
     const text = typing ?? vcb.value;
@@ -299,20 +312,25 @@ async function start(): Promise<void> {
     e.stopPropagation();
   });
 
-  // Ctrl tapped on its own (pressed and released with no other key) toggles copy mode, as in
-  // SketchUp; Ctrl+Z and friends must not toggle it.
-  let ctrlAlone = false;
+  // Pressing Ctrl switches copy mode at once (Move, Rotate, Push/Pull), as in SketchUp, so the + on
+  // the cursor shows straight away and clicking with Ctrl held copies. If another key follows while
+  // it is held, it was a shortcut (Ctrl+Z...): the switch is quietly taken back.
+  let ctrlSwitched = false;
   window.addEventListener('keyup', (e) => {
-    if (e.key === 'Control' && ctrlAlone) controller.toggleCopy();
-    if (e.key === 'Control') ctrlAlone = false;
+    if (e.key === 'Control') ctrlSwitched = false;
   });
-  window.addEventListener('pointerdown', () => (ctrlAlone = false), true);
 
   window.addEventListener('keydown', (e) => {
     if (e.target instanceof HTMLInputElement || document.querySelector('dialog[open]')) return;
     const key = e.key;
-    ctrlAlone = key === 'Control' && !e.repeat;
-    if (key === 'Control') return;
+    if (key === 'Control') {
+      if (!e.repeat) ctrlSwitched = controller.toggleCopy();
+      return;
+    }
+    if (ctrlSwitched) {
+      controller.toggleCopy(true);
+      ctrlSwitched = false;
+    }
     const lower = key.toLowerCase();
     if (e.ctrlKey || e.metaKey) {
       const command: Record<string, () => void> = {
@@ -323,6 +341,8 @@ async function start(): Promise<void> {
         n: () => void files.newDocument(),
         g: () => controller.makeGroup(),
         i: () => void files.importModel(),
+        // Everything in the model (not the page's text and buttons).
+        a: () => controller.selectAll(),
       };
       if (command[lower]) {
         e.preventDefault();
@@ -465,6 +485,10 @@ interface KeepActions {
   saveCopy(): void;
   /** The Help menu, under its toolbar button. */
   help(anchor: HTMLElement): void;
+  /** Google Drive (null where it is not available yet: the desktop app). */
+  drive: DriveCommands | null;
+  /** The Google Drive menu, under its toolbar button. */
+  driveMenu(anchor: HTMLElement): void;
 }
 
 function commandList(viewer: Viewer, controller: ToolController, files: FileCommands, setTool: (id: ToolId) => void, toggleMaterials: () => void, view: ViewActions, showEntityInfo: () => void, keep: KeepActions): Command[] {
@@ -488,6 +512,13 @@ function commandList(viewer: Viewer, controller: ToolController, files: FileComm
     { id: 'file:open', name: 'Open…', keywords: ['file', 'load'], shortcut: 'Ctrl+O', run: () => void files.open() },
     { id: 'file:save', name: 'Save', keywords: ['file'], shortcut: 'Ctrl+S', run: () => void files.save() },
     { id: 'file:saveas', name: 'Save As…', keywords: ['file'], shortcut: 'Ctrl+Shift+S', run: () => void files.save(true) },
+    ...(keep.drive
+      ? [
+          { id: 'drive:save', name: 'Save to Google Drive…', keywords: ['file', 'cloud', 'drive', 'google', 'upload'], run: () => void keep.drive!.saveAs() },
+          { id: 'drive:open', name: 'Open from Google Drive…', keywords: ['file', 'cloud', 'drive', 'google', 'load'], run: () => void keep.drive!.open() },
+          { id: 'drive:autosave', name: 'Autosave a Copy to Google Drive (on/off)', keywords: ['cloud', 'drive', 'google', 'backup'], run: () => void keep.drive!.toggleAutosave() },
+        ]
+      : []),
     { id: 'file:copy', name: 'Save a Copy Without History…', keywords: ['file', 'share', 'send', 'export'], run: keep.saveCopy },
     { id: 'file:history', name: 'History (earlier versions)', keywords: ['versions', 'restore', 'backup', 'go back', 'revert'], run: keep.toggleHistory },
     { id: 'app:settings', name: 'Settings', keywords: ['preferences', 'options', 'autosave', 'backup folder'], run: keep.settings },
@@ -502,7 +533,7 @@ function commandList(viewer: Viewer, controller: ToolController, files: FileComm
     { id: 'file:obj', name: 'Export OBJ…', keywords: ['export', 'mesh'], run: () => void files.exportObj() },
     { id: 'edit:undo', name: 'Undo', keywords: ['edit'], shortcut: 'Ctrl+Z', run: () => controller.undo() },
     { id: 'edit:redo', name: 'Redo', keywords: ['edit'], shortcut: 'Ctrl+Y', run: () => controller.redo() },
-    { id: 'edit:selectall', name: 'Select All', keywords: ['edit', 'selection'], run: () => controller.selectAll() },
+    { id: 'edit:selectall', name: 'Select All', keywords: ['edit', 'selection'], shortcut: 'Ctrl+A', run: () => controller.selectAll() },
     { id: 'edit:delete', name: 'Delete Selection', keywords: ['edit', 'erase', 'remove'], shortcut: 'Delete', run: () => controller.deleteSelection() },
     { id: 'group:make', name: 'Make Group', keywords: ['group', 'combine'], shortcut: 'Ctrl+G', run: () => controller.makeGroup() },
     { id: 'group:explode', name: 'Explode Group', keywords: ['group', 'ungroup', 'explode'], run: () => controller.explodeSelection() },
@@ -540,16 +571,17 @@ function commandList(viewer: Viewer, controller: ToolController, files: FileComm
   ];
 }
 
-const cursors = new Map<ToolId, string>();
-let shownCursor: ToolId | null = null;
+const cursors = new Map<string, string>();
+let shownCursor: string | null = null;
 
-/** The viewport's mouse cursor shows the active tool's icon (`toolCursor`); orbiting and panning still override it. */
-function setToolCursor(id: ToolId): void {
+/** The viewport's mouse cursor shows the active tool's icon (`toolCursor`), with a + in copy mode; orbiting and panning still override it. */
+function setToolCursor(id: ToolId, copy: boolean): void {
   const canvas = document.querySelector<HTMLElement>('.viewport-canvas');
-  if (shownCursor === id || !canvas) return;
-  shownCursor = id;
-  if (!cursors.has(id)) cursors.set(id, toolCursor(id, TOOLS.find((t) => t.id === id)?.icon ?? ''));
-  canvas.style.setProperty('--tool-cursor', cursors.get(id)!);
+  const key = `${id}${copy ? '+' : ''}`;
+  if (shownCursor === key || !canvas) return;
+  shownCursor = key;
+  if (!cursors.has(key)) cursors.set(key, toolCursor(id, TOOLS.find((t) => t.id === id)?.icon ?? '', copy));
+  canvas.style.setProperty('--tool-cursor', cursors.get(key)!);
 }
 
 const PALETTE_KEY = 'vormcraft.palette.hidden';
@@ -601,7 +633,10 @@ function buildToolbar(viewer: Viewer, controller: ToolController, files: FileCom
   const bar = document.getElementById('toolbar')!;
   const brand = document.createElement('span');
   brand.className = 'brand';
-  brand.textContent = 'VormCraft';
+  const logo = document.createElement('img');
+  logo.src = './icons/icon-192.png';
+  logo.alt = '';
+  brand.append(logo, 'VormCraft');
   bar.append(brand);
   const sep = () => bar.append(Object.assign(document.createElement('span'), { className: 'sep' }));
 
@@ -609,6 +644,14 @@ function buildToolbar(viewer: Viewer, controller: ToolController, files: FileCom
     iconButton(ICONS.newDoc, 'New (Ctrl+N)', () => void files.newDocument()),
     iconButton(ICONS.open, 'Open (Ctrl+O)', () => void files.open()),
     iconButton(ICONS.save, 'Save (Ctrl+S) · Save As (Ctrl+Shift+S)', () => void files.save()),
+  );
+  let driveButton: HTMLButtonElement | null = null;
+  if (keep.drive) {
+    const b = iconButton(ICONS.cloud, 'Google Drive: save, open, autosave a copy', () => keep.driveMenu(b));
+    driveButton = b;
+    bar.append(b);
+  }
+  bar.append(
     textButton(ICONS.importFile, 'Import', 'Import a SketchUp (.skp), OBJ or STL file (Ctrl+I)', () => void files.importModel()),
   );
   sep();
@@ -664,7 +707,7 @@ function buildToolbar(viewer: Viewer, controller: ToolController, files: FileCom
   const help = iconButton(ICONS.help, 'Help: shortcuts, updates, report a problem, about', () => keep.help(help));
   bar.append(help);
   const viewButtons: ViewButtons = { styles, projection, scenes, history };
-  return { undoButton, redoButton, materialsButton, viewButtons };
+  return { undoButton, redoButton, materialsButton, viewButtons, driveButton };
 }
 
 function iconButton(icon: string, title: string, onClick: () => void): HTMLButtonElement {

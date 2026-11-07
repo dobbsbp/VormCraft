@@ -5,7 +5,7 @@ import { FileCommands } from '../src/app/fileCommands';
 import type { FileHost } from '../src/app/files';
 import { cleanSettings, DEFAULT_SETTINGS, loadSettings, saveSettings, type Settings } from '../src/app/settings';
 import { drawRectangle, GROUND_PLANE, initBooleanKernel } from '../src/core';
-import { parseDocument, serializeDocument } from '../src/io/fileFormat';
+import { FORMAT_VERSION, parseDocument, serializeDocument } from '../src/io/fileFormat';
 import { harness } from './helpers/tools';
 
 beforeAll(async () => {
@@ -171,7 +171,7 @@ describe('saving with history', () => {
     h.change();
     await h.files.save();
     expect(h.host.files.get('D:/Work/Shed (format 4 backup).vorm')).toBe(oldText);
-    expect(JSON.parse(h.host.files.get('D:/Work/Shed.vorm')!).version).toBe(5);
+    expect(JSON.parse(h.host.files.get('D:/Work/Shed.vorm')!).version).toBe(FORMAT_VERSION);
     // Only the first time.
     h.host.files.delete('D:/Work/Shed (format 4 backup).vorm');
     h.change();

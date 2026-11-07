@@ -15,21 +15,34 @@ const HEAD_ON = Math.cos((5 * Math.PI) / 180);
  * (positive = out, adds material; negative = in, removes it). Moving onto other geometry snaps the
  * distance to it, which is how you push exactly flush to the far side for a through-hole.
  * Double-click a face to repeat the last distance. Typing after finishing changes the last push.
+ * Press Ctrl for a new starting face: an edge loop stays where the face was, so the new sides are
+ * faces of their own (ends with the push, as in SketchUp).
  */
 export class PushPullTool implements Tool {
   readonly id = 'pushpull';
   readonly name = 'Push/Pull';
   readonly dragIsClick = true;
   private hover: FaceId | null = null;
+  private copy = false;
   private active: { face: FaceId; normal: Vec3; start: Vec3; distance: number } | null = null;
-  private last: { base: DocumentSnapshot; face: FaceId; distance: number } | null = null;
+  private last: { base: DocumentSnapshot; face: FaceId; distance: number; copy: boolean } | null = null;
 
   constructor(private readonly ctx: ToolContext) {}
 
   hint(): string {
+    const mode = this.copy ? 'New starting face (Ctrl to switch off). ' : '';
     return this.active
-      ? 'Move to set the distance and click, or type it and press Enter (negative pushes in).'
-      : 'Click a face to push or pull it. Double-click a face to repeat the last distance.';
+      ? `${mode}Move to set the distance and click, or type it and press Enter (negative pushes in).`
+      : `${mode}Click a face to push or pull it. Double-click a face to repeat the last distance. Press Ctrl to keep an edge where the face was.`;
+  }
+
+  toggleCopy(): boolean {
+    this.copy = !this.copy;
+    return this.copy;
+  }
+
+  copying(): boolean {
+    return this.copy;
   }
 
   vcbLabel(): string {
@@ -88,21 +101,22 @@ export class PushPullTool implements Tool {
 
   doubleClick(e: ToolEvent): void {
     if (this.active || e.face === null || !this.last) return;
-    this.commit(e.face, this.last.distance);
+    this.commit(e.face, this.last.distance, undefined, this.copy || this.last.copy);
   }
 
   typed(text: string): void {
     const d = parseLength(text);
     if (d === undefined || Math.abs(d) <= TOL) throw new Error('Type a distance (e.g. 20, or -20 to push in)');
     if (this.active) this.commit(this.active.face, d);
-    else if (this.last) this.commit(this.last.face, d, this.last.base);
+    else if (this.last) this.commit(this.last.face, d, this.last.base, this.last.copy);
     else throw new Error('Click a face first, then type the distance');
   }
 
-  private commit(face: FaceId, distance: number, base?: DocumentSnapshot): void {
+  private commit(face: FaceId, distance: number, base?: DocumentSnapshot, copy = this.copy): void {
     this.active = null;
-    const before = this.ctx.apply(() => pushPull(this.ctx.doc.model, face, distance), base);
-    this.last = { base: before, face, distance };
+    const before = this.ctx.apply(() => pushPull(this.ctx.doc.model, face, distance, { newStart: copy }), base);
+    this.last = { base: before, face, distance, copy };
+    this.copy = false;
   }
 
   cancel(): void {
@@ -112,6 +126,7 @@ export class PushPullTool implements Tool {
   reset(): void {
     this.cancel();
     this.last = null;
+    this.copy = false;
   }
 
   preview(): Preview {
@@ -127,6 +142,7 @@ export class PushPullTool implements Tool {
           const a = model.pos(v);
           const b = model.pos(ring[(i + 1) % ring.length]);
           pts.push(add(a, shift), add(b, shift), a, add(a, shift));
+          if (this.copy) pts.push(a, b);
         });
       }
       lines.push({ points: pts, color: 'preview', width: 2 });

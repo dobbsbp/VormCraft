@@ -10,6 +10,7 @@ import { loadSettings, saveSettings, type Settings } from './settings';
 import { showSettingsDialog } from './settingsDialog';
 import { APP_VERSION, checkForUpdates, type UpdateHooks } from './updater';
 import { graphicsChoice, setGraphicsChoice } from './graphics';
+import { maybeShowGraphicsTip } from './graphicsTip';
 import { installedWebApp, startOffline } from './webApp';
 
 /**
@@ -120,6 +121,8 @@ export class Lifecycle {
         'Graphics acceleration is off',
         `VormCraft is drawing without the graphics card (${gpu.renderer}), so it will be slow.\n\nUpdating your graphics drivers usually fixes this. On a laptop with two graphics chips, you can also set VormCraft to "High performance" in Windows Settings → System → Display → Graphics.`,
       );
+    } else if (!isTauri()) {
+      void maybeShowGraphicsTip(document.getElementById('viewport')!, gpu.renderer);
     }
     await startOffline();
     const launched = await this.launchFile();

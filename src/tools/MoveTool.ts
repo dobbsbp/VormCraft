@@ -9,8 +9,9 @@ import { formatLength, parseLength, parseLengths } from './units';
 
 /**
  * Move: click a start point on the selection (or on an object, with nothing selected), then the
- * point to move it to; or type a distance (along the mouse direction) or "dx,dy,dz". Tap Ctrl to
- * toggle copying; after a copy type "3x" for a row of 3 copies, or "/3" to spread 3 copies
+ * point to move it to; or type a distance (along the mouse direction) or "dx,dy,dz". Press Ctrl to
+ * copy instead (the copy follows the mouse; copy mode ends with the copy, as in SketchUp); after a
+ * copy type "3x" for a row of 3 copies, or "/3" to spread 3 copies
  * over the distance. Arrow keys lock the direction to an axis. Typing after finishing changes
  * the last move.
  */
@@ -29,7 +30,7 @@ export class MoveTool implements Tool {
 
   hint(): string {
     const mode = this.copy ? 'Copy mode (Ctrl to switch off). ' : '';
-    if (!this.from) return `${mode}Click the point to move from (on the selection, or on an object). Tap Ctrl to copy.`;
+    if (!this.from) return `${mode}Click the point to move from (on the selection, or on an object). Press Ctrl to copy.`;
     return `${mode}Click where it goes, or type a distance or dx,dy,dz. Arrow keys lock an axis.`;
   }
 
@@ -49,6 +50,10 @@ export class MoveTool implements Tool {
 
   toggleCopy(): boolean {
     this.copy = !this.copy;
+    return this.copy;
+  }
+
+  copying(): boolean {
     return this.copy;
   }
 
@@ -75,12 +80,13 @@ export class MoveTool implements Tool {
     const steps = Array.from({ length: copy ? count : 1 }, (_, i) => translation(scale(vector, divide ? (i + 1) / count : i + 1)));
     const before = this.ctx.apply(() => applyToTargets(this.ctx.doc, targets, steps, copy), base);
     this.last = { base: before, targets, vector, copy, count, divide };
+    this.copy = false;
   }
 
   typed(text: string): void {
     const array = parseArray(text);
     if (array) {
-      if (!this.last?.copy || this.from) throw new Error('Make a copy first (tap Ctrl, then move), then type 3x or /3');
+      if (!this.last?.copy || this.from) throw new Error('Make a copy first (press Ctrl, then move), then type 3x or /3');
       const l = this.last;
       this.commit(l.targets, l.vector, true, array.count, array.divide, l.base);
       return;
@@ -110,6 +116,7 @@ export class MoveTool implements Tool {
   reset(): void {
     this.cancel();
     this.last = null;
+    this.copy = false;
   }
 
   preview(): Preview {

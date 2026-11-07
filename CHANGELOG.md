@@ -4,6 +4,16 @@ What changed in each version of VormCraft. The section for a version is also sho
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
+## 0.5.0
+
+- Undo after reopening: the last 100 undo steps are saved with the design, so Ctrl+Z still works after you close and open it again. Each step stores only what changed, so files stay small. Files saved this way need this version of VormCraft or newer.
+- New logo, for the app, the web app and the toolbar.
+- Ctrl+A selects everything in your model (it used to select the page's text and buttons).
+- Copying works as in SketchUp: press Ctrl while using Move or Rotate (before or during the move), a + shows on the cursor, and the copy follows the mouse while the original stays. Copy mode ends with the copy.
+- Push/Pull: a pull that would leave two parts touching only along an edge is now refused with a clear message, and your model stays as it was.
+- Push/Pull with Ctrl makes a new starting face: an edge stays where the face was, so the new sides are separate faces (handy for stacking floors).
+- Web version: browsers on Windows usually run on the built-in graphics, even when the computer has a faster graphics card. VormCraft now notices and shows once how to switch the browser to the faster card (Settings → Graphics card shows the steps too).
+
 ## 0.4.6
 
 - Arc and Pie: after the radius, the Measurements box asks how many segments to use (type any number and press Enter, or press Enter to keep 12), then the angle.

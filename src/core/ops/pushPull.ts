@@ -4,7 +4,9 @@ import { interiorPoint, intersectSegments, pointInRegion, type Vec2 } from '../m
 import { ANGLE_TOL, TOL } from '../math/tolerance';
 import { add, dot, scale, type Vec3 } from '../math/vec3';
 import { Model, type CurveId, type FaceId, type HalfEdgeId, type VertexId } from '../model/Model';
+import { findFaceAt } from '../model/query';
 import { mergeCoplanarFaces, onCircle, removeCollinearVertices } from './cleanup';
+import { drawEdges } from './edges';
 import { imprintSegments, type ImprintSegment } from './imprint';
 
 export type PushPullMode = 'none' | 'extrude' | 'flush-through' | 'boolean';
@@ -27,24 +29,57 @@ const OVERSHOOT = 0.01;
  * - On a closed solid, pulling out adds material and pushing in removes it. If a push lands exactly
  *   on an opposite face of the solid, both faces are removed and the side walls kept (a through-hole);
  *   otherwise Manifold computes the boolean, so cuts follow whatever the solid looks like.
+ * With `newStart` (Ctrl, SketchUp's "new starting face"), the new side walls stay separate faces:
+ * an edge loop is left where the face was instead of the walls merging with the neighbouring
+ * faces they line up with (stacking floors, for example). Pushing into a solid is unchanged.
  */
-export function pushPull(model: Model, faceId: FaceId, distance: number): PushPullResult {
+export function pushPull(model: Model, faceId: FaceId, distance: number, opts: { newStart?: boolean } = {}): PushPullResult {
   if (Math.abs(distance) <= TOL) return { mode: 'none', face: faceId, faces: [] };
   const shell = model.connectedFaces(faceId);
-  if (!model.isClosed(shell)) return extrudeOpenFace(model, faceId, distance);
+  if (!model.isClosed(shell)) return extrudeOpenFace(model, faceId, distance, opts);
   if (distance < 0) {
     const flush = tryFlushPushThrough(model, faceId, distance, shell);
     if (flush) return flush;
   }
-  return booleanPushPull(model, faceId, distance, shell);
+  if (!opts.newStart || distance < 0) return booleanPushPull(model, faceId, distance, shell);
+  // A new starting face on a solid: an ordinary pull (so whatever the new part touches is joined
+  // properly), then the face's old outline drawn back where it shows, like lines drawn by hand.
+  const outline = outlineSegments(model, faceId);
+  const result = booleanPushPull(model, faceId, distance, shell);
+  redrawOutline(model, outline);
+  return result;
+}
+
+type OutlineSegment = { a: Vec3; b: Vec3; curve: CurveId | null };
+
+/** The edges around a face, as positions (with their true-curve tags). */
+function outlineSegments(model: Model, faceId: FaceId): OutlineSegment[] {
+  return model.faceVertexLoops(faceId).flatMap((ring) =>
+    ring.map((v, i) => {
+      const w = ring[(i + 1) % ring.length];
+      return { a: model.pos(v), b: model.pos(w), curve: model.he(model.halfEdgeBetween(v, w)!).curve };
+    }),
+  );
+}
+
+/** Draw outline segments that lie on a face now (not those inside the solid, or already edges). */
+function redrawOutline(model: Model, segments: OutlineSegment[]): void {
+  for (const s of segments) {
+    const va = model.findVertex(s.a);
+    const vb = model.findVertex(s.b);
+    if (va !== undefined && vb !== undefined && model.halfEdgeBetween(va, vb) !== undefined) continue;
+    if (findFaceAt(model, scale(add(s.a, s.b), 0.5)) === undefined) continue;
+    const curve = s.curve !== null && model.curves.has(s.curve) ? s.curve : null;
+    drawEdges(model, [s.a, s.b], { curve });
+  }
 }
 
 /**
  * Extrude a free-standing face into a solid: base (original, reversed), side walls, and the cap,
  * which keeps the face id. A negative distance extrudes behind the face.
  */
-export function extrudeOpenFace(model: Model, faceId: FaceId, distance: number): PushPullResult {
-  if (model.adjacentFaces(faceId).size > 0) return extrudeAttachedFace(model, faceId, distance);
+export function extrudeOpenFace(model: Model, faceId: FaceId, distance: number, opts: { newStart?: boolean } = {}): PushPullResult {
+  if (model.adjacentFaces(faceId).size > 0) return extrudeAttachedFace(model, faceId, distance, opts.newStart ?? false);
   if (distance < 0) {
     model.flipFace(faceId);
     distance = -distance;
@@ -68,9 +103,10 @@ export function extrudeOpenFace(model: Model, faceId: FaceId, distance: number):
  * Push/pull a face that is joined to other faces of an open surface (one half of a split sheet,
  * a rectangle drawn inside a bigger face, the floor of an open box), as SketchUp does: the face
  * moves and side walls join it to where it was, with no new face left behind, so the surface
- * gets a bump (or a dent). Walls that line up with neighbouring faces merge into them.
+ * gets a bump (or a dent). Walls that line up with neighbouring faces merge into them, unless
+ * `keepEdges` (a new starting face).
  */
-function extrudeAttachedFace(model: Model, faceId: FaceId, distance: number): PushPullResult {
+function extrudeAttachedFace(model: Model, faceId: FaceId, distance: number, keepEdges: boolean): PushPullResult {
   const n = model.face(faceId).normal;
   const rings = model.faceVertexLoops(faceId);
   const edgeCurves = ringEdgeCurves(model, rings);
@@ -83,6 +119,7 @@ function extrudeAttachedFace(model: Model, faceId: FaceId, distance: number): Pu
   const walls = buildWalls(model, rings, top);
   const cap = model.addFace(lift(rings[0]), rings.slice(1).map(lift), { normal: n, id: faceId });
   tagOffsetCurves(model, edgeCurves, top, n, distance);
+  if (keepEdges) return { mode: 'extrude', face: cap, faces: [...walls, cap] };
   const touched = new Set<VertexId>();
   mergeCoplanarFaces(model, walls, touched);
   removeCollinearVertices(model, touched);

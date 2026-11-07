@@ -12,6 +12,7 @@ import { shrinkImage } from './materialLibrary';
 import { showSkpDialog } from './skpDialog';
 import { readSkp } from './skpReader';
 import type { FileFilter, FileHost, OpenedFile } from './files';
+import type { DriveLocation } from './drive/driveSession';
 import type { Settings } from './settings';
 
 const MODEL_FILTER: FileFilter = { name: 'VormCraft model', extensions: [FILE_EXTENSION] };
@@ -40,6 +41,10 @@ export class FileCommands {
   name = 'Untitled';
   /** Where the document lives on disk (desktop only), so Save writes back to it. */
   path: string | undefined;
+  /** The Google Drive file the design lives in (opened from or saved to Drive), if any. */
+  drive: DriveLocation | undefined;
+  /** Save for a design that lives in Google Drive (set when Drive is available). */
+  saveToDrive: (() => Promise<void>) | null = null;
   onTitleChange: () => void = () => {};
   /** The opened file as it was, while it is in an older format and not yet backed up. */
   private olderFormat: { text: string; version: number } | null = null;
@@ -68,6 +73,7 @@ export class FileCommands {
     this.controller.replaceDocument(new Document());
     this.name = 'Untitled';
     this.path = undefined;
+    this.drive = undefined;
     this.olderFormat = null;
     this.onTitleChange();
   }
@@ -93,6 +99,14 @@ export class FileCommands {
     await this.guard(async () => this.load({ name, text }));
   }
 
+  /** Open a design read from Google Drive (after the caller checked unsaved changes). */
+  async openFromDrive(name: string, text: string, drive: DriveLocation): Promise<void> {
+    await this.guard(async () => {
+      this.load({ name, text });
+      this.drive = drive;
+    });
+  }
+
   private load(file: OpenedFile): void {
     let doc: Document;
     try {
@@ -105,6 +119,7 @@ export class FileCommands {
     this.name = file.name.replace(EXTENSION, '');
     // A file from before the rename is saved as a new .vorm file, not over the old one.
     this.path = EXTENSION.exec(file.name)?.[1].toLowerCase() === FILE_EXTENSION ? file.path : undefined;
+    this.drive = undefined;
     const version = fileFormatVersion(file.text) ?? FORMAT_VERSION;
     this.olderFormat = version < FORMAT_VERSION && this.path ? { text: file.text, version } : null;
     // The design as opened is the first point to come back to.
@@ -119,16 +134,34 @@ export class FileCommands {
     this.controller.dirty = true;
     this.name = name;
     this.path = path;
+    this.drive = undefined;
     this.olderFormat = null;
     this.onTitleChange();
   }
 
+  /** The design as it is saved now (recording a "save" point in its history first). */
+  textForSave(): string {
+    const s = this.options.settings();
+    if (s.history) this.controller.recordVersion('save', s.historyLimitMB * 1024 * 1024);
+    return serializeDocument(this.controller.doc, { history: s.history, undo: s.history ? this.controller.history.steps : undefined });
+  }
+
+  /** The design was saved somewhere other than this device's files (Google Drive). */
+  async savedElsewhere(fileName: string, drive: DriveLocation): Promise<void> {
+    this.olderFormat = null;
+    this.name = fileName.replace(EXTENSION, '');
+    this.path = undefined;
+    this.drive = drive;
+    this.controller.markSaved();
+    await this.options.autosave?.clear();
+    this.onTitleChange();
+  }
+
   async save(saveAs = false): Promise<void> {
+    if (!saveAs && this.drive && this.saveToDrive) return this.saveToDrive();
     this.controller.endPreview();
     await this.guard(async () => {
-      const s = this.options.settings();
-      if (s.history) this.controller.recordVersion('save', s.historyLimitMB * 1024 * 1024);
-      const text = serializeDocument(this.controller.doc, { history: s.history });
+      const text = this.textForSave();
       const target = saveAs ? undefined : this.path;
       // First save over a file from an older format: keep the original beside it.
       if (target && this.olderFormat && target === this.path) {
@@ -140,6 +173,7 @@ export class FileCommands {
       this.olderFormat = null;
       this.name = written.name.replace(EXTENSION, '');
       this.path = written.path;
+      this.drive = undefined;
       this.controller.markSaved();
       await this.options.autosave?.clear();
       this.controller.notify(this.host.native ? `Saved ${written.name}` : `Downloaded ${written.name}`);
@@ -252,7 +286,7 @@ export class FileCommands {
   }
 
   /** File errors become a status-bar message instead of an uncaught rejection. */
-  private async guard(fn: () => Promise<void>): Promise<void> {
+  async guard(fn: () => Promise<void>): Promise<void> {
     try {
       await fn();
     } catch (err) {

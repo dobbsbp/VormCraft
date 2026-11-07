@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/logo.png" alt="VormCraft: 3D modeling software" width="420"></p>
+
 # VormCraft
 
 **A free, fast, direct 3D modeler: draw a shape, grab a face, push it.**
@@ -40,7 +42,7 @@ Both versions have the same version number and open the same `.vorm` files.
   - Double-click a face to repeat the last distance.
 - **Offset**: copy a face's outline inward or outward, or offset a chain of edges.
 - **Follow Me**: sweep a profile along a path, for mouldings, pipes, grooves, chamfers and lathed (turned) shapes.
-- **Move** and **Rotate**: tap Ctrl to make copies, then type a count (`5x` or `/5`) to make arrays. **Scale** resizes selected geometry; negative factors mirror.
+- **Move** and **Rotate**: press Ctrl to copy instead (a + shows on the cursor and the copy follows the mouse; copy mode ends with the copy), then type a count (`5x` or `/5`) to make arrays. **Push/Pull** with Ctrl makes a new starting face: an edge loop stays where the face was, so the new sides are separate faces (stacking floors, for example). **Scale** resizes selected geometry; negative factors mirror.
 - **Eraser**, **Tape Measure** (measure, place guides, rescale the model) and **Text** labels.
 - **Reverse Faces**, **Flip Along** red/green/blue, and **Soften/Unsoften Edges** (from the right-click menu).
 - Curves keep their true radius, so circles and arcs export smoothly at any resolution.
@@ -80,11 +82,13 @@ Right-click anything to select it and get a menu for it:
 - **Autosave** every minute (when something changed) to a backup folder. Your own file only changes when you save. If VormCraft closes without saving, it offers your work back next time.
 - **History:** every design keeps its earlier versions (recorded at each autosave and save, compressed, inside the `.vorm` file). Open **History**, click a version to look at it, then **Restore this version** or go **Back to now**. Restoring never loses anything: what you had stays in the list, and Undo works too.
 - Older versions are thinned out over time (everything from the last day, one per hour for a week, then one per day) and the history has a size limit.
-- **Save a Copy Without History** for sending a design to someone.
+- **Undo after reopening:** the last 100 undo steps are saved in the file too, so Ctrl+Z still goes back after you close and reopen a design. Each step stores only what changed, so 100 steps usually add well under a megabyte.
+- **Save a Copy Without History** for sending a design to someone (it leaves out the undo steps too).
 - **Settings** (gear button): autosave on/off and how often, the backup folder, how long unrecovered backups are kept, history on/off and its size limit, the graphics card, update checks.
 
 ### Graphics and help
 - Uses the graphics card through WebGL (Direct3D 11 on Windows). On laptops with two graphics chips, the Windows app uses the faster one by default; **Settings → Graphics card** switches between High performance, Power saving and Let Windows decide. If a computer can only draw without the graphics card, VormCraft says so.
+- In the web version, Windows chooses the graphics card for the whole browser, usually the built-in one. When VormCraft runs on built-in graphics there, it shows once how to give the browser the faster card (Windows Settings → System → Display → Graphics → High performance); Settings → Graphics card shows the same steps.
 - **Help** (the ? button): Keyboard and Mouse reference (also **F1**), What's New, Check for Updates, Report a Problem or Idea, and About (version and graphics card in use).
 
 ### Files and export
@@ -129,7 +133,8 @@ Standard views (top, front, iso, …), Zoom Window, Previous View, display style
 | Shift+Z | Zoom Extents | Shift+V | Previous View |
 | K | Back Edges | Shift+S | Search commands |
 | Ctrl+G | Make Group | Esc | Cancel / clear selection / close group |
-| Ctrl+I | Import SketchUp, OBJ or STL | | |
+| Ctrl+I | Import SketchUp, OBJ or STL | Ctrl+A | Select everything in the model |
+| Ctrl | Copy (Move, Rotate); new starting face (Push/Pull) | | |
 | Delete | Erase selection | Page Down / Page Up | Next / previous scene |
 | Ctrl+Z / Ctrl+Y | Undo / Redo | Ctrl+N / O / S | New / Open / Save |
 | Ctrl+Shift+S | Save As | Esc | Leave an earlier version (History) |

@@ -75,6 +75,13 @@ function applyOp(a: Manifold, b: Manifold, op: BooleanOp): Manifold {
   return a.intersect(b);
 }
 
+/** The result would have parts touching only along an edge (or at faces back to back). */
+export class NonManifoldResult extends Error {
+  constructor() {
+    super('That would leave parts touching only along an edge, which VormCraft cannot model. Try a slightly different distance (or join the parts more).');
+  }
+}
+
 export interface BooleanResult {
   /** Faces of the result in the target model. */
   faces: FaceId[];
@@ -127,10 +134,21 @@ export function booleanInPlace(model: Model, targetFaces: ReadonlySet<FaceId>, t
     const m = model.face(f).material;
     if (m !== undefined) materials.set(f, m);
   }
+  const saved = [...targetFaces].map((f) => ({ id: f, rings: model.faceVertexLoops(f), normal: model.face(f).normal, material: model.face(f).material }));
   for (const f of targetFaces) model.removeFace(f);
-  const result = rebuildFaces(model, out, planes, normals, snap, materials);
+  const newVertices: VertexId[] = [];
+  let faces: FaceId[];
+  try {
+    faces = rebuildFaces(model, out, planes, normals, snap, materials, newVertices);
+  } catch (err) {
+    if (!(err instanceof NonManifoldResult)) throw err;
+    // Put the solid back as it was.
+    for (const s of saved) model.addFace(s.rings[0], s.rings.slice(1), { id: s.id, normal: s.normal, material: s.material });
+    for (const v of newVertices) model.removeVertexIfIsolated(v);
+    throw err;
+  }
   model.purgeFree(oldEdges);
-  return { ...result, toolFaceIds };
+  return { faces, newVertices, toolFaceIds };
 }
 
 function rebuildFaces(
@@ -140,7 +158,8 @@ function rebuildFaces(
   normals: Map<number, Vec3>,
   snap: SpatialHash<VertexId>,
   materials: Map<number, MaterialId>,
-): { faces: FaceId[]; newVertices: VertexId[] } {
+  newVertices: VertexId[],
+): FaceId[] {
   const np = mesh.numProp;
   const nVerts = mesh.vertProperties.length / np;
   const nTris = mesh.triVerts.length / 3;
@@ -149,7 +168,6 @@ function rebuildFaces(
   const incident: Set<number>[] = Array.from({ length: nVerts }, () => new Set());
   for (let t = 0; t < nTris; t++) for (let k = 0; k < 3; k++) incident[mesh.triVerts[t * 3 + k]].add(faceID[t]);
 
-  const newVertices: VertexId[] = [];
   const vid: VertexId[] = new Array(nVerts);
   for (let i = 0; i < nVerts; i++) {
     const p: Vec3 = [mesh.vertProperties[i * np], mesh.vertProperties[i * np + 1], mesh.vertProperties[i * np + 2]];
@@ -187,6 +205,15 @@ function rebuildFaces(
     }
   }
 
+  // Parts of the result that touch only along an edge (or two faces back to back) would put more
+  // than two faces on one edge, which the model cannot hold: refuse before changing anything.
+  const owner = new Set<string>();
+  for (const edges of groups.values()) {
+    for (const k of edges.keys()) {
+      if (owner.has(k)) throw new NonManifoldResult();
+      owner.add(k);
+    }
+  }
   const faces: FaceId[] = [];
   for (const [id, edges] of groups) {
     if (edges.size === 0) continue;
@@ -199,7 +226,7 @@ function rebuildFaces(
       faces.push(model.addFace(r.outer, r.holes, { normal: normals.get(id), id: reuse ? id : undefined, material: materials.get(id) }));
     });
   }
-  return { faces, newVertices };
+  return faces;
 }
 
 /**

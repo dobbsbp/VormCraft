@@ -9,6 +9,8 @@ export const LINKS = {
   newIssue: 'https://github.com/dobbsbp/VormCraft/issues/new',
   /** Donations (GitHub Sponsors). */
   support: 'https://github.com/sponsors/dobbsbp',
+  /** The newest Windows installer. */
+  windowsApp: 'https://github.com/dobbsbp/VormCraft/releases/latest',
 };
 
 /** Open a web page in the user's browser (the desktop app hands it to the system). */
@@ -24,11 +26,12 @@ const OTHER_KEYS: [string, string][] = [
   ['Ctrl+N / Ctrl+O', 'New / Open'],
   ['Ctrl+S / Ctrl+Shift+S', 'Save / Save As'],
   ['Ctrl+Z / Ctrl+Y', 'Undo / Redo'],
+  ['Ctrl+A', 'Select everything in the model'],
   ['Ctrl+G', 'Make Group'],
   ['Delete', 'Erase the selection'],
   ['Esc', 'Cancel; clear the selection; close a group; leave an earlier version'],
   ['Page Down / Page Up', 'Next / previous scene'],
-  ['Ctrl (tap)', 'Copy mode in Move and Rotate'],
+  ['Ctrl', 'Copy in Move and Rotate; new starting face in Push/Pull (+ on the cursor)'],
   ['F1', 'This list'],
 ];
 

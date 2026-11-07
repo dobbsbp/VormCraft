@@ -203,8 +203,10 @@ export interface Tool {
   readonly dragIsClick?: boolean;
   /** True while every typed key is text for the tool (e.g. editing a label), not a shortcut. */
   acceptsText?(): boolean;
-  /** Ctrl tapped: toggle copy mode (Move/Rotate). Returns the new state. */
+  /** Ctrl pressed: switch copy mode (Move, Rotate; Push/Pull's new starting face). Returns the new state. */
   toggleCopy?(): boolean;
+  /** Copy mode is on (the cursor shows a +). */
+  copying?(): boolean;
   /** Arrow key: a tool-specific axis lock (Rotate picks its rotation axis). Returns a status message, or null to fall back to the normal inference lock. */
   lockAxis?(lock: AxisLock): string | null;
 }

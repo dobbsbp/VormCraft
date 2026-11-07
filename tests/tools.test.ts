@@ -302,6 +302,85 @@ describe('Circle tool', () => {
 });
 
 describe('Push/Pull tool', () => {
+  it('Ctrl: a new starting face leaves an edge loop where the face was; the mode ends with the push', () => {
+    const { doc, model, controller } = boxHarness();
+    const t = use(controller, 'pushpull');
+    expect(controller.toggleCopy()).toBe(true);
+    expect(controller.notice).toMatch(/new starting face on/);
+    expect(t.copying!()).toBe(true);
+    const top = findFaceAt(model, [50, 50, 20])!;
+    t.pointerDown(ev(doc, [50, 50, 20], { face: top }));
+    controller.typed('10');
+    expect(volume(model)).toBeCloseTo(100 * 100 * 30);
+    expect(model.faces.size).toBe(10); // the new sides stay separate from the old ones
+    expect(findFaceAt(model, [50, 0, 10])).not.toBe(findFaceAt(model, [50, 0, 25]));
+    expect(checkWatertight(model).watertight).toBe(true);
+    expect(t.copying!()).toBe(false);
+    // Typing again changes that push, still as a new starting face.
+    controller.typed('15');
+    expect(volume(model)).toBeCloseTo(100 * 100 * 35);
+    expect(model.faces.size).toBe(10);
+    // Without Ctrl the walls merge as before.
+    const top2 = findFaceAt(model, [50, 50, 35])!;
+    t.pointerDown(ev(doc, [50, 50, 35], { face: top2 }));
+    controller.typed('5');
+    expect(model.faces.size).toBe(10);
+    expect(checkWatertight(model).watertight).toBe(true);
+  });
+
+  it('Ctrl on a face drawn inside another keeps the edge loop too', () => {
+    const { doc, model, controller } = harness();
+    drawRectangle(model, GROUND_PLANE, [0, 0, 0], 100, 100);
+    const inner = drawRectangle(model, GROUND_PLANE, [20, 20, 0], 20, 20).inner!;
+    const t = use(controller, 'pushpull');
+    controller.toggleCopy();
+    t.pointerDown(ev(doc, [30, 30, 0], { face: inner }));
+    controller.typed('10');
+    expect(model.findVertex([20, 20, 10])).toBeDefined();
+    model.validate();
+  });
+
+  it('Ctrl pulls that end up touching other parts join them properly; every face still pulls', () => {
+    const { model } = harness();
+    pushPull(model, drawRectangle(model, GROUND_PLANE, [0, 0, 0], 100, 100).inner!, 100);
+    pushPull(model, findFaceAt(model, [100, 50, 50])!, 50, { newStart: true });
+    pushPull(model, findFaceAt(model, [125, 50, 100])!, 50, { newStart: true });
+    // The first box's top, pulled up beside the block on the right: they touch at x = 100.
+    pushPull(model, findFaceAt(model, [50, 50, 100])!, 50, { newStart: true });
+    model.validate();
+    expect(checkWatertight(model).watertight).toBe(true);
+    expect(volume(model)).toBeCloseTo(100 * 100 * 150 + 50 * 100 * 150);
+    for (const f of [...model.faces.keys()]) {
+      const c = model.clone();
+      expect(() => pushPull(c, f, 30)).not.toThrow();
+    }
+  });
+
+  it('a pull that would leave parts touching only along an edge is refused, and nothing changes', () => {
+    const { model } = harness();
+    const slab = drawRectangle(model, GROUND_PLANE, [0, 0, 0], 200, 200).inner!;
+    pushPull(model, slab, -50);
+    const top = () => findFaceAt(model, [150, 150, 0])!;
+    const a = drawRectangle(model, GROUND_PLANE, [0, 0, 0], 100, 100, findFaceAt(model, [50, 50, 0])).inner!;
+    pushPull(model, a, 100);
+    const b = drawRectangle(model, GROUND_PLANE, [100, 100, 0], 100, 100, top()).inner!;
+    const faces = model.faces.size;
+    expect(() => pushPull(model, b, 100)).toThrow(/touching only along an edge/);
+    model.validate();
+    expect(model.faces.size).toBe(faces);
+    expect(checkWatertight(model).watertight).toBe(true);
+  });
+
+  it('Ctrl does not change pushing into a solid', () => {
+    const { doc, model, controller } = boxHarness();
+    const t = use(controller, 'pushpull');
+    controller.toggleCopy();
+    t.pointerDown(ev(doc, [50, 50, 20], { face: findFaceAt(model, [50, 50, 20])! }));
+    controller.typed('-5');
+    expect(volume(model)).toBeCloseTo(100 * 100 * 15);
+    expect(checkWatertight(model).watertight).toBe(true);
+  });
+
   it('click a face, move, click: extrudes by the distance along the normal', () => {
     const { doc, model, controller } = harness();
     const f = drawRectangle(model, GROUND_PLANE, [0, 0, 0], 10, 10).inner!;

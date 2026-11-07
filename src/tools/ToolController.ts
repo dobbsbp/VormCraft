@@ -260,7 +260,9 @@ export class ToolController {
     this.doc.editing = null;
     this.doc.restore(next.snapshot());
     this.doc.versions.copyFrom(next.versions);
-    this.history.clear();
+    // Undo steps saved with the file: Ctrl+Z goes back through them as before it was closed.
+    this.history.load(next.savedUndo);
+    next.savedUndo = [];
     this.selection.clear();
     this.dirty = false;
     this.error = null;
@@ -282,11 +284,18 @@ export class ToolController {
     return { ...hints, lock: { dir: AXES[axis], axis } };
   }
 
-  /** Ctrl tapped on its own: toggle copy mode in tools that copy (Move, Rotate). */
-  toggleCopy(): void {
-    if (!this.tool.toggleCopy) return;
-    this.notice = this.tool.toggleCopy() ? `${this.tool.name}: copy mode on (tap Ctrl to switch off)` : `${this.tool.name}: copy mode off`;
+  /**
+   * Ctrl pressed: switch copy mode in tools that copy (Move, Rotate; Push/Pull makes a new starting
+   * face). `quiet` takes a switch back without a message (Ctrl was the start of a shortcut).
+   * Returns whether the tool has a copy mode.
+   */
+  toggleCopy(quiet = false): boolean {
+    if (!this.tool.toggleCopy) return false;
+    const on = this.tool.toggleCopy();
+    const what = this.tool.id === 'pushpull' ? 'new starting face' : 'copy mode';
+    this.notice = quiet ? null : on ? `${this.tool.name}: ${what} on (press Ctrl again to switch off)` : `${this.tool.name}: ${what} off`;
     this.onUpdate();
+    return true;
   }
 
   /** Arrow keys: lock (or unlock, pressing the same key again) the next point to a direction. */

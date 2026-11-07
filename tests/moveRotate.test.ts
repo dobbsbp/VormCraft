@@ -95,6 +95,21 @@ describe('Move tool', () => {
     expect(shells(H)).toBe(1);
   });
 
+  it('copy mode ends with the copy; the next move moves', () => {
+    const H = boxH();
+    const t = use(H.controller, 'move');
+    H.controller.toggleCopy();
+    expect(t.copying!()).toBe(true);
+    click(H, [0, 0, 0], { kind: 'endpoint', face: findFaceAt(H.model, [5, 10, 0], [0, 0, -1])! });
+    move(H, [5, 0, 0], { face: null });
+    H.controller.typed('50');
+    expect(shells(H)).toBe(2);
+    expect(t.copying!()).toBe(false);
+    H.controller.toggleCopy(true); // a shortcut took it back: no message
+    H.controller.toggleCopy(true);
+    expect(H.controller.notice).toBeNull();
+  });
+
   it('arrays need a copy first', () => {
     const H = boxH();
     use(H.controller, 'move');

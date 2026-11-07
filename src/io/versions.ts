@@ -2,23 +2,14 @@ import { gunzipSync, gzipSync, strFromU8, strToU8 } from 'fflate';
 import type { Document } from '../doc/Document';
 import type { Version, VersionKind, Versions } from '../doc/Versions';
 import { parseDocument, serializeDocument } from './fileFormat';
+import { hashText } from './hash';
+
+export { hashText };
 
 /** Texture images in a version's document are replaced by `TEXTURE_REF` + hash. */
 const TEXTURE_REF = '#texture:';
 const HOUR = 3600_000;
 const DAY = 24 * HOUR;
-
-/** A 64-bit FNV-1a hash (as hex) plus the length: enough to tell document states apart. */
-export function hashText(text: string): string {
-  let a = 0x811c9dc5;
-  let b = 0x01000193 ^ text.length;
-  for (let i = 0; i < text.length; i++) {
-    const c = text.charCodeAt(i);
-    a = Math.imul(a ^ c, 0x01000193) >>> 0;
-    b = Math.imul(b ^ c, 0x5bd1e995) >>> 0;
-  }
-  return `${text.length.toString(36)}-${a.toString(16)}${b.toString(16)}`;
-}
 
 function toBase64(bytes: Uint8Array): string {
   let s = '';
