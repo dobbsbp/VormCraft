@@ -103,6 +103,8 @@ export class Lifecycle {
         '',
         'https://github.com/dobbsbp/VormCraft',
         'MIT licence.',
+        '',
+        'VormCraft is free and always will be. If it is useful to you, a small donation helps pay for the website and upkeep: Help → Support VormCraft ♥.',
       ].join('\n'),
     );
   }

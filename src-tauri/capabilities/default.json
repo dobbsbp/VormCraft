@@ -19,6 +19,9 @@
       "allow": [
         {
           "url": "https://github.com/dobbsbp/VormCraft*"
+        },
+        {
+          "url": "https://github.com/sponsors/dobbsbp*"
         }
       ]
     },

@@ -135,6 +135,11 @@ body {
   background: var(--button-hover);
 }
 
+/* The heart on the toolbar (Support VormCraft): coloured, so it is easy to find. */
+.support-button {
+  color: #d6336c;
+}
+
 .icon-button[aria-pressed='true'] {
   background: var(--accent-soft);
   border-color: var(--accent);
@@ -397,6 +402,27 @@ body {
   color: var(--text);
   background: #fff;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+}
+
+.modal.support .qris {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 4px 0 8px;
+}
+
+.modal.support .qris[hidden] {
+  display: none;
+}
+
+.modal.support .qris img {
+  flex: none;
+  width: 280px;
+  max-width: 60vw;
+  height: auto;
+  border-radius: 4px;
+  background: #fff;
+  object-fit: contain;
 }
 
 .modal::backdrop {

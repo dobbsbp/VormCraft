@@ -31,6 +31,7 @@ Both versions have the same version number and open the same `.vorm` files.
 - The tool icons can be tucked away into a narrow tab (the bar above them) for more room; click the tab to bring them back.
 - Every tool takes typed input. Type a length, `width,length` or a radius and press Enter, for example `1200,600`, `2.5m`, `3'6"`. Lengths are in millimetres by default; cm, m, in and ft are also accepted.
 - **Circle**: click the centre, type the number of sides and press Enter (or just Enter for 24), then type the radius and press Enter. Or click to set the radius.
+- **Arc** and **Pie**: click the centre, click the start or type the radius and press Enter, type the number of segments and press Enter (or just Enter for 12), then type the angle in degrees (360 makes a full circle) or click the end.
 
 ### Modeling
 - **Push/Pull**: extrude a face out to add material, or in to remove it.
@@ -202,6 +203,14 @@ Features are added as real use calls for them. Ideas on the list:
 Bug reports and suggestions are welcome in [Issues](../../issues).
 
 ---
+
+## Support VormCraft
+
+VormCraft is free and always will be. If it's useful to you, a small donation helps pay for the website and upkeep: **[Sponsor VormCraft on GitHub ♥](https://github.com/sponsors/dobbsbp)**. In the app, it's the heart on the toolbar, or Help → Support VormCraft.
+
+In Indonesia you can also scan this QRIS code with any bank or e-wallet app:
+
+<img src="src/app/assets/qris.jpeg" alt="QRIS payment code for VormCraft" width="280">
 
 ## License
 

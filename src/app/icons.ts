@@ -20,6 +20,8 @@ export const ICONS = {
   // A clock with an arrow running back round it.
   // An arrow dropping into an open box (a model coming in).
   importFile: svg('<path d="M12 2v9M9 8l3 3 3-3"/><path d="M4 13l8 4 8-4M4 13v5l8 4 8-4v-5"/>'),
+  // A heart (Support VormCraft).
+  heart: svg('<path d="M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.2a4.3 4.3 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20Z"/>'),
   // A question mark in a circle.
   help: svg('<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.6 2.6 0 0 1 5 1c0 1.8-2.5 2.2-2.5 4"/><circle cx="12" cy="17.3" r="0.9" fill="currentColor" stroke="none"/>'),
   history: svg('<path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/><path d="M12 8v4l3 2"/>'),

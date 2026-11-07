@@ -7,6 +7,8 @@ export const LINKS = {
   project: 'https://github.com/dobbsbp/VormCraft',
   releaseNotes: `https://github.com/dobbsbp/VormCraft/releases/tag/v${APP_VERSION}`,
   newIssue: 'https://github.com/dobbsbp/VormCraft/issues/new',
+  /** Donations (GitHub Sponsors). */
+  support: 'https://github.com/sponsors/dobbsbp',
 };
 
 /** Open a web page in the user's browser (the desktop app hands it to the system). */
@@ -93,7 +95,7 @@ export function showShortcuts(): void {
 }
 
 /** The Help menu (toolbar "?" button). */
-export function helpMenu(actions: { checkForUpdates(): void; about(): void }): MenuEntry[] {
+export function helpMenu(actions: { checkForUpdates(): void; about(): void; support(): void }): MenuEntry[] {
   return [
     { label: 'Keyboard and Mouse', shortcut: 'F1', run: showShortcuts },
     { label: 'What’s New in This Version', run: () => void openLink(LINKS.releaseNotes) },
@@ -101,6 +103,7 @@ export function helpMenu(actions: { checkForUpdates(): void; about(): void }): M
     'separator',
     { label: 'Report a Problem or Idea…', run: () => void openLink(LINKS.newIssue) },
     { label: 'VormCraft on GitHub', run: () => void openLink(LINKS.project) },
+    { label: 'Support VormCraft ♥', run: actions.support },
     'separator',
     { label: 'About VormCraft', run: actions.about },
   ];

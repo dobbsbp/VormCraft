@@ -31,3 +31,14 @@ describe('desktop permissions', () => {
     expect([...used].filter((p) => !granted.has(p))).toEqual([]);
   });
 });
+
+describe('desktop links', () => {
+  it('every link the app opens is allowed by the desktop opener scope', async () => {
+    const { LINKS } = await import('../src/app/help');
+    const caps = JSON.parse(readFileSync('src-tauri/capabilities/default.json', 'utf8')) as { permissions: (string | { identifier: string; allow?: { url: string }[] })[] };
+    const scope = caps.permissions.flatMap((p) => (typeof p !== 'string' && p.identifier === 'opener:allow-open-url' ? (p.allow ?? []) : []));
+    // Scope entries are a URL, optionally ending in * (anything after it).
+    const allowed = (url: string) => scope.some((s) => (s.url.endsWith('*') ? url.startsWith(s.url.slice(0, -1)) : url === s.url));
+    expect(Object.values(LINKS).filter((url) => !allowed(url))).toEqual([]);
+  });
+});
