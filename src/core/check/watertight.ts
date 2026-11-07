@@ -24,7 +24,6 @@ export function checkWatertight(model: Model, faces: Iterable<FaceId> = model.fa
   const set = new Set(faces);
   const openEdges: HalfEdgeId[] = [];
   const degenerateFaces: FaceId[] = [];
-  const verts = new Set<number>();
   const edges = new Set<number>();
   let rings = 0;
   for (const f of set) {
@@ -32,20 +31,27 @@ export function checkWatertight(model: Model, faces: Iterable<FaceId> = model.fa
     if (faceArea(model, f) <= 1e-9) degenerateFaces.push(f);
     for (const h of model.faceHalfEdges(f)) {
       const he = model.he(h);
-      verts.add(he.origin);
       edges.add(Math.min(h, he.twin));
       const other = model.faceOf(he.twin);
       if (other === null || !set.has(other)) openEdges.push(h);
     }
   }
+  // Shells by their edges: parts that only touch (along an edge or at a point) are separate
+  // shells here, each counting its own vertices, so the Euler characteristic stays right.
   let shells = 0;
+  let shellVerts = 0;
   const seen = new Set<FaceId>();
   for (const f of set) {
     if (seen.has(f)) continue;
     shells++;
-    for (const g of model.connectedFaces(f)) seen.add(g);
+    const vs = new Set<number>();
+    for (const g of model.connectedFaces(f, false)) {
+      seen.add(g);
+      if (set.has(g)) for (const h of model.faceHalfEdges(g)) vs.add(model.he(h).origin);
+    }
+    shellVerts += vs.size;
   }
-  const euler = verts.size - edges.size + set.size - rings;
+  const euler = shellVerts - edges.size + set.size - rings;
   return {
     watertight: set.size > 0 && openEdges.length === 0 && degenerateFaces.length === 0,
     openEdges,

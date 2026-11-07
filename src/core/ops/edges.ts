@@ -1,7 +1,8 @@
-import { makePlane, planesCoincide, signedDistance, toPlane2D, type Plane } from '../math/plane';
-import { pointInRegion, signedArea } from '../math/polygon2d';
+import { fromPlane2D, makePlane, planesCoincide, signedDistance, toPlane2D, type Plane } from '../math/plane';
+import { interiorPoint, pointInRegion, signedArea } from '../math/polygon2d';
+import { findFaceAt } from '../model/query';
 import { TOL } from '../math/tolerance';
-import { add, cross, distance, dot, length, normalize, scale, sub, type Vec3 } from '../math/vec3';
+import { add, cross, distance, dot, length, newellNormal, normalize, scale, sub, type Vec3 } from '../math/vec3';
 import type { CurveId, FaceId, HalfEdgeId, Model, VertexId } from '../model/Model';
 import { assembleFaces, traceLoops } from '../model/region';
 import { imprintSegments } from './imprint';
@@ -174,7 +175,7 @@ function closeLoops(model: Model, fresh: HalfEdgeId[]): FaceId[] {
   for (const e0 of fresh) {
     if (!model.halfEdges.has(e0) || !isWire(model, e0)) continue;
     for (const plane of candidatePlanes(model, e0)) {
-      if (!isWire(model, e0)) break;
+      if (!model.halfEdges.has(e0) || !isWire(model, e0)) break;
       const onPlane = (v: VertexId) => Math.abs(signedDistance(plane, model.pos(v))) <= TOL;
       const directed: [VertexId, VertexId][] = [];
       for (const e of model.edges()) {
@@ -183,7 +184,10 @@ function closeLoops(model: Model, fresh: HalfEdgeId[]): FaceId[] {
         const b = model.dest(e);
         if (!onPlane(a) || !onPlane(b)) continue;
         if (isWire(model, e)) directed.push([a, b], [b, a]);
-        else {
+        else if (h.loop !== null && model.he(h.twin).loop !== null) {
+          // An edge with a face on each side (a box's corner): a new face can still touch it.
+          directed.push([a, b], [b, a]);
+        } else {
           // An outline edge of an existing face on this plane, facing the same way: only its free side.
           for (const side of [e, h.twin]) {
             const t = model.he(model.he(side).twin);
@@ -209,15 +213,114 @@ function closeLoops(model: Model, fresh: HalfEdgeId[]): FaceId[] {
         // Skip loops that walk an edge twice (a bridge) — they enclose nothing new.
         const keys = f.outer.map((v, i) => `${v}>${f.outer[(i + 1) % f.outer.length]}`);
         if (new Set(keys).size !== keys.length) continue;
+        // Never on top of a face that is already there.
+        const inside = fromPlane2D(plane, interiorPoint(f.outer.map(pos2), f.holes.map((r) => r.map(pos2))));
+        if (findFaceAt(model, inside, plane.normal) !== undefined || findFaceAt(model, inside, scale(plane.normal, -1)) !== undefined) continue;
         try {
           created.push(model.addFace(f.outer, f.holes, { normal: plane.normal }));
         } catch {
-          // A directed edge is already taken (e.g. by a face on the other side): leave this loop open.
+          // An edge already has a face on each side (or this side taken): the new face touches
+          // the existing faces there instead, with corners of its own.
+          try {
+            created.push(addTouchingFace(model, f.outer, f.holes, plane.normal));
+          } catch {
+            // Leave this loop open.
+          }
         }
       }
     }
   }
   return created;
+}
+
+/**
+ * A face on loops that run along edges already fully used (a face on each side): it gets its own
+ * vertices wherever it meets existing faces (it touches them there; see
+ * `Model.coincidentVertices`), and the drawn lines along it become its edges.
+ */
+function addTouchingFace(model: Model, outer: VertexId[], holes: VertexId[][], normal: Vec3): FaceId {
+  const rings = [outer, ...holes];
+  const onlyLines = new Map<VertexId, boolean>();
+  for (const v of rings.flat()) onlyLines.set(v, [...model.outgoing(v)].every((h) => model.he(h).loop === null && model.he(model.he(h).twin).loop === null));
+  const copies = new Map<VertexId, VertexId>();
+  const vertexOf = (v: VertexId) => {
+    if (onlyLines.get(v)) return v;
+    let c = copies.get(v);
+    if (c === undefined) copies.set(v, (c = model.addVertex(model.pos(v))));
+    return c;
+  };
+  // Lines of the loop reaching a copied corner are replaced by the face's own edges.
+  const curves: [VertexId, VertexId, CurveId][] = [];
+  for (const ring of rings) {
+    ring.forEach((a, i) => {
+      const b = ring[(i + 1) % ring.length];
+      if (onlyLines.get(a) && onlyLines.get(b)) return;
+      const h = model.halfEdgeBetween(a, b);
+      if (h === undefined || !isWire(model, h)) return;
+      const curve = model.he(h).curve;
+      if (curve !== null) curves.push([a, b, curve]);
+      model.removeEdge(h);
+    });
+  }
+  const mapped = rings.map((r) => r.map(vertexOf));
+  const face = model.addFace(mapped[0], mapped.slice(1), { normal });
+  for (const [a, b, curve] of curves) model.setEdgeCurve(vertexOf(a), vertexOf(b), curve);
+  return face;
+}
+
+/**
+ * Close openings the path runs along: where a drawn edge is the edge of an opening (a face on one
+ * side, nothing on the other, as after deleting a box's end), follow the opening's outline; if it
+ * comes back round and lies flat, it becomes a face. As in SketchUp, tracing over one edge of the
+ * opening closes it.
+ */
+function fillOpenings(model: Model, drawn: HalfEdgeId[]): FaceId[] {
+  const created: FaceId[] = [];
+  for (const e of drawn) {
+    if (!model.halfEdges.has(e)) continue;
+    for (const h of [e, model.he(e).twin]) {
+      if (model.he(h).loop !== null || model.he(model.he(h).twin).loop === null) continue;
+      const ring = openingFrom(model, h);
+      if (!ring) continue;
+      try {
+        created.push(model.addFace(ring));
+      } catch {
+        // Not a simple outline: leave it open.
+      }
+    }
+  }
+  return created;
+}
+
+/** The opening's outline through the free side `h0`, if it closes and lies on one plane. */
+function openingFrom(model: Model, h0: HalfEdgeId): VertexId[] | null {
+  const ring: VertexId[] = [model.he(h0).origin];
+  const seen = new Set<HalfEdgeId>([h0]);
+  let h = h0;
+  for (;;) {
+    const at = model.dest(h);
+    const back = model.he(h).twin;
+    // The next free side of an opening from here: exactly one, or the outline is ambiguous.
+    const next = [...model.outgoing(at)].filter((n) => n !== back && model.he(n).loop === null && model.he(model.he(n).twin).loop !== null);
+    if (next.length !== 1) return null;
+    h = next[0];
+    if (h === h0) break;
+    if (seen.has(h)) return null;
+    seen.add(h);
+    ring.push(model.he(h).origin);
+  }
+  if (ring.length < 3) return null;
+  const pts = ring.map((v) => model.pos(v));
+  const n = newellNormal(pts);
+  if (length(n) <= TOL) return null;
+  const plane = makePlane(pts[0], normalize(n));
+  if (!pts.every((p) => Math.abs(signedDistance(plane, p)) <= TOL)) return null;
+  // Faces lying flat in the outline's own plane all round: that is the back of a flat surface,
+  // not an opening (a hole in a face is one, though: tracing its edge fills it).
+  const bordering = [...seen].map((x) => model.he(model.he(x).twin).loop!);
+  const flat = bordering.every((l) => Math.abs(Math.abs(dot(model.face(model.loop(l).face).normal, plane.normal)) - 1) <= 1e-6);
+  const hole = bordering.every((l) => model.face(model.loop(l).face).outer !== l);
+  return flat && !hole ? null : ring;
 }
 
 /**
@@ -247,6 +350,7 @@ export function drawEdges(model: Model, points: readonly Vec3[], opts: { curve?:
     if (pieces.length > 1 || pieces[0] !== f) faces.push(...pieces);
   }
   faces.push(...closeLoops(model, canonical()));
+  faces.push(...fillOpenings(model, canonical()));
 
   // Re-collect the path's edges by its vertices (splits may have renumbered half-edges).
   const edges = canonical();

@@ -27,6 +27,10 @@ Use our own icons and assets, and copy nothing from SketchUp.
 - Click a start corner, move, click the second corner.
 - While drawing, type width,length and press Enter for exact size.
 - Draws on the face under the cursor, or on the ground plane. Splits the host face.
+- Snapping the second corner to a point on the model off the drawing plane turns the rectangle upright, into the red/green/blue plane holding both corners (as in SketchUp). Arrow keys fix the plane instead (→ faces red, ← green, ↑ flat); press again to unlock. A rectangle drawn exactly over an opening fills it; one along an edge that already has a face on each side gets corners of its own (it touches there).
+### Closing openings
+- Drawing a line over an edge of an opening (a face on one side, nothing on the other, as after deleting a box's end, or a hole in a face) follows the opening's outline and, if it closes and lies flat, fills it with a face. The back of a flat surface (faces lying in the outline's plane all round, not a hole) is not an opening.
+- Lines closing a loop against existing solids: edges that already have a face on each side (a box's corners) may bound the new face too; it gets its own vertices there (it touches the solids, see "touching parts") and the drawn lines become its edges. A loop over an existing face is never filled again.
 ### Circle
 - Click the centre, move, click to set the radius, or type the radius and press Enter.
 - After the centre click the Measurements box asks for the number of sides first (default 24): type it and press Enter (or press Enter to keep it), then type the radius and press Enter. "32s" sets the sides at any time.
@@ -41,7 +45,7 @@ Use our own icons and assets, and copy nothing from SketchUp.
 - Flush push-through: if the face reaches a coplanar opposite face of the same solid, delete both faces and keep the side walls, making a through-hole.
 - Non-flush push-through: if the extrusion passes through a solid whose far side is not flush, run a boolean subtraction (Manifold) so the cut follows the solid automatically. No manual Intersect Faces step is needed.
 - Pushing outward from a face adds material. Pushing inward removes it.
-- A result with parts touching only along an edge (or faces back to back) cannot be held by the half-edge model: the boolean refuses it before changing anything ("touching only along an edge"), and the solid stays as it was.
+- Parts touching only along an edge or at a point: each part keeps its own vertices (copies at the same spot), so every part stays a proper 2-manifold solid. The boolean rebuild keeps result vertices that Manifold treats as different apart, even at the same spot. Touching parts count as one object (`connectedFaces` follows shared and coincident vertices: selection, push/pull, Follow Me); the watertight check counts them as separate shells. A push/pull next to a contact includes the touching parts, so a shared line is split where a face stops, and parts pulled into each other merge into one solid. Faces back to back (which cannot be represented) are still refused.
 - Ctrl (new starting face): the new side walls stay separate faces, leaving an edge loop where the face was, instead of merging with neighbouring faces they line up with. On a closed solid, pulling out is an ordinary (boolean) pull, so whatever the new part touches is joined properly, after which the face's old outline is drawn back where it lies on a face, as if drawn by hand; pushing in is unchanged. The model has no internal faces, so unlike SketchUp the original face itself is not kept. The mode ends with the push.
 ### Move and Rotate
 - Ctrl switches copy mode (a + on the cursor): the copy follows the mouse and the original stays. It ends with the copy, as in SketchUp; typing "3x" or "/3" afterwards makes an array. Pressing Ctrl switches at once; if another key follows while it is held (Ctrl+Z…), it was a shortcut and the switch is taken back.

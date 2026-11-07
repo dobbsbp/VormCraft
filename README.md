@@ -29,6 +29,8 @@ Both versions have the same version number and open the same `.vorm` files.
 ### Drawing
 - **Line**, **Rectangle**, **Rotated Rectangle**, **Circle**, **Polygon**, **2-Point Arc**, **3-Point Arc**, **Arc**, **Pie**
 - Draw on any face, or on the ground. New edges split the face they are drawn on automatically.
+- **Rectangle** stands upright when you snap its second corner to a point above or beside the first; the arrow keys fix its plane (→ faces red, ← faces green, ↑ flat).
+- Deleted a face? Draw a line over one of the opening's edges and it closes again.
 - The mouse pointer shows the active tool's icon, with a small triangle at its top-left tip marking the exact click point.
 - The tool icons can be tucked away into a narrow tab (the bar above them) for more room; click the tab to bring them back.
 - Every tool takes typed input. Type a length, `width,length` or a radius and press Enter, for example `1200,600`, `2.5m`, `3'6"`. Lengths are in millimetres by default; cm, m, in and ft are also accepted.

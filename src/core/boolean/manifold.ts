@@ -75,10 +75,10 @@ function applyOp(a: Manifold, b: Manifold, op: BooleanOp): Manifold {
   return a.intersect(b);
 }
 
-/** The result would have parts touching only along an edge (or at faces back to back). */
+/** The result would have two faces back to back (or more than two faces on one edge), which the model cannot hold. */
 export class NonManifoldResult extends Error {
   constructor() {
-    super('That would leave parts touching only along an edge, which VormCraft cannot model. Try a slightly different distance (or join the parts more).');
+    super('That would leave two faces back to back, which VormCraft cannot model. Try a slightly different distance.');
   }
 }
 
@@ -168,24 +168,33 @@ function rebuildFaces(
   const incident: Set<number>[] = Array.from({ length: nVerts }, () => new Set());
   for (let t = 0; t < nTris; t++) for (let k = 0; k < 3; k++) incident[mesh.triVerts[t * 3 + k]].add(faceID[t]);
 
+  // Manifold may list one vertex more than once (`mergeFromVert` → `mergeToVert`): use one.
+  const root = new Int32Array(nVerts).map((_, i) => i);
+  for (let k = 0; k < (mesh.mergeFromVert?.length ?? 0); k++) root[mesh.mergeFromVert[k]] = mesh.mergeToVert[k];
+  // Other result vertices at the same spot are different vertices: parts touching along an edge
+  // or at a point. Each keeps a vertex of its own (the model's existing ones first), so every part
+  // stays a proper solid.
+  const used = new Set<VertexId>();
   const vid: VertexId[] = new Array(nVerts);
-  for (let i = 0; i < nVerts; i++) {
+  const assign = (i: number): VertexId => {
     const p: Vec3 = [mesh.vertProperties[i * np], mesh.vertProperties[i * np + 1], mesh.vertProperties[i * np + 2]];
-    const existing = snap.find(p);
-    if (existing !== undefined) {
-      vid[i] = existing;
-      continue;
-    }
+    const free = (q: Vec3) => snap.findAll(q).find((v) => !used.has(v));
+    const existing = free(p);
+    if (existing !== undefined) return existing;
     const refined = refinePoint(p, [...incident[i]].map((f) => planes.get(f)).filter((x): x is Plane => !!x));
-    const existingRefined = snap.find(refined);
-    if (existingRefined !== undefined) {
-      vid[i] = existingRefined;
-      continue;
-    }
-    vid[i] = model.addVertex(refined);
-    newVertices.push(vid[i]);
-    snap.insert(refined, vid[i]);
+    const existingRefined = free(refined);
+    if (existingRefined !== undefined) return existingRefined;
+    const v = model.addVertex(refined);
+    newVertices.push(v);
+    snap.insert(refined, v);
+    return v;
+  };
+  for (let i = 0; i < nVerts; i++) {
+    if (root[i] !== i) continue;
+    vid[i] = assign(i);
+    used.add(vid[i]);
   }
+  for (let i = 0; i < nVerts; i++) if (root[i] !== i) vid[i] = vid[root[i]];
 
   // Boundary edges of each face-id group: directed triangle edges whose reverse is not in the group.
   const groups = new Map<number, Map<string, [VertexId, VertexId]>>();
@@ -205,8 +214,8 @@ function rebuildFaces(
     }
   }
 
-  // Parts of the result that touch only along an edge (or two faces back to back) would put more
-  // than two faces on one edge, which the model cannot hold: refuse before changing anything.
+  // Touching parts have vertices of their own (above), so an edge used twice in one direction
+  // means faces back to back, which the model cannot hold: refuse before changing anything.
   const owner = new Set<string>();
   for (const edges of groups.values()) {
     for (const k of edges.keys()) {

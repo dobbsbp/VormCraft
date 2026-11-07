@@ -4,6 +4,13 @@ What changed in each version of VormCraft. The section for a version is also sho
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
+## Unreleased
+
+- Lines drawn between corners of boxes (for example two boxes with flush fronts or tops) now close into a face, like any other closed shape of lines.
+- Closing an opening: after deleting a face (the end of a box, say), drawing a line over one of its edges fills it again, as in SketchUp. Tracing the edge of a hole in a face fills the hole.
+- Rectangle tool: snap the second corner to a point above or beside the first and the rectangle stands upright (up a wall, across an open end). The arrow keys fix the plane: → faces red, ← faces green, ↑ flat.
+- Push/Pull works on shapes whose parts touch only along a line or at a corner (for example two boxes drawn corner to corner). The shared line is split where a pushed face stops, parts pulled into each other merge into one solid, and touching parts are selected together as one object. These used to be refused.
+
 ## 0.5.0
 
 - Undo after reopening: the last 100 undo steps are saved with the design, so Ctrl+Z still works after you close and open it again. Each step stores only what changed, so files stay small. Files saved this way need this version of VormCraft or newer.

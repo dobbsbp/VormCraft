@@ -356,21 +356,6 @@ describe('Push/Pull tool', () => {
     }
   });
 
-  it('a pull that would leave parts touching only along an edge is refused, and nothing changes', () => {
-    const { model } = harness();
-    const slab = drawRectangle(model, GROUND_PLANE, [0, 0, 0], 200, 200).inner!;
-    pushPull(model, slab, -50);
-    const top = () => findFaceAt(model, [150, 150, 0])!;
-    const a = drawRectangle(model, GROUND_PLANE, [0, 0, 0], 100, 100, findFaceAt(model, [50, 50, 0])).inner!;
-    pushPull(model, a, 100);
-    const b = drawRectangle(model, GROUND_PLANE, [100, 100, 0], 100, 100, top()).inner!;
-    const faces = model.faces.size;
-    expect(() => pushPull(model, b, 100)).toThrow(/touching only along an edge/);
-    model.validate();
-    expect(model.faces.size).toBe(faces);
-    expect(checkWatertight(model).watertight).toBe(true);
-  });
-
   it('Ctrl does not change pushing into a solid', () => {
     const { doc, model, controller } = boxHarness();
     const t = use(controller, 'pushpull');

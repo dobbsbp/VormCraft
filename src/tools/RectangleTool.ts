@@ -1,22 +1,34 @@
-import { fromPlane2D, toPlane2D } from '../core/math/plane';
+import { fromPlane2D, signedDistance, toPlane2D, type Plane } from '../core/math/plane';
 import { TOL } from '../core/math/tolerance';
+import { scale, sub, type Vec3 } from '../core/math/vec3';
+import { findFaceAt } from '../core/model/query';
 import { drawRectangle, rectanglePoints } from '../core/ops/draw';
 import type { DocumentSnapshot } from '../doc/Document';
-import { pointOnPlane } from './geom';
+import { AXES, drawingPlane, pointOnPlane } from './geom';
 import { placementAt, type Placement } from './placement';
-import type { InferenceHints, Preview, Tool, ToolContext, ToolEvent } from './types';
+import type { AxisLock, InferenceHints, Preview, SnapKind, Tool, ToolContext, ToolEvent } from './types';
 import { formatLength, parseLengths } from './units';
+
+const AXIS_NAMES = ['red', 'green', 'blue'];
+/** Snaps on real geometry (not just where the cursor meets a plane). */
+const GEOMETRY: ReadonlySet<SnapKind> = new Set(['endpoint', 'midpoint', 'onEdge', 'origin', 'guidePoint', 'guideIntersection', 'onGuide', 'onFace']);
 
 /**
  * Rectangle: click a corner, click the opposite corner (or type "width,length" + Enter). Drawn on
- * the face under the first click (splitting it) or on the ground. Typing after finishing resizes
- * the rectangle just drawn.
+ * the face under the first click (splitting it) or on the ground. Snapping the second corner to a
+ * point off that plane turns the rectangle upright (into the red/green/blue plane holding both
+ * corners), as in SketchUp; the arrow keys fix the plane instead (→ faces red, ← green, ↑ flat).
+ * Typing after finishing resizes the rectangle just drawn.
  */
 export class RectangleTool implements Tool {
   readonly id = 'rectangle';
   readonly name = 'Rectangle';
   readonly dragIsClick = true;
+  /** Where the first click landed, and (`start`) the plane the rectangle is being drawn on now. */
+  private origin: Placement | null = null;
   private start: Placement | null = null;
+  /** Arrow keys: the normal of the plane to draw on. */
+  private axisLock: Vec3 | null = null;
   private size: [number, number] = [0, 0];
   private last: { base: DocumentSnapshot; at: Placement; size: [number, number] } | null = null;
 
@@ -38,12 +50,55 @@ export class RectangleTool implements Tool {
   }
 
   inference(): InferenceHints {
-    return this.start ? { plane: this.start.plane } : {};
+    if (!this.start) return {};
+    // Free snapping (so the second corner can pick a point off the plane) unless the plane is fixed.
+    return this.axisLock ? { plane: this.start.plane } : { reference: this.start.point };
+  }
+
+  lockAxis(lock: AxisLock): string | null {
+    if (lock === 'parallel' || lock === 'perpendicular') return null;
+    const i = { x: 0, y: 1, z: 2 }[lock];
+    const same = this.axisLock === AXES[i];
+    this.axisLock = same ? null : AXES[i];
+    if (this.origin) this.start = this.axisLock ? this.placementOn(drawingPlane(this.origin.point, this.axisLock)) : this.origin;
+    if (same) return `${this.name}: plane unlocked (it follows the faces and points you click)`;
+    return `${this.name}: drawn ${i === 2 ? 'flat' : 'upright'}, facing the ${AXIS_NAMES[i]} axis (press the arrow again to unlock)`;
+  }
+
+  /** Drawing on `plane` from the first corner: on a face there if there is one (it gets split). */
+  private placementOn(plane: Plane): Placement {
+    const point = this.origin!.point;
+    const host = findFaceAt(this.ctx.doc.model, point, plane.normal) ?? findFaceAt(this.ctx.doc.model, point, scale(plane.normal, -1));
+    return { point, plane, host };
+  }
+
+  /**
+   * The red/green/blue plane holding both corners, when the second corner is a point on the model
+   * off the current plane (a rectangle up a wall, or across an open end). Null if they are not in
+   * one such plane.
+   */
+  private uprightPlane(p: Vec3): Plane | null {
+    const d = sub(p, this.origin!.point);
+    const sizes = d.map(Math.abs);
+    const i = sizes.indexOf(Math.min(...sizes));
+    if (sizes[i] > TOL || sizes.filter((x) => x > TOL).length < 2) return null;
+    return drawingPlane(this.origin!.point, AXES[i]);
   }
 
   pointerMove(e: ToolEvent): void {
-    if (!this.start) return;
-    const p = pointOnPlane(e.snap?.point, e.ray, this.start.plane);
+    if (!this.start || !this.origin) return;
+    const s = e.snap;
+    if (!this.axisLock && s && GEOMETRY.has(s.kind) && Math.abs(signedDistance(this.start.plane, s.point)) > TOL) {
+      // Off the plane: back on the first click's plane if the point is on it, else upright.
+      if (Math.abs(signedDistance(this.origin.plane, s.point)) <= TOL) this.start = this.origin;
+      else {
+        const upright = this.uprightPlane(s.point);
+        if (upright) this.start = this.placementOn(upright);
+      }
+    }
+    // A snapped point still off the plane: follow the mouse on the plane instead.
+    const onPlane = s && Math.abs(signedDistance(this.start.plane, s.point)) <= TOL ? s.point : undefined;
+    const p = pointOnPlane(onPlane, e.ray, this.start.plane) ?? (s ? pointOnPlane(s.point, e.ray, this.start.plane) : null);
     if (!p) return;
     const [x0, y0] = toPlane2D(this.start.plane, this.start.point);
     const [x1, y1] = toPlane2D(this.start.plane, p);
@@ -52,7 +107,8 @@ export class RectangleTool implements Tool {
 
   pointerDown(e: ToolEvent): void {
     if (!this.start) {
-      this.start = placementAt(this.ctx.doc.model, e);
+      this.origin = placementAt(this.ctx.doc.model, e);
+      this.start = this.origin && this.axisLock ? this.placementOn(drawingPlane(this.origin.point, this.axisLock)) : this.origin;
       this.size = [0, 0];
       return;
     }
@@ -80,13 +136,13 @@ export class RectangleTool implements Tool {
   }
 
   private commit(at: Placement, size: [number, number], base?: DocumentSnapshot): void {
-    this.start = null;
+    this.start = this.origin = null;
     const before = this.ctx.apply(() => drawRectangle(this.ctx.doc.model, at.plane, at.point, size[0], size[1], at.host), base);
     this.last = { base: before, at, size };
   }
 
   cancel(): void {
-    this.start = null;
+    this.start = this.origin = null;
   }
 
   reset(): void {

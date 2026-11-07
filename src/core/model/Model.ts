@@ -1,4 +1,5 @@
 import { makePlane, type Plane } from '../math/plane';
+import { SpatialHash } from '../math/spatialHash';
 import { TOL } from '../math/tolerance';
 import { distance, newellNormal, normalize, type Vec3 } from '../math/vec3';
 
@@ -411,19 +412,54 @@ export class Model {
     return out;
   }
 
-  /** All faces edge-connected to `id` (a shell or open surface). */
-  connectedFaces(id: FaceId): Set<FaceId> {
+  /**
+   * All faces connected to `id`: across edges (a shell or open surface) and, unless
+   * `throughContacts` is false, also to parts touching it only along an edge or at a point (they
+   * share a vertex, or have vertices at the same spot), which count as one object.
+   */
+  connectedFaces(id: FaceId, throughContacts = true): Set<FaceId> {
+    const copies = throughContacts ? this.coincidentVertices() : null;
     const seen = new Set<FaceId>([id]);
     const stack = [id];
+    const visit = (n: FaceId) => {
+      if (!seen.has(n)) {
+        seen.add(n);
+        stack.push(n);
+      }
+    };
     while (stack.length) {
-      for (const n of this.adjacentFaces(stack.pop()!)) {
-        if (!seen.has(n)) {
-          seen.add(n);
-          stack.push(n);
+      const f = stack.pop()!;
+      for (const n of this.adjacentFaces(f)) visit(n);
+      if (!throughContacts) continue;
+      for (const h of this.faceHalfEdges(f)) {
+        const v = this.he(h).origin;
+        for (const w of copies!.get(v) ?? [v]) {
+          for (const o of this.outgoing(w)) {
+            const g = this.faceOf(o);
+            if (g !== null) visit(g);
+          }
         }
       }
     }
     return seen;
+  }
+
+  /**
+   * Vertices at the same spot as another vertex, each with the whole group (itself included).
+   * Separate vertices only share a spot where parts touch along an edge or at a point.
+   */
+  coincidentVertices(): Map<VertexId, VertexId[]> {
+    const hash = new SpatialHash<VertexId>();
+    const out = new Map<VertexId, VertexId[]>();
+    for (const v of this.vertices.values()) {
+      const others = hash.findAll(v.pos);
+      if (others.length) {
+        const group = [...new Set([...(out.get(others[0]) ?? others), v.id])];
+        for (const g of group) out.set(g, group);
+      }
+      hash.insert(v.pos, v.id);
+    }
+    return out;
   }
 
   /** True when every edge of these faces has a face from the set on both sides. */

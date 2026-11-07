@@ -1,7 +1,7 @@
 import { fromPlane2D, toPlane2D, type Plane } from '../math/plane';
 import { interiorPoint, pointInPolygon, signedArea } from '../math/polygon2d';
 import { TOL } from '../math/tolerance';
-import { dot, newellNormal, type Vec3 } from '../math/vec3';
+import { dot, newellNormal, scale, type Vec3 } from '../math/vec3';
 import type { CurveId, FaceId, Model } from '../model/Model';
 import { imprintSegments, loopSegments } from './imprint';
 
@@ -54,8 +54,25 @@ export function drawPolygon(model: Model, plane: Plane, points: readonly Vec3[],
     return { faces, inner };
   }
   const ordered = dot(newellNormal(points), plane.normal) < 0 ? [...points].reverse() : [...points];
-  const ids = ordered.map((p) => model.vertexAt(p));
-  const face = model.addFace(ids, [], { normal: plane.normal });
+  let ids = ordered.map((p) => model.vertexAt(p));
+  const taken = (err: unknown) => /already bounds/.test(String(err));
+  let face: FaceId;
+  try {
+    face = model.addFace(ids, [], { normal: plane.normal });
+  } catch (err) {
+    if (!taken(err)) throw err;
+    try {
+      // Drawn exactly over an opening whose outline runs the other way: the face faces out of it.
+      face = model.addFace([...ids].reverse(), [], { normal: scale(plane.normal, -1) });
+      ids = [...ids].reverse();
+    } catch (err2) {
+      if (!taken(err2)) throw err2;
+      // Along an edge that already has a face on each side: the new face touches it there, with
+      // corners of its own (see `Model.coincidentVertices`).
+      ids = ordered.map((p) => model.addVertex(p));
+      face = model.addFace(ids, [], { normal: plane.normal });
+    }
+  }
   if (opts.curve !== undefined) ids.forEach((v, i) => model.setEdgeCurve(v, ids[(i + 1) % ids.length], opts.curve!));
   return { faces: [face], inner: face };
 }
