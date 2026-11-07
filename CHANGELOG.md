@@ -4,6 +4,11 @@ What changed in each version of VormCraft. The section for a version is also sho
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
+## 0.4.6
+
+- Arc and Pie: after the radius, the Measurements box asks how many segments to use (type any number and press Enter, or press Enter to keep 12), then the angle.
+- Support VormCraft: if you'd like to chip in for the website and upkeep, the heart on the toolbar (or Help → Support VormCraft) shows how: GitHub Sponsors, or QRIS in Indonesia. VormCraft stays free; nothing else changes.
+
 ## 0.4.5
 
 - Fixed: arcs drawn from edge to edge of a face (for example across a corner of a box top) could be drawn on the wrong plane and not connect to the model. They now lie on the face and split it.
