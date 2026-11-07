@@ -139,12 +139,40 @@ describe('arc tools', () => {
     click(H, [0, 0, 0]);
     move(H, [1, 0, 0]);
     H.controller.typed('50');
+    H.controller.enter(); // keep the segments shown
     move(H, [30, 30, 0]);
     H.controller.typed('90');
     expect(H.model.findVertex([50, 0, 0])).toBeDefined();
     expect(H.model.findVertex([0, 50, 0])).toBeDefined();
     H.controller.typed('180');
     expect(H.model.findVertex([-50, 0, 0])).toBeDefined();
+  });
+
+  it('centre arc: centre, radius, then the number of segments, then the angle', () => {
+    const H = harness();
+    use(H.controller, 'arc');
+    click(H, [0, 0, 0]);
+    click(H, [50, 0, 0]);
+    expect(H.controller.tool.vcbLabel()).toBe('Segments');
+    expect(H.controller.tool.vcbValue()).toBe('12');
+    H.controller.typed('40');
+    expect(H.controller.tool.vcbLabel()).toBe('Angle');
+    move(H, [30, 30, 0]);
+    H.controller.typed('360');
+    expect([...H.model.edges()]).toHaveLength(40);
+    expect(H.model.findVertex([-50, 0, 0])).toBeDefined();
+  });
+
+  it('centre arc: a typed radius also asks for the segments; a click skips the question', () => {
+    const H = harness();
+    use(H.controller, 'arc');
+    click(H, [0, 0, 0]);
+    move(H, [1, 0, 0]);
+    H.controller.typed('50');
+    expect(H.controller.tool.vcbLabel()).toBe('Segments');
+    click(H, [0, 50, 0]);
+    expect([...H.model.edges()]).toHaveLength(12);
+    expect(H.model.findVertex([0, 50, 0])).toBeDefined();
   });
 
   it('an arc from edge to edge of a box top is drawn on the top and splits it, whichever face the first click reports', () => {

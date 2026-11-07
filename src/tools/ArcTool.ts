@@ -21,8 +21,8 @@ const AXIS_NAMES = ['red', 'green', 'blue'];
  * - 2-Point Arc: click the start, click the end (or type the chord length), then move to set the
  *   bulge and click (or type it).
  * - 3-Point Arc: click the start, a point the arc passes through, and the end.
- * - Arc: click the centre, click the start (or type the radius), then click the end (or type the
- *   angle in degrees).
+ * - Arc: click the centre, click the start (or type the radius), type the number of segments and
+ *   press Enter (or press Enter to keep it), then click the end (or type the angle in degrees).
  * - Pie: as Arc, and the two radii close it into a slice-shaped face.
  * Type e.g. "16s" at any time to set the number of segments. Typing after finishing changes the
  * arc just drawn. Arcs keep their true radius (for STEP and fine STL export).
@@ -42,6 +42,8 @@ export class ArcTool implements Tool {
   private snap: Snap | null = null;
   /** For the centre arc: the sweep followed continuously, so it can pass 180°. */
   private sweep = 0;
+  /** Arc and Pie, after the radius: the Measurements box asks for the number of segments. */
+  private askingSegments = false;
   /** Arrow keys: the normal of the plane to draw on, overriding the faces clicked. */
   private axisLock: Vec3 | null = null;
   private last: { base: DocumentSnapshot; plane: Plane; points: Vec3[]; value: number; segments: number } | null = null;
@@ -69,18 +71,21 @@ export class ArcTool implements Tool {
       return ['Click the start of the arc.', 'Click the end, or type the chord length.', 'Move to set the bulge and click, or type it.'][n] + segs;
     }
     if (this.mode === 'arc3') return ['Click the start of the arc.', 'Click a point the arc passes through.', 'Click the end of the arc.'][n] + segs;
+    if (this.askingSegments) return `Type the number of segments and press Enter (Enter keeps ${this.segments}), or click the end of the arc.`;
     return ['Click the centre.', 'Click the start of the arc, or type the radius.', 'Click the end, or type the angle in degrees.'][n] + segs;
   }
 
   vcbLabel(): string {
     const n = this.points.length;
     if (this.mode === 'arc2') return n === 2 || (n === 0 && this.last) ? 'Bulge' : n === 1 ? 'Length' : 'Segments';
+    if (this.askingSegments) return 'Segments';
     if (this.centred) return n === 2 || (n === 0 && this.last) ? 'Angle' : n === 1 ? 'Radius' : 'Segments';
     return 'Segments';
   }
 
   vcbValue(): string {
     const n = this.points.length;
+    if (this.askingSegments) return String(this.segments);
     if (n === 1 && this.cursor) return formatLength(distance(this.points[0], this.cursor));
     if (n === 2 && this.mode === 'arc2') return formatLength(Math.abs(this.bulgeAt()));
     if (n === 2 && this.centred) return `${Math.round((this.sweep * 180) / Math.PI * 10) / 10}°`;
@@ -186,6 +191,7 @@ export class ArcTool implements Tool {
       this.points.push(p);
       this.sweep = 0;
       if (this.centred) this.cursor = p;
+      this.askingSegments = this.centred;
       return;
     }
     const arc = this.arcFor(p);
@@ -211,15 +217,18 @@ export class ArcTool implements Tool {
     const points = [...this.points];
     this.points = [];
     this.plane = null;
+    this.askingSegments = false;
     const before = this.ctx.apply(() => (this.mode === 'pie' ? drawPie : drawArc)(this.ctx.doc.model, arc, this.segments), base);
     this.last = { base: before, plane, points, value, segments: this.segments };
   }
 
   typed(text: string): void {
-    const segs = parseSegments(text);
+    const segs = parseSegments(text) ?? (this.askingSegments && /^\d+$/.test(text.trim()) ? Number(text) : undefined);
+    if (this.askingSegments && segs === undefined) throw new Error('Type the number of segments (a whole number, e.g. 12), then the angle');
     if (segs !== undefined) {
       if (segs < 1 || segs > 999) throw new Error('Segments must be between 1 and 999');
       this.segments = segs;
+      this.askingSegments = false;
       if (this.points.length === 0 && this.last) this.redo(this.last.value);
       return;
     }
@@ -233,6 +242,7 @@ export class ArcTool implements Tool {
       const dir = toward && distance(toward, this.points[0]) > TOL ? normalize(sub(toward, this.points[0])) : this.plane!.u;
       this.points.push(add(this.points[0], scale(dir, len)));
       this.sweep = 0;
+      this.askingSegments = this.centred;
       return;
     }
     const value = this.parseValue(text);
@@ -278,9 +288,15 @@ export class ArcTool implements Tool {
     this.commit(arc, value, last.base);
   }
 
+  /** Enter with nothing typed: keep the shown number of segments and go on to the angle. */
+  enter(): void {
+    this.askingSegments = false;
+  }
+
   cancel(): void {
     this.points = [];
     this.plane = null;
+    this.askingSegments = false;
   }
 
   reset(): void {

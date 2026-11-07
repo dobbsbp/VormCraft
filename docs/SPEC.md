@@ -34,6 +34,7 @@ Use our own icons and assets, and copy nothing from SketchUp.
 - Drawn on a face, it splits the face into an outer face with a hole plus an inner circle face.
 ### Arcs (2-Point, 3-Point, Arc, Pie)
 - The drawing plane comes from the face under the first click; at the second click, if that plane does not hold the second point, a face holding both points is used instead (the face the chord crosses, else the one under the cursor), so an arc from edge to edge of a face lies on that face and splits it.
+- Arc and Pie: click the centre, then click the start or type the radius and press Enter. The Measurements box then asks for the number of segments (default 12): type it and press Enter (or press Enter to keep it), then type the angle in degrees and press Enter, or click the end. A click skips the segments question. "16s" sets the segments at any time.
 - Arrow keys fix the plane instead (→ faces red, ← green, ↑ blue); press again to unlock. 3-Point arcs take their plane from their three points.
 ### Push/Pull
 - Hover a face, click, drag along its normal, click to finish, or type a distance and press Enter.

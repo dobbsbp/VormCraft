@@ -96,6 +96,7 @@ describe('Pie tool', () => {
     click(h, [0, 0, 0]);
     move(h, [1, 0, 0]);
     h.controller.typed('50');
+    h.controller.enter(); // keep 12 segments
     move(h, [30, 30, 0]);
     h.controller.typed('90');
     const f = onlyFace(h.model);
@@ -111,6 +112,7 @@ describe('Pie tool', () => {
     use(h.controller, 'pie');
     click(h, [0, 0, 0]);
     click(h, [50, 0, 0]);
+    h.controller.enter();
     move(h, [30, 30, 0]);
     h.controller.typed('90');
     h.controller.typed('270');
@@ -128,6 +130,7 @@ describe('Pie tool', () => {
     use(h.controller, 'pie');
     click(h, [0, 0, 0]);
     click(h, [50, 0, 0]);
+    h.controller.enter();
     move(h, [0, 50, 0]);
     h.controller.typed('90');
     expect(h.model.faces.size).toBe(2);
