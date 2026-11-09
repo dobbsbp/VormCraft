@@ -58,20 +58,21 @@ describe('Move tool', () => {
     expect(volume(H.model)).toBeCloseTo(10 * 20 * 40);
   });
 
-  it('a move that would bend a face is refused with a message, model untouched', () => {
+  it('moving one edge of a box sideways folds the faces next to it', () => {
     const H = boxH();
     const corner = [...H.model.vertices.values()].find((v) => distance(v.pos, [10, 20, 30]) < 1e-9)!.id;
     const e = [...H.model.outgoing(corner)][0];
     H.controller.selection.set([], []);
-    // Select just one corner's edge going down: moving it sideways warps two faces.
+    // Select just one corner's edge going down: moving it sideways would warp two faces.
     H.controller.selection.set([], [Math.min(e, H.model.he(e).twin)]);
     use(H.controller, 'move');
     click(H, [10, 20, 30], { kind: 'endpoint' });
     move(H, [10, 25, 30], { face: null });
     H.controller.typed('0,0,5');
-    expect(H.controller.error).toMatch(/bend a face/);
-    expect(volume(H.model)).toBeCloseTo(6000);
+    expect(H.controller.error).toBeNull();
     H.model.validate();
+    expect(checkWatertight(H.model).watertight).toBe(true);
+    expect(H.model.faces.size).toBeGreaterThan(6);
   });
 
   it('Ctrl copy, then 3x makes a row; /2 spreads copies over the distance', () => {

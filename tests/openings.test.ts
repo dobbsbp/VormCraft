@@ -52,6 +52,32 @@ describe('closing an opening', () => {
     H.model.validate();
   });
 
+  it('lines on the ground beside a box with no bottom still close into faces', () => {
+    const H = openBox([50, 50, 0], [0, 0, -1]);
+    const before = H.model.faces.size;
+    drawEdges(H.model, [
+      [100, 0, 0],
+      [150, 50, 0],
+      [100, 100, 0],
+    ]);
+    H.model.validate();
+    expect(H.model.faces.size).toBe(before + 1);
+    const f = findFaceAt(H.model, [120, 50, 0])!;
+    expect(H.model.face(f).normal[2]).toBeCloseTo(1);
+    expect(faceArea(H.model, f)).toBeCloseTo(2500);
+    // A line off a corner: the region between the box and the lines fills (facing up), not the
+    // outline round the back of the new face and the box's open bottom.
+    drawEdges(H.model, [
+      [150, 50, 0],
+      [150, 120, 0],
+      [0, 120, 0],
+      [0, 100, 0],
+    ]);
+    H.model.validate();
+    expect(H.model.faces.size).toBe(before + 2);
+    expect(H.model.face(findFaceAt(H.model, [100, 110, 0])!).normal[2]).toBeCloseTo(1);
+  });
+
   it('with the Line tool', () => {
     const H = openBox([50, 50, 100], [0, 0, 1]);
     use(H.controller, 'line');
@@ -144,5 +170,100 @@ describe('lines between solids', () => {
     pushPull(H.model, f, 20);
     H.model.validate();
     expect(checkWatertight(H.model).watertight).toBe(true);
+  });
+});
+
+describe('shared lines', () => {
+  const edgeAt = (H: ReturnType<typeof harness>, a: Vec3, b: Vec3) => {
+    const h = H.model.halfEdgeBetween(H.model.findVertex(a)!, H.model.findVertex(b)!)!;
+    return Math.min(h, H.model.he(h).twin);
+  };
+
+  it('a triangle drawn against a square shares its line; erasing the line merges them', () => {
+    const H = harness();
+    drawRectangle(H.model, GROUND_PLANE, [0, 0, 0], 10, 10);
+    drawEdges(H.model, [
+      [10, 0, 0],
+      [15, 5, 0],
+      [10, 10, 0],
+    ]);
+    expect(H.model.faces.size).toBe(2);
+    expect([...H.model.edges()]).toHaveLength(6);
+    expect(H.model.coincidentVertices().size).toBe(0);
+    H.controller.selection.set([], [edgeAt(H, [10, 0, 0], [10, 10, 0])]);
+    H.controller.deleteSelection();
+    expect(H.model.faces.size).toBe(1);
+    expect(faceArea(H.model, [...H.model.faces.keys()][0])).toBeCloseTo(125);
+    H.model.validate();
+  });
+
+  it.each([
+    ['facing the same way', 1],
+    ['facing opposite ways (one is turned round to match)', -1],
+  ] as [string, number][])('lines joining the corners of two flat squares %s close the face between them', (_, facing) => {
+    const H = harness();
+    drawRectangle(H.model, GROUND_PLANE, [0, 0, 0], 10, 10);
+    drawRectangle(H.model, facing > 0 ? GROUND_PLANE : { ...GROUND_PLANE, normal: [0, 0, -1], v: [0, -1, 0] }, [20, facing > 0 ? 0 : 10, 0], 10, 10);
+    expect(H.model.face(findFaceAt(H.model, [25, 5, 0])!).normal[2]).toBeCloseTo(facing);
+    drawEdges(H.model, [
+      [10, 0, 0],
+      [20, 0, 0],
+    ]);
+    drawEdges(H.model, [
+      [10, 10, 0],
+      [20, 10, 0],
+    ]);
+    H.model.validate();
+    expect(H.model.faces.size).toBe(3);
+    expect(faceArea(H.model, findFaceAt(H.model, [15, 5, 0])!)).toBeCloseTo(100);
+    for (const f of H.model.faces.keys()) expect(H.model.face(f).normal[2]).toBeCloseTo(1);
+  });
+
+  it('erasing the line between two squares side by side leaves one rectangle', () => {
+    const H = harness();
+    drawRectangle(H.model, GROUND_PLANE, [0, 0, 0], 10, 10);
+    drawEdges(H.model, [
+      [10, 0, 0],
+      [20, 0, 0],
+      [20, 10, 0],
+      [10, 10, 0],
+    ]);
+    H.controller.selection.set([], [edgeAt(H, [10, 0, 0], [10, 10, 0])]);
+    H.controller.deleteSelection();
+    expect(H.model.faces.size).toBe(1);
+    expect(faceArea(H.model, [...H.model.faces.keys()][0])).toBeCloseTo(200);
+    H.model.validate();
+  });
+
+  it('erasing a box edge, then drawing it again, closes the box again', () => {
+    const H = harness();
+    pushPull(H.model, drawRectangle(H.model, GROUND_PLANE, [0, 0, 0], 100, 100).inner!, 100);
+    H.controller.selection.set([], [edgeAt(H, [0, 0, 100], [100, 0, 100])]);
+    H.controller.deleteSelection();
+    expect(H.model.faces.size).toBe(4);
+    drawEdges(H.model, [
+      [0, 0, 100],
+      [100, 0, 100],
+    ]);
+    closed(H);
+  });
+
+  it('a triangle off a box top edge touches it; erasing that line merges it with the top', () => {
+    const H = harness();
+    pushPull(H.model, drawRectangle(H.model, GROUND_PLANE, [0, 0, 0], 100, 100).inner!, 100);
+    drawEdges(H.model, [
+      [0, 0, 100],
+      [50, -40, 100],
+      [100, 0, 100],
+    ]);
+    expect(H.model.faces.size).toBe(7);
+    H.controller.selection.set([], [edgeAt(H, [0, 0, 100], [100, 0, 100])]);
+    H.controller.deleteSelection();
+    H.model.validate();
+    // The top and the triangle are one face; the front (which needed that line) is gone.
+    expect(H.model.faces.size).toBe(5);
+    const top = findFaceAt(H.model, [50, -10, 100])!;
+    expect(faceArea(H.model, top)).toBeCloseTo(100 * 100 + 0.5 * 100 * 40);
+    expect(H.model.coincidentVertices().size).toBe(0);
   });
 });

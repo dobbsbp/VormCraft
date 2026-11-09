@@ -6,6 +6,7 @@ import { add, cross, distance, dot, length, newellNormal, normalize, scale, sub,
 import type { CurveId, FaceId, HalfEdgeId, Model, VertexId } from '../model/Model';
 import { assembleFaces, traceLoops } from '../model/region';
 import { imprintSegments } from './imprint';
+import { reverseFaces } from './orient';
 
 export interface DrawEdgesResult {
   /** The edges now making up the drawn path (canonical lower half-edge ids). */
@@ -172,65 +173,117 @@ function candidatePlanes(model: Model, e: HalfEdgeId): Plane[] {
  */
 function closeLoops(model: Model, fresh: HalfEdgeId[]): FaceId[] {
   const created: FaceId[] = [];
+  const hasFreeSide = (e: HalfEdgeId) => model.halfEdges.has(e) && (model.he(e).loop === null || model.he(model.he(e).twin).loop === null);
   for (const e0 of fresh) {
     if (!model.halfEdges.has(e0) || !isWire(model, e0)) continue;
-    for (const plane of candidatePlanes(model, e0)) {
-      if (!model.halfEdges.has(e0) || !isWire(model, e0)) break;
-      const onPlane = (v: VertexId) => Math.abs(signedDistance(plane, model.pos(v))) <= TOL;
-      const directed: [VertexId, VertexId][] = [];
-      for (const e of model.edges()) {
-        const h = model.he(e);
-        const a = h.origin;
-        const b = model.dest(e);
-        if (!onPlane(a) || !onPlane(b)) continue;
-        if (isWire(model, e)) directed.push([a, b], [b, a]);
-        else if (h.loop !== null && model.he(h.twin).loop !== null) {
-          // An edge with a face on each side (a box's corner): a new face can still touch it.
-          directed.push([a, b], [b, a]);
-        } else {
-          // An outline edge of an existing face on this plane, facing the same way: only its free side.
-          for (const side of [e, h.twin]) {
-            const t = model.he(model.he(side).twin);
-            if (model.he(side).loop !== null || t.loop === null) continue;
-            const owner = model.face(model.loop(t.loop).face);
-            if (dot(owner.normal, plane.normal) > 1 - 1e-6) directed.push([model.he(side).origin, model.dest(side)]);
-          }
-        }
-      }
-      const pos2 = (v: VertexId) => toPlane2D(plane, model.pos(v));
-      let loops: VertexId[][];
-      try {
-        loops = traceLoops(directed, pos2);
-      } catch {
-        continue; // dangling one-sided outline edges: no closed region on this plane
-      }
-      const freshKeys = new Set(fresh.filter((e) => model.halfEdges.has(e)).flatMap((e) => [`${model.he(e).origin}>${model.dest(e)}`, `${model.dest(e)}>${model.he(e).origin}`]));
-      const touchesFresh = (ring: VertexId[]) => ring.some((v, i) => freshKeys.has(`${v}>${ring[(i + 1) % ring.length]}`));
-      const { faces } = assembleFaces(loops, pos2);
-      for (const f of faces) {
-        if (!touchesFresh(f.outer) && !f.holes.some(touchesFresh)) continue;
-        if (Math.abs(signedArea(f.outer.map(pos2))) <= TOL * TOL) continue;
-        // Skip loops that walk an edge twice (a bridge) — they enclose nothing new.
-        const keys = f.outer.map((v, i) => `${v}>${f.outer[(i + 1) % f.outer.length]}`);
-        if (new Set(keys).size !== keys.length) continue;
-        // Never on top of a face that is already there.
-        const inside = fromPlane2D(plane, interiorPoint(f.outer.map(pos2), f.holes.map((r) => r.map(pos2))));
-        if (findFaceAt(model, inside, plane.normal) !== undefined || findFaceAt(model, inside, scale(plane.normal, -1)) !== undefined) continue;
-        try {
-          created.push(model.addFace(f.outer, f.holes, { normal: plane.normal }));
-        } catch {
-          // An edge already has a face on each side (or this side taken): the new face touches
-          // the existing faces there instead, with corners of its own.
-          try {
-            created.push(addTouchingFace(model, f.outer, f.holes, plane.normal));
-          } catch {
-            // Leave this loop open.
-          }
-        }
+    const planes = candidatePlanes(model, e0).flatMap((p) => [p, { ...p, normal: scale(p.normal, -1), v: scale(p.v, -1) }]);
+    // Each plane facing both ways (the preferred way first): edges of existing faces can only be
+    // used on their free side, which fixes which way a face through them must face. Only if that
+    // finds nothing, a flat surface facing the other way is turned round to match (`turn`).
+    for (const turn of [false, true]) {
+      for (const plane of planes) {
+        while (hasFreeSide(e0) && closeOnPlane(model, plane, fresh, turn, created));
       }
     }
   }
   return created;
+}
+
+/**
+ * One pass of `closeLoops` on a plane facing one way. Returns true when it turned a flat surface
+ * round (the plane's edges have changed sides, so it should be traced again).
+ */
+function closeOnPlane(model: Model, plane: Plane, fresh: HalfEdgeId[], turn: boolean, created: FaceId[]): boolean {
+  const onPlane = (v: VertexId) => Math.abs(signedDistance(plane, model.pos(v))) <= TOL;
+  // Every edge on the plane is traced both ways (so the walk always closes); a loop becomes a face
+  // only if each of its sides is free to take (`allowed`), or would be once the flat surface
+  // facing the other way along it is turned round (`turnable`).
+  const directed: [VertexId, VertexId][] = [];
+  const allowed = new Set<string>();
+  const turnable = new Map<string, FaceId>();
+  const full = new Set<string>();
+  for (const e of model.edges()) {
+    const h = model.he(e);
+    const a = h.origin;
+    const b = model.dest(e);
+    if (!onPlane(a) || !onPlane(b)) continue;
+    directed.push([a, b], [b, a]);
+    if (isWire(model, e)) allowed.add(`${a}>${b}`).add(`${b}>${a}`);
+    else if (h.loop !== null && model.he(h.twin).loop !== null) {
+      // An edge with a face on each side (a box's corner): a new face can still touch it.
+      allowed.add(`${a}>${b}`).add(`${b}>${a}`);
+      full.add(`${a}>${b}`).add(`${b}>${a}`);
+    } else {
+      // An edge with a face on one side only: its free side. For a face lying in this plane,
+      // only if it faces the same way (a face next to it); for any other face (the edge of an
+      // opening, say after a face was deleted) always.
+      for (const side of [e, h.twin]) {
+        const t = model.he(model.he(side).twin);
+        if (model.he(side).loop !== null || t.loop === null) continue;
+        const owner = model.loop(t.loop).face;
+        const d = dot(model.face(owner).normal, plane.normal);
+        if (d > 1 - 1e-6 || Math.abs(d) < 1 - 1e-6) allowed.add(`${model.he(side).origin}>${model.dest(side)}`);
+        else if (turn) turnable.set(`${t.origin}>${model.dest(model.he(side).twin)}`, owner);
+      }
+    }
+  }
+  const pos2 = (v: VertexId) => toPlane2D(plane, model.pos(v));
+  let loops: VertexId[][];
+  try {
+    loops = traceLoops(directed, pos2);
+  } catch {
+    return false; // not a clean drawing on this plane (overlapping lines, say)
+  }
+  const freshKeys = new Set(fresh.filter((e) => model.halfEdges.has(e)).flatMap((e) => [`${model.he(e).origin}>${model.dest(e)}`, `${model.dest(e)}>${model.he(e).origin}`]));
+  const touchesFresh = (ring: VertexId[]) => ring.some((v, i) => freshKeys.has(`${v}>${ring[(i + 1) % ring.length]}`));
+  const { faces } = assembleFaces(loops, pos2);
+  for (const f of faces) {
+    if (!touchesFresh(f.outer) && !f.holes.some(touchesFresh)) continue;
+    if (Math.abs(signedArea(f.outer.map(pos2))) <= TOL * TOL) continue;
+    // Skip loops that walk an edge twice (a bridge) — they enclose nothing new.
+    const keys = f.outer.map((v, i) => `${v}>${f.outer[(i + 1) % f.outer.length]}`);
+    if (new Set(keys).size !== keys.length) continue;
+    const rings = [f.outer, ...f.holes];
+    const ringKeys = rings.flatMap((r) => r.map((v, i) => `${v}>${r[(i + 1) % r.length]}`));
+    // Every side must be free: not the taken side of an existing face's edge.
+    if (!ringKeys.every((k) => allowed.has(k) || turnable.has(k))) continue;
+    // Never on top of a face that is already there.
+    const inside = fromPlane2D(plane, interiorPoint(f.outer.map(pos2), f.holes.map((r) => r.map(pos2))));
+    if (findFaceAt(model, inside, plane.normal) !== undefined || findFaceAt(model, inside, scale(plane.normal, -1)) !== undefined) continue;
+    const toTurn = new Set(ringKeys.filter((k) => !allowed.has(k)).map((k) => turnable.get(k)!));
+    if (toTurn.size) {
+      // Only whole flat surfaces lying in this plane are turned round, never part of a solid.
+      const surfaces = new Set([...toTurn].flatMap((g) => [...model.connectedFaces(g)]));
+      if ([...surfaces].some((g) => dot(model.face(g).normal, plane.normal) > -1 + 1e-6 || !model.faceVertexLoops(g).flat().every(onPlane))) continue;
+      try {
+        reverseFaces(model, surfaces);
+      } catch {
+        continue;
+      }
+      try {
+        created.push(model.addFace(f.outer, f.holes, { normal: plane.normal }));
+      } catch {
+        reverseFaces(model, surfaces);
+        continue;
+      }
+      return true;
+    }
+    // Along an edge that already has a face on each side, the new face touches the existing
+    // faces there, with corners of its own; elsewhere it shares the edges.
+    const touching = ringKeys.some((k) => full.has(k));
+    const allLinesOrFull = ringKeys.every((k) => {
+      if (full.has(k)) return true;
+      const [a, b] = k.split('>').map(Number);
+      const h = model.halfEdgeBetween(a, b);
+      return h !== undefined && isWire(model, h);
+    });
+    try {
+      created.push(touching && allLinesOrFull ? addTouchingFace(model, f.outer, f.holes, plane.normal) : model.addFace(f.outer, f.holes, { normal: plane.normal }));
+    } catch {
+      // An edge is taken on this side: not a face this way round.
+    }
+  }
+  return false;
 }
 
 /**
@@ -276,32 +329,49 @@ function addTouchingFace(model: Model, outer: VertexId[], holes: VertexId[][], n
  */
 function fillOpenings(model: Model, drawn: HalfEdgeId[]): FaceId[] {
   const created: FaceId[] = [];
+  const tryRing = (ring: VertexId[] | null) => {
+    if (!ring) return;
+    try {
+      created.push(model.addFace(ring));
+    } catch {
+      // Not a simple outline: leave it open.
+    }
+  };
   for (const e of drawn) {
     if (!model.halfEdges.has(e)) continue;
+    if (isWire(model, e)) {
+      // A line drawn back where an edge was (after erasing it, say): close the openings it
+      // completes, one plane at a time (the top and the front of a box, for instance).
+      for (const plane of candidatePlanes(model, e)) {
+        for (const h of [e, model.he(e).twin]) if (model.halfEdges.has(h) && model.he(h).loop === null) tryRing(openingFrom(model, h, plane));
+      }
+      continue;
+    }
     for (const h of [e, model.he(e).twin]) {
       if (model.he(h).loop !== null || model.he(model.he(h).twin).loop === null) continue;
-      const ring = openingFrom(model, h);
-      if (!ring) continue;
-      try {
-        created.push(model.addFace(ring));
-      } catch {
-        // Not a simple outline: leave it open.
-      }
+      tryRing(openingFrom(model, h));
     }
   }
   return created;
 }
 
-/** The opening's outline through the free side `h0`, if it closes and lies on one plane. */
-function openingFrom(model: Model, h0: HalfEdgeId): VertexId[] | null {
+/**
+ * The opening's outline through the free side `h0`, if it closes and lies on one plane. Free
+ * sides of existing faces lead the way; loose lines fill in where there is no other way on. With
+ * `plane`, only edges on that plane count.
+ */
+function openingFrom(model: Model, h0: HalfEdgeId, plane?: Plane): VertexId[] | null {
+  const onPlane = (n: HalfEdgeId) => !plane || [model.he(n).origin, model.dest(n)].every((v) => Math.abs(signedDistance(plane, model.pos(v))) <= TOL);
   const ring: VertexId[] = [model.he(h0).origin];
   const seen = new Set<HalfEdgeId>([h0]);
   let h = h0;
   for (;;) {
     const at = model.dest(h);
     const back = model.he(h).twin;
+    const free = [...model.outgoing(at)].filter((n) => n !== back && model.he(n).loop === null && onPlane(n));
     // The next free side of an opening from here: exactly one, or the outline is ambiguous.
-    const next = [...model.outgoing(at)].filter((n) => n !== back && model.he(n).loop === null && model.he(model.he(n).twin).loop !== null);
+    const border = free.filter((n) => model.he(model.he(n).twin).loop !== null);
+    const next = border.length ? border : free;
     if (next.length !== 1) return null;
     h = next[0];
     if (h === h0) break;
@@ -310,17 +380,19 @@ function openingFrom(model: Model, h0: HalfEdgeId): VertexId[] | null {
     ring.push(model.he(h).origin);
   }
   if (ring.length < 3) return null;
+  const bordering = [...seen].map((x) => model.he(model.he(x).twin).loop).filter((l): l is number => l !== null);
+  // Loose lines alone are for closing shapes of lines (`closeLoops`), not openings.
+  if (bordering.length === 0) return null;
   const pts = ring.map((v) => model.pos(v));
   const n = newellNormal(pts);
   if (length(n) <= TOL) return null;
-  const plane = makePlane(pts[0], normalize(n));
-  if (!pts.every((p) => Math.abs(signedDistance(plane, p)) <= TOL)) return null;
-  // Faces lying flat in the outline's own plane all round: that is the back of a flat surface,
-  // not an opening (a hole in a face is one, though: tracing its edge fills it).
-  const bordering = [...seen].map((x) => model.he(model.he(x).twin).loop!);
-  const flat = bordering.every((l) => Math.abs(Math.abs(dot(model.face(model.loop(l).face).normal, plane.normal)) - 1) <= 1e-6);
-  const hole = bordering.every((l) => model.face(model.loop(l).face).outer !== l);
-  return flat && !hole ? null : ring;
+  const ringPlane = makePlane(pts[0], normalize(n));
+  if (!pts.every((p) => Math.abs(signedDistance(ringPlane, p)) <= TOL)) return null;
+  // A face lying flat in the outline's plane but facing the other way: the outline runs round the
+  // back of a flat surface, not an opening (a hole in a face is one, though: it faces the same way,
+  // so tracing its edge fills it).
+  const back = bordering.some((l) => dot(model.face(model.loop(l).face).normal, ringPlane.normal) < -1 + 1e-6);
+  return back ? null : ring;
 }
 
 /**

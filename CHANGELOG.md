@@ -4,6 +4,15 @@ What changed in each version of VormCraft. The section for a version is also sho
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
+## 0.5.2
+
+- Erasing the line between two flat faces in the same plane (a square and a triangle drawn against it, say) joins them into one face, as in SketchUp, instead of deleting both.
+- Erase an edge of a box and draw it again: the faces on both sides come back and the box is closed again.
+- Fixed: a face closed by lines could get a second copy of a line it shares with a neighbouring face ("doubled" lines). Lines are shared between faces; only where an edge already has a face on each side (a box's corner) does a new face touch it with a copy of its own, and erasing that line joins the flat faces on either side.
+- Fixed: lines on the ground (or any plane) did not close into faces when a shape with an open bottom, such as a box with its bottom deleted, stood on that plane. Drawing or tracing a line now fills every closed shape it completes, on both sides of the line.
+- Lines joining the corners of flat shapes now close the face between them even when the shapes face opposite ways (one drawn from below, or reversed): the flat shape is turned round to match, as in SketchUp. Solids are never turned round.
+- Rotating, moving or scaling part of a shape (a box's top face, say) no longer stops with "That would bend a face out of flat". The faces connected to it adjust: any that can no longer lie flat fold into flat pieces along new lines, as in SketchUp. Twisting a box's top, lifting one corner or pushing an edge sideways now just works.
+
 ## 0.5.1
 
 - Lines drawn between corners of boxes (for example two boxes with flush fronts or tops) now close into a face, like any other closed shape of lines.

@@ -70,13 +70,17 @@ describe('move (translate)', () => {
     expect(volume(m)).toBeCloseTo(6000);
   });
 
-  it('lifting one corner would warp the top face: refused, nothing changes', () => {
+  it('lifting one corner folds the faces at that corner, as in SketchUp', () => {
     const m = box();
-    const before = [...m.vertices.values()].map((v) => v.pos);
     const corner = m.findVertex([10, 20, 30])!;
-    expect(() => transformVertices(m, new Set([corner]), translation([0, 0, 5]))).toThrow(/bend a face/);
-    expect([...m.vertices.values()].map((v) => v.pos)).toEqual(before);
+    transformVertices(m, new Set([corner]), translation([0, 0, 5]));
     m.validate();
+    expect(checkWatertight(m).watertight).toBe(true);
+    // The sides at that corner stretch upward and stay flat; the top folds off just the corner.
+    expect(m.faces.size).toBe(7);
+    expect(volume(m)).toBeCloseTo(6000 + (0.5 * 10 * 20 * 5) / 3);
+    // The rest of the top stays where it was.
+    expect(m.face(findFaceAt(m, [2, 2, 30])!).normal).toEqual([0, 0, 1]);
   });
 
   it('moving the top face down onto the bottom would collapse the box: refused', () => {
@@ -121,10 +125,23 @@ describe('rotate', () => {
     expect([...m.curves.values()].map((c) => c.radius)).toEqual([5, 5]);
   });
 
-  it('rotating just the top face of a box (a twist) is refused', () => {
+  it('rotating just the top face of a box (a twist) folds each side once', () => {
     const m = box();
     const top = findFaceAt(m, [5, 10, 30])!;
-    expect(() => transformVertices(m, selectionVertices(m, [top], []), rotation([5, 10, 30], [0, 0, 1], 0.3))).toThrow(BendError);
+    transformVertices(m, selectionVertices(m, [top], []), rotation([5, 10, 30], [0, 0, 1], 0.3));
+    m.validate();
+    expect(checkWatertight(m).watertight).toBe(true);
+    expect(m.faces.size).toBe(2 + 4 * 2);
+    expect(m.face(top).normal[2]).toBeCloseTo(1);
+  });
+
+  it('a twist so far that a side would fold over onto itself is refused, nothing changes', () => {
+    const m = box();
+    const before = [...m.vertices.values()].map((v) => v.pos);
+    const top = findFaceAt(m, [5, 10, 30])!;
+    expect(() => transformVertices(m, selectionVertices(m, [top], []), rotation([5, 10, 30], [0, 0, 1], 3))).toThrow(BendError);
+    expect([...m.vertices.values()].map((v) => v.pos)).toEqual(before);
+    expect(m.faces.size).toBe(6);
     m.validate();
   });
 });

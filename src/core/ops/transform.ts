@@ -1,8 +1,10 @@
 import { signedDistance, makePlane } from '../math/plane';
 import { TOL } from '../math/tolerance';
-import { cross, dot, length, newellNormal, normalize, scale, sub, type Vec3 } from '../math/vec3';
+import { add, cross, distance, dot, length, normalize, scale, sub, type Vec3 } from '../math/vec3';
 import type { CurveId, FaceId, Model, VertexId } from '../model/Model';
 import { faceArea } from '../check/measure';
+import { triangulateFace } from '../triangulate';
+import { facesCoplanar, mergeFaces } from './cleanup';
 
 /** An affine map p ↦ M·p + t, with M row-major 3×3. */
 export interface Affine {
@@ -66,10 +68,11 @@ export class BendError extends Error {}
 
 /**
  * Transform vertices in place. Faces entirely inside the set move rigidly with them (normals and
- * true circles follow). Faces only partly inside (moving one face of a box up, say) must stay
- * flat and keep their facing, otherwise nothing changes and BendError is thrown. A mirror
- * (negative determinant) reverses loop winding so solids stay outward-facing; it needs whole
- * faces.
+ * true circles follow). Faces only partly inside (the sides of a box whose top is moved, say)
+ * stretch to follow; where one can no longer lie flat (the top twisted, or one corner lifted) it
+ * folds into flat pieces along new lines, as in SketchUp. A face that would fold over onto itself
+ * or collapse is refused: nothing changes and BendError is thrown. A mirror (negative
+ * determinant) reverses loop winding so solids stay outward-facing; it needs whole faces.
  */
 export function transformVertices(model: Model, vertices: ReadonlySet<VertexId>, a: Affine): void {
   const mirror = det(a.m) < 0;
@@ -89,6 +92,8 @@ export function transformVertices(model: Model, vertices: ReadonlySet<VertexId>,
   const whole = new Set([...faces].filter((f) => model.faceVertexLoops(f).flat().every((v) => vertices.has(v))));
   if (mirror && whole.size !== faces.size) throw new BendError('Mirroring needs whole objects: select all of it');
 
+  // How each partly moved face would fold, worked out where it lies flat now.
+  const cuts = new Map([...faces].filter((f) => !whole.has(f)).map((f) => [f, foldCuts(model, f)]));
   const oldPos = new Map([...vertices].map((v) => [v, model.pos(v)]));
   const oldNormal = new Map([...faces].map((f) => [f, model.face(f).normal]));
   const undo = () => {
@@ -97,32 +102,34 @@ export function transformVertices(model: Model, vertices: ReadonlySet<VertexId>,
   };
   for (const v of vertices) model.vertices.get(v)!.pos = applyAffine(a, model.pos(v));
 
+  const bent: FaceId[] = [];
   for (const f of faces) {
     const face = model.face(f);
     if (whole.has(f)) {
       face.normal = transformNormal(a, face.normal);
       continue;
     }
-    // Partly moved: it must still be flat, facing the same way, and not collapsed.
-    const outer = model.loopVertices(face.outer).map((v) => model.pos(v));
-    let n: Vec3;
-    try {
-      n = newellNormal(outer);
-    } catch {
-      undo();
-      throw new BendError('That would collapse a face');
+    // Partly moved: still flat, facing the same way and not collapsed; or else it folds.
+    const n = flatNormal(model, model.faceVertexLoops(f));
+    if (n === null) {
+      bent.push(f);
+      continue;
     }
-    const plane = makePlane(outer[0], n);
-    const flat = model.faceVertexLoops(f).flat().every((v) => Math.abs(signedDistance(plane, model.pos(v))) <= TOL);
-    if (!flat || dot(n, face.normal) <= 0 || faceArea(model, f) <= TOL * TOL) {
+    if (dot(n, face.normal) <= 0 || faceArea(model, f) <= TOL * TOL) {
       undo();
-      throw new BendError(
-        !flat
-          ? 'That would bend a face out of flat. Move or rotate the whole object, or move along a direction that keeps its faces flat.'
-          : 'That would fold a face over or collapse it',
-      );
+      throw new BendError('That would fold a face over or collapse it');
     }
     face.normal = n;
+  }
+  if (bent.length) {
+    const before = model.clone();
+    try {
+      for (const f of bent) fold(model, f, cuts.get(f)!, vertices);
+    } catch (err) {
+      model.copyFrom(before);
+      undo();
+      throw err instanceof BendError ? err : new BendError('That would fold a face over or collapse it');
+    }
   }
 
   if (mirror) {
@@ -143,6 +150,71 @@ export function transformVertices(model: Model, vertices: ReadonlySet<VertexId>,
       // The circle was stretched or only partly moved: it is no longer a true circle.
       for (const h of edges) if (vertices.has(h.origin) || vertices.has(model.dest(h.id))) h.curve = null;
       if (![...model.halfEdges.values()].some((h) => h.curve === c)) model.curves.delete(c);
+    }
+  }
+}
+
+/** The normal of rings that lie flat (and enclose some area), else null. */
+function flatNormal(model: Model, rings: VertexId[][]): Vec3 | null {
+  const outer = rings[0].map((v) => model.pos(v));
+  let raw: Vec3 = [0, 0, 0];
+  outer.forEach((p, i) => (raw = add(raw, cross(p, outer[(i + 1) % outer.length]))));
+  if (length(raw) <= TOL * TOL) return null;
+  const n = normalize(raw);
+  const plane = makePlane(outer[0], n);
+  return rings.flat().every((v) => Math.abs(signedDistance(plane, model.pos(v))) <= TOL) ? n : null;
+}
+
+/**
+ * The ways a face could be cut into flat pieces if it has to fold, worked out while it still lies
+ * flat: triangles of its outline (holes included). A four-sided face has two (either diagonal);
+ * `fold` picks between them once the corners have moved.
+ */
+function foldCuts(model: Model, f: FaceId): VertexId[][][] {
+  const rings = model.faceVertexLoops(f);
+  if (rings.length === 1 && rings[0].length === 4) {
+    const [p, q, r, s] = rings[0];
+    return [
+      [
+        [p, q, r],
+        [p, r, s],
+      ],
+      [
+        [q, r, s],
+        [q, s, p],
+      ],
+    ];
+  }
+  return [triangulateFace(model, f)];
+}
+
+/**
+ * Replace a bent face by flat pieces, joining neighbouring pieces that lie in one plane. Of the
+ * possible cuts, the one that leaves the most of the face where it was (lifting one corner folds
+ * off just that corner), then the one along the shorter line (a gentler fold).
+ */
+function fold(model: Model, f: FaceId, cuts: VertexId[][][], moving: ReadonlySet<VertexId>): void {
+  const { normal, material } = model.face(f);
+  const still = (cut: VertexId[][]) => cut.filter((t) => t.every((v) => !moving.has(v))).length;
+  const line = (cut: VertexId[][]) => (cut.length === 2 ? distance(model.pos(cut[0][0]), model.pos(cut[0][2])) : 0);
+  const order = [...cuts].sort((x, y) => still(y) - still(x) || line(x) - line(y));
+  // Each piece must lie flat and still face the same way (not fold over onto itself).
+  const cut = order.find((c) => c.every((t) => {
+    const n = flatNormal(model, [t]);
+    return n !== null && dot(n, normal) > 0;
+  }));
+  if (!cut) throw new BendError('That would fold a face over or collapse it');
+  model.removeFace(f);
+  let parts: FaceId[] = cut.map((t, i) => model.addFace(t, [], { normal: flatNormal(model, [t])!, material, id: i === 0 ? f : undefined }));
+  for (let merged = true; merged; ) {
+    merged = false;
+    for (const x of parts) {
+      const y = parts.find((g) => g !== x && model.adjacentFaces(x).has(g) && facesCoplanar(model, x, g));
+      if (y === undefined) continue;
+      const result = mergeFaces(model, x, y, y === f ? y : x);
+      parts = [...parts.filter((g) => g !== x && g !== y), ...result];
+      merged = true;
+      break;
     }
   }
 }
