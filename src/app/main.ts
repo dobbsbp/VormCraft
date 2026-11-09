@@ -73,8 +73,10 @@ async function start(): Promise<void> {
     onNewerFile: () => void lifecycle.checkForUpdates(),
   });
   lifecycle.attach(files);
-  // Google Drive (web version for now).
-  const drive = DriveCommands.available() ? new DriveCommands(files, controller, () => lifecycle.settings) : null;
+  // Google Drive (unless switched off: see DriveCommands.available). Switching it on or off in
+  // Settings takes effect at once (syncDrive).
+  const newDrive = () => new DriveCommands(files, controller, () => lifecycle.settings);
+  let drive = (await DriveCommands.available()) ? newDrive() : null;
   const materials = new MaterialsPanel(document.getElementById('materials-panel')!, controller, () => setTool('paint'));
   controller.sceneView = viewer;
   const player = new ScenePlayer(controller);
@@ -205,6 +207,7 @@ async function start(): Promise<void> {
     viewer.setOverlay({
       selectedFaces: controller.selection.faces,
       selectedEdges: controller.selection.edges,
+      selectedPoints: controller.selection.points,
       selectedLabels: controller.selection.labels,
       selectedGuides: controller.selection.guides,
       selectedGroups: controller.selection.groups,
@@ -246,7 +249,7 @@ async function start(): Promise<void> {
   const showEntityInfo = () => togglePanel('info', true);
   const keep: KeepActions = {
     toggleHistory: () => togglePanel('history'),
-    settings: () => void lifecycle.openSettings(),
+    settings: () => void lifecycle.openSettings().then(() => syncDrive()),
     checkUpdates: () => void lifecycle.checkForUpdates(),
     about: () => void lifecycle.about(),
     saveCopy: () => void files.saveCopyWithoutHistory(),
@@ -254,7 +257,9 @@ async function start(): Promise<void> {
       const r = anchor.getBoundingClientRect();
       menu.open(helpMenu({ checkForUpdates: keep.checkUpdates, about: keep.about, support: showSupport }), r.left - 2, r.bottom);
     },
-    drive,
+    get drive() {
+      return drive;
+    },
     driveMenu: (anchor) => {
       if (!drive) return;
       const r = anchor.getBoundingClientRect();
@@ -293,6 +298,14 @@ async function start(): Promise<void> {
   const toggleTools = buildPalette(toolButtons, setTool);
   const search = new SearchBox(document.getElementById('viewport')!, () => commandList(viewer, controller, files, setTool, toggleMaterials, view, showEntityInfo, keep));
   ({ undoButton, redoButton, materialsButton, viewButtons, driveButton } = buildToolbar(viewer, controller, files, toggleMaterials, view, keep));
+  const syncDrive = async () => {
+    const on = await DriveCommands.available();
+    if (on && !drive) drive = newDrive();
+    // Switched off: no more autosaved copies; the sign-in is kept for when it is switched on again.
+    if (!on) drive = null;
+    driveButton!.style.display = drive ? '' : 'none';
+    update();
+  };
 
   const submitTyped = () => {
     const text = typing ?? vcb.value;
@@ -485,8 +498,8 @@ interface KeepActions {
   saveCopy(): void;
   /** The Help menu, under its toolbar button. */
   help(anchor: HTMLElement): void;
-  /** Google Drive (null where it is not available yet: the desktop app). */
-  drive: DriveCommands | null;
+  /** Google Drive (null while it is switched off). */
+  readonly drive: DriveCommands | null;
   /** The Google Drive menu, under its toolbar button. */
   driveMenu(anchor: HTMLElement): void;
 }
@@ -645,12 +658,10 @@ function buildToolbar(viewer: Viewer, controller: ToolController, files: FileCom
     iconButton(ICONS.open, 'Open (Ctrl+O)', () => void files.open()),
     iconButton(ICONS.save, 'Save (Ctrl+S) · Save As (Ctrl+Shift+S)', () => void files.save()),
   );
-  let driveButton: HTMLButtonElement | null = null;
-  if (keep.drive) {
-    const b = iconButton(ICONS.cloud, 'Google Drive: save, open, autosave a copy', () => keep.driveMenu(b));
-    driveButton = b;
-    bar.append(b);
-  }
+  // Always made, hidden while Google Drive is switched off (it can be switched on in Settings).
+  const driveButton = iconButton(ICONS.cloud, 'Google Drive: save, open, autosave a copy', () => keep.driveMenu(driveButton));
+  if (!keep.drive) driveButton.style.display = 'none';
+  bar.append(driveButton);
   bar.append(
     textButton(ICONS.importFile, 'Import', 'Import a SketchUp (.skp), OBJ or STL file (Ctrl+I)', () => void files.importModel()),
   );

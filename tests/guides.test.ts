@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { drawRectangle, findFaceAt, GROUND_PLANE, initBooleanKernel, Model, pushPull, type Vec3 } from '../src/core';
+import { lerp } from '../src/core/math/vec3';
 import { Guides } from '../src/doc/Guides';
 import { guideAt } from '../src/tools/guidePick';
 import { Navigator } from '../src/view/navigation';
@@ -68,8 +69,8 @@ describe('picking guides', () => {
 });
 
 describe('selecting, deleting, erasing guides', () => {
-  const click = (H: ReturnType<typeof harness>, o: Parameters<typeof ev>[2]) => {
-    const e = ev(H.doc, [0, 0, 0], o);
+  const click = (H: ReturnType<typeof harness>, o: Parameters<typeof ev>[2], at: Vec3 = [0, 0, 0]) => {
+    const e = ev(H.doc, at, o);
     H.controller.tool.pointerDown(e);
     H.controller.tool.pointerUp!(e, false);
   };
@@ -97,13 +98,15 @@ describe('selecting, deleting, erasing guides', () => {
     const H = harness();
     drawRectangle(H.model, GROUND_PLANE, [0, 0, 0], 10, 10);
     const edge = [...H.model.edges()][0];
+    // The middle of the edge (its corners are points, which win over guides too).
+    const mid = lerp(H.model.pos(H.model.he(edge).origin), H.model.pos(H.model.dest(edge)), 0.5);
     const line = H.doc.guides.addLine([0, 0, 0], [1, 0, 0]);
     const point = H.doc.guides.addPoint([5, 0, 0]);
     use(H.controller, 'select');
-    click(H, { face: null, edge, guide: { id: line, kind: 'line' } });
+    click(H, { face: null, edge, guide: { id: line, kind: 'line' } }, mid);
     expect([...H.controller.selection.edges]).toEqual([edge]);
     expect(H.controller.selection.guides.size).toBe(0);
-    click(H, { face: null, edge, guide: { id: point, kind: 'point' } });
+    click(H, { face: null, edge, guide: { id: point, kind: 'point' } }, mid);
     expect([...H.controller.selection.guides]).toEqual([point]);
   });
 

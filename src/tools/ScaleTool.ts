@@ -1,6 +1,7 @@
 import { TOL } from '../core/math/tolerance';
 import { add, distance, dot, normalize, scale, sub, type Vec3 } from '../core/math/vec3';
 import type { VertexId } from '../core/model/Model';
+import { pointVertices } from '../core/ops/points';
 import { connectedVertices, scalePieces } from '../core/ops/scale';
 import type { DocumentSnapshot } from '../doc/Document';
 import type { GroupId } from '../doc/Groups';
@@ -61,6 +62,8 @@ export class ScaleTool implements Tool {
       const { selection, doc } = this.ctx;
       let targets: { vertices: Set<VertexId>; groups: GroupId[] };
       if (selection.faces.size || selection.edges.size || selection.groups.size) targets = { vertices: connectedVertices(doc.model, selection.faces, selection.edges), groups: [...selection.groups] };
+      // Points alone: just those points (spreading or drawing them together).
+      else if (selection.points.size) targets = { vertices: pointVertices(doc.model, selection.points), groups: [] };
       else if (e.edge !== null) targets = { vertices: connectedVertices(doc.model, [], [e.edge]), groups: [] };
       else if (e.group !== null) targets = { vertices: new Set(), groups: [e.group] };
       else if (e.face !== null) targets = { vertices: connectedVertices(doc.model, [e.face], []), groups: [] };

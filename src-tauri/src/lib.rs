@@ -1,6 +1,9 @@
 // Desktop shell for the modeler. All modelling happens in the web front end; the shell adds
 // native file dialogs and file access (save/open/export, autosave backups), the updater, opening a
-// .vorm file double-clicked in Explorer, and choosing which graphics card draws the view.
+// .vorm file double-clicked in Explorer, choosing which graphics card draws the view, and Google
+// Drive sign-in (google.rs).
+
+mod google;
 
 use tauri::Manager;
 
@@ -79,7 +82,16 @@ pub fn run() {
     .plugin(tauri_plugin_opener::init())
     .plugin(tauri_plugin_process::init())
     .plugin(tauri_plugin_updater::Builder::new().build())
-    .invoke_handler(tauri::generate_handler![launch_file, graphics_preference, set_graphics_preference])
+    .invoke_handler(tauri::generate_handler![
+      launch_file,
+      graphics_preference,
+      set_graphics_preference,
+      google::google_client,
+      google::google_authorize,
+      google::google_saved_token,
+      google::google_save_token,
+      google::google_forget_token
+    ])
     .setup(|app| {
       // The main window is made here (not in tauri.conf.json) so the graphics card choice can be
       // passed to WebView2 when it starts.

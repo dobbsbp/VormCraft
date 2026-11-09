@@ -1,5 +1,6 @@
 import { isTauri } from './files';
 import { GRAPHICS_LABELS, type GraphicsChoice } from './graphics';
+import { driveShown, setDriveShown } from './drive/preview';
 import { classifyGpu, onWindows, switchHelp } from './graphicsTip';
 import { cleanSettings, DEFAULT_SETTINGS, type Settings } from './settings';
 
@@ -43,6 +44,11 @@ export function showSettingsDialog(current: Settings, ctx: SettingsContext): Pro
         <label class="row"><input type="checkbox" name="history"> Keep a version history in each design, up to <input type="number" name="limit" min="1" max="1000" step="1"> MB</label>
         <p class="note">Versions are kept each time the design is autosaved or saved, compressed, in the .vorm file. Older ones are thinned out (all of the last day, then one an hour, then one a day). The last 100 undo steps are kept in the file too, so Undo works after reopening. Use History to go back to a version; use “Save a Copy Without History” to share a design without either.</p>
       </fieldset>
+      <fieldset>
+        <legend>Google Drive</legend>
+        <label class="row"><input type="checkbox" name="drive"> Show Google Drive saving</label>
+        <p class="note">While Google is still verifying VormCraft, only accounts on its test list can sign in. It will work for everyone once Google has verified VormCraft.</p>
+      </fieldset>
       <fieldset class="graphics">
         <legend>Graphics card</legend>
         ${(Object.keys(GRAPHICS_LABELS) as GraphicsChoice[]).map((g) => `<label class="row"><input type="radio" name="graphics" value="${g}"> ${GRAPHICS_LABELS[g]}</label>`).join('')}
@@ -74,6 +80,7 @@ export function showSettingsDialog(current: Settings, ctx: SettingsContext): Pro
     input('folder').value = folder ?? `${ctx.defaultFolder} (default)`;
   };
   fill(current);
+  input('drive').checked = driveShown();
   dlg.querySelector('.version')!.textContent = ctx.version;
   dlg.querySelector('.gpu')!.textContent = ctx.graphicsInUse;
   const graphicsBox = dlg.querySelector<HTMLFieldSetElement>('fieldset.graphics')!;
@@ -128,6 +135,7 @@ export function showSettingsDialog(current: Settings, ctx: SettingsContext): Pro
     dlg.addEventListener('cancel', () => finish(null));
     form.addEventListener('submit', (e) => {
       e.preventDefault();
+      setDriveShown(input('drive').checked);
       const picked = graphicsBox.querySelector<HTMLInputElement>('input[name="graphics"]:checked');
       finish({
         graphics: ctx.graphics === null ? null : ((picked?.value as GraphicsChoice | undefined) ?? ctx.graphics),

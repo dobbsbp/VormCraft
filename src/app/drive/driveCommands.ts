@@ -8,7 +8,10 @@ import type { Settings } from '../settings';
 import { DriveAutosaveScheduler } from './driveAutosave';
 import { showDriveOpenDialog } from './driveDialog';
 import { DriveClash, DriveSession, type KeyValueStore } from './driveSession';
-import { SignInNeeded, WebGoogleAuth } from './googleAuth';
+import { DesktopGoogleAuth, tauriSignIn } from './desktopAuth';
+import { SignInNeeded, WebGoogleAuth, type GoogleAuth } from './googleAuth';
+import { DRIVE_IN_TESTING, DRIVE_TESTING_NOTE, driveShown } from './preview';
+import { openLink } from '../help';
 
 const AUTOSAVE_KEY = 'vormcraft.drive.autosave';
 const time = (t: number) => new Date(t).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
@@ -25,12 +28,12 @@ function storage(): KeyValueStore | null {
 const userActive = () => (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation?.isActive ?? true;
 
 /**
- * Google Drive in the app (web version for now): connect an account, save a design to VormCraft's
+ * Google Drive in the app (web version and Windows app): connect an account, save a design to VormCraft's
  * folder and open one from it (Ctrl+S then saves back there), and, if switched on, keep an
  * autosaved copy in VormCraft/Autosave. The design's own file is only written by Save.
  */
 export class DriveCommands {
-  readonly auth: WebGoogleAuth;
+  readonly auth: GoogleAuth;
   readonly session: DriveSession;
   private readonly scheduler: DriveAutosaveScheduler;
   private readonly sessionKey = `session-${Date.now().toString(36)}`;
@@ -46,7 +49,7 @@ export class DriveCommands {
   ) {
     const store = storage();
     this.session = new DriveSession(async (renew) => this.auth.source(userActive)(renew), store);
-    this.auth = new WebGoogleAuth(this.session.email || undefined);
+    this.auth = isTauri() ? new DesktopGoogleAuth(this.session.email || undefined) : new WebGoogleAuth(this.session.email || undefined);
     this.autosaveOn = store?.getItem(AUTOSAVE_KEY) === '1';
     this.scheduler = new DriveAutosaveScheduler((revision) => this.uploadCopy(revision));
     files.saveToDrive = () => this.save();
@@ -57,15 +60,14 @@ export class DriveCommands {
   }
 
   /**
-   * Drive works in the web version (the Windows app's sign-in comes later). While Google has the
-   * app in testing (only listed test accounts can sign in) it shows on the test server only, or
-   * where switched on with localStorage `vormcraft.drive.preview` = "1".
+   * Whether to offer Drive: unless switched off (see `driveShown`), and in the Windows app only
+   * if it was built with VormCraft's desktop sign-in at Google.
    */
-  static available(): boolean {
-    if (isTauri()) return false;
-    if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') return true;
+  static async available(): Promise<boolean> {
+    if (!driveShown()) return false;
+    if (!isTauri()) return true;
     try {
-      return localStorage.getItem('vormcraft.drive.preview') === '1';
+      return (await tauriSignIn().client()) !== null;
     } catch {
       return false;
     }
@@ -112,6 +114,7 @@ export class DriveCommands {
 
   /** Sign in (choosing the account) and set up VormCraft's folder. */
   async connect(): Promise<boolean> {
+    if (DRIVE_IN_TESTING && !(await confirmDialog('Google Drive is in testing', DRIVE_TESTING_NOTE, 'Continue'))) return false;
     try {
       await this.auth.signIn(true);
       await this.session.connect();
@@ -271,7 +274,7 @@ export class DriveCommands {
       { label: 'Open from Google Drive…', run: () => void this.open() },
       'separator',
       { label: `${this.autosaveOn ? '✓ ' : ''}Autosave a Copy to Google Drive`, run: () => void this.toggleAutosave() },
-      ...(folder ? [{ label: 'Show the VormCraft Folder in Google Drive', run: () => void window.open(folder, '_blank', 'noopener') } as MenuEntry] : []),
+      ...(folder ? [{ label: 'Show the VormCraft Folder in Google Drive', run: () => void openLink(folder) } as MenuEntry] : []),
       'separator',
       { label: `Disconnect ${this.session.email}`, run: () => void this.disconnect() },
     ];

@@ -3,6 +3,7 @@ import type { Guide, GuideId } from '../doc/Guides';
 import { guideFirst } from './SelectTool';
 import type { VertexId } from '../core/model/Model';
 import { connectedVertices } from '../core/ops/scale';
+import { pointVertices } from '../core/ops/points';
 import { applyAffine, duplicateVertices, transformVertices, type Affine } from '../core/ops/transform';
 import type { Document } from '../doc/Document';
 import type { GroupId } from '../doc/Groups';
@@ -20,7 +21,7 @@ export interface Targets {
 }
 
 /**
- * The selection (its own vertices and labels), or with nothing selected the whole object under
+ * The selection (its own vertices, with a selected point's copies where parts touch, and labels), or with nothing selected the whole object under
  * the cursor.
  */
 export function targetsAt(ctx: ToolContext, e: ToolEvent): Targets {
@@ -33,6 +34,7 @@ export function targetsAt(ctx: ToolContext, e: ToolEvent): Targets {
       vertices.add(doc.model.he(ed).origin);
       vertices.add(doc.model.dest(ed));
     }
+    pointVertices(doc.model, selection.points).forEach((v) => vertices.add(v));
     return { vertices, labels: [...selection.labels], guides: [...selection.guides], groups: [...selection.groups] };
   }
   // Nothing selected: the guide under the cursor (it sits on top), else the object.

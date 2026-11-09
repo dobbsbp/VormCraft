@@ -10,6 +10,7 @@ import { ALL_PARTS, applyScene, captureScene, type SceneId, type SceneParts, typ
 import { extractGeometry, mergeGeometry, modelBounds, scaleModel } from '../core/ops/group';
 import { reverseFaces } from '../core/ops/orient';
 import { scaling, selectionVertices, transformVertices } from '../core/ops/transform';
+import { pointVertices } from '../core/ops/points';
 import { edgeId } from './Selection';
 import { History } from '../doc/History';
 import { facesWithCurveEdges, smoothSurface, surfaceOutline } from '../core/model/surfaces';
@@ -459,11 +460,14 @@ export class ToolController {
 
   deleteSelection(): void {
     if (this.selection.size === 0) return;
-    const { faces, edges, labels, guides, groups } = this.selection;
+    const { faces, edges, points, labels, guides, groups } = this.selection;
+    // A point erases the lines that meet there (and the faces they bound).
+    const model = this.doc.model;
+    const pointEdges = [...pointVertices(model, points)].flatMap((v) => [...model.outgoing(v)].map((h) => edgeId(model, h)));
     this.run(() =>
       this.apply(
         () => {
-          erase(this.doc.model, [...faces], [...edges]);
+          erase(this.doc.model, [...faces], [...new Set([...edges, ...pointEdges])]);
           for (const g of groups) this.doc.groups.delete(g);
           for (const l of labels) this.doc.labels.delete(l);
           for (const g of guides) this.doc.guides.delete(g);
@@ -908,7 +912,9 @@ export class ToolController {
 
   /** Vertices of the selected geometry (exactly the selection). */
   private selectedVertices(): Set<number> {
-    return selectionVertices(this.doc.model, this.selection.faces, this.selection.edges);
+    const out = selectionVertices(this.doc.model, this.selection.faces, this.selection.edges);
+    pointVertices(this.doc.model, this.selection.points).forEach((v) => out.add(v));
+    return out;
   }
 
   /** Bounds of the selection (geometry and groups), or null when nothing is selected. */
@@ -1030,7 +1036,7 @@ export class ToolController {
         if (group.length > 1) surfaces++;
         else flat++;
       }
-      const items = [part(this.selection.groups.size, 'group'), part(surfaces, 'curved surface'), part(flat, 'face'), part(edges.size, 'edge'), part(this.selection.guides.size, 'guide'), part(this.selection.labels.size, 'label')];
+      const items = [part(this.selection.groups.size, 'group'), part(surfaces, 'curved surface'), part(flat, 'face'), part(edges.size, 'edge'), part(this.selection.points.size, 'point'), part(this.selection.guides.size, 'guide'), part(this.selection.labels.size, 'label')];
       return `Selected: ${items.filter(Boolean).join(', ')}. Delete erases, Esc clears.`;
     }
     return this.tool.hint();

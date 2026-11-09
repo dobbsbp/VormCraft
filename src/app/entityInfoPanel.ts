@@ -20,7 +20,7 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 /**
  * Entity Info: facts about the selection (a group's name, contents, size and paint; faces' area
- * and paint; edges' length and smoothing), and renaming a group.
+ * and paint; edges' length and smoothing; a point's position), and renaming a group.
  */
 export class EntityInfoPanel {
   private shown = '';
@@ -44,7 +44,7 @@ export class EntityInfoPanel {
     if (!this.isOpen) return;
     const c = this.controller;
     const sel = c.selection;
-    const key = JSON.stringify([[...sel.faces], [...sel.edges], [...sel.groups], sel.guides.size, sel.labels.size, c.revision, c.doc.editing]);
+    const key = JSON.stringify([[...sel.faces], [...sel.edges], [...sel.points], [...sel.groups], sel.guides.size, sel.labels.size, c.revision, c.doc.editing]);
     if (key === this.shown) return;
     if (this.shown && this.root.contains(document.activeElement) && document.activeElement instanceof HTMLInputElement) return;
     this.shown = key;
@@ -107,8 +107,10 @@ export class EntityInfoPanel {
 
     const faces = [...sel.faces].filter((f) => model.faces.has(f));
     const edges = [...sel.edges].filter((e) => model.halfEdges.has(e));
-    const parts = [plural(sel.groups.size, 'group'), plural(faces.length, 'face'), plural(edges.length, 'edge'), plural(sel.guides.size, 'guide'), plural(sel.labels.size, 'label')].filter((p) => !p.startsWith('0 '));
+    const points = [...sel.points].filter((v) => model.vertices.has(v));
+    const parts = [plural(sel.groups.size, 'group'), plural(faces.length, 'face'), plural(edges.length, 'edge'), plural(points.length, 'point'), plural(sel.guides.size, 'guide'), plural(sel.labels.size, 'label')].filter((p) => !p.startsWith('0 '));
     out.push(el('p', { className: 'panel-note' }, parts.join(', ')));
+    if (points.length === 1) out.push(this.row('Position', model.pos(points[0]).map((x) => formatLength(x).replace(' mm', '')).join(', ') + ' mm'));
     if (faces.length) {
       const paints = new Set(faces.map((f) => model.face(f).material));
       out.push(

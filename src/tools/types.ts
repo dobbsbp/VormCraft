@@ -1,6 +1,6 @@
 import type { Plane } from '../core/math/plane';
 import type { Vec3 } from '../core/math/vec3';
-import type { FaceId, HalfEdgeId } from '../core/model/Model';
+import type { FaceId, HalfEdgeId, VertexId } from '../core/model/Model';
 import type { Document, DocumentSnapshot } from '../doc/Document';
 import type { GroupId } from '../doc/Groups';
 import type { GuideId } from '../doc/Guides';
@@ -114,6 +114,8 @@ export interface Preview {
   /** Faces to tint (e.g. the face under the Push/Pull cursor). */
   faces?: FaceId[];
   edges?: HalfEdgeId[];
+  /** Points to highlight (the one under the Select cursor). */
+  points?: VertexId[];
   /** Groups to highlight (e.g. the one under the Select cursor). */
   groups?: GroupId[];
   /** Guides to highlight (e.g. the one under the Select cursor). */

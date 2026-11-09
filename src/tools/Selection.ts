@@ -1,22 +1,24 @@
-import type { FaceId, HalfEdgeId, Model } from '../core/model/Model';
+import type { FaceId, HalfEdgeId, Model, VertexId } from '../core/model/Model';
 import type { GroupId } from '../doc/Groups';
 import type { GuideId, Guides } from '../doc/Guides';
 import type { LabelId, Labels } from '../doc/Labels';
 
 /**
- * The current selection: faces and edges by id in the model being edited (edges by their lower
- * half-edge id), groups inside it, guides and labels.
+ * The current selection: faces, edges and points by id in the model being edited (edges by their
+ * lower half-edge id; points by a vertex where two or more lines meet), groups inside it, guides
+ * and labels.
  */
 export class Selection {
   readonly faces = new Set<FaceId>();
   readonly edges = new Set<HalfEdgeId>();
+  readonly points = new Set<VertexId>();
   readonly guides = new Set<GuideId>();
   readonly labels = new Set<LabelId>();
   readonly groups = new Set<GroupId>();
   private listeners: (() => void)[] = [];
 
   get size(): number {
-    return this.faces.size + this.edges.size + this.guides.size + this.labels.size + this.groups.size;
+    return this.faces.size + this.edges.size + this.points.size + this.guides.size + this.labels.size + this.groups.size;
   }
 
   onChange(fn: () => void): void {
@@ -31,6 +33,7 @@ export class Selection {
     if (this.size === 0) return;
     this.faces.clear();
     this.edges.clear();
+    this.points.clear();
     this.guides.clear();
     this.labels.clear();
     this.groups.clear();
@@ -42,6 +45,7 @@ export class Selection {
     if (!additive) {
       this.faces.clear();
       this.edges.clear();
+      this.points.clear();
       this.guides.clear();
       this.labels.clear();
       this.groups.clear();
@@ -51,9 +55,10 @@ export class Selection {
     this.changed();
   }
 
-  set(faces: Iterable<FaceId>, edges: Iterable<HalfEdgeId>, guides: Iterable<GuideId> = [], groups: Iterable<GroupId> = []): void {
+  set(faces: Iterable<FaceId>, edges: Iterable<HalfEdgeId>, guides: Iterable<GuideId> = [], groups: Iterable<GroupId> = [], points: Iterable<VertexId> = []): void {
     this.faces.clear();
     this.edges.clear();
+    this.points.clear();
     this.guides.clear();
     this.labels.clear();
     this.groups.clear();
@@ -61,19 +66,21 @@ export class Selection {
     for (const e of edges) this.edges.add(e);
     for (const g of guides) this.guides.add(g);
     for (const g of groups) this.groups.add(g);
+    for (const v of points) this.points.add(v);
     this.changed();
   }
 
-  add(faces: Iterable<FaceId>, edges: Iterable<HalfEdgeId>, guides: Iterable<GuideId> = [], groups: Iterable<GroupId> = []): void {
+  add(faces: Iterable<FaceId>, edges: Iterable<HalfEdgeId>, guides: Iterable<GuideId> = [], groups: Iterable<GroupId> = [], points: Iterable<VertexId> = []): void {
     for (const f of faces) this.faces.add(f);
     for (const e of edges) this.edges.add(e);
     for (const g of guides) this.guides.add(g);
     for (const g of groups) this.groups.add(g);
+    for (const v of points) this.points.add(v);
     this.changed();
   }
 
   /** Shift-click: add what is not selected, remove what is. */
-  toggle(faces: Iterable<FaceId>, edges: Iterable<HalfEdgeId>, guides: Iterable<GuideId> = [], groups: Iterable<GroupId> = []): void {
+  toggle(faces: Iterable<FaceId>, edges: Iterable<HalfEdgeId>, guides: Iterable<GuideId> = [], groups: Iterable<GroupId> = [], points: Iterable<VertexId> = []): void {
     const flip = <T>(set: Set<T>, items: Iterable<T>) => {
       for (const x of items) {
         if (set.has(x)) set.delete(x);
@@ -84,6 +91,7 @@ export class Selection {
     flip(this.edges, edges);
     flip(this.guides, guides);
     flip(this.groups, groups);
+    flip(this.points, points);
     this.changed();
   }
 
@@ -102,6 +110,7 @@ export class Selection {
     if (guides) keep(this.guides, (g) => guides.items.has(g));
     keep(this.faces, (f) => model.faces.has(f));
     keep(this.edges, (e) => model.halfEdges.has(e));
+    keep(this.points, (v) => model.vertices.has(v) && model.outgoing(v).size > 0);
     if (groupOk) keep(this.groups, groupOk);
     if (changed) this.changed();
   }

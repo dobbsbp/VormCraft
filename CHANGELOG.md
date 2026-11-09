@@ -4,6 +4,11 @@ What changed in each version of VormCraft. The section for a version is also sho
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
+## 0.5.3
+
+- Points: with Select, click where two or more lines meet (a box's corner, say) to select that point; Shift adds or removes points. Then use Move to move it: the faces around it stretch, or fold where they can no longer stay flat. Arrow keys hold the move on the red, green or blue axis, and you can type a distance or dx,dy,dz. Delete erases the lines that meet at a point. Entity Info shows a point's position.
+- Google Drive saving, in the Windows app and on vormcraft.app: use the cloud button in the toolbar to connect your Google account, then save, open, and (if you like) autosave a copy to Google Drive. In the Windows app, signing in opens Google's page in your browser, and VormCraft stays signed in between sessions (kept safely in Windows Credential Manager) until you disconnect. Google is still verifying VormCraft: until it has, only accounts on VormCraft's test list can sign in, and others see "Access blocked" from Google. It will work for everyone once Google has verified VormCraft. Don't need it? Hide the button in Settings → Google Drive.
+
 ## 0.5.2
 
 - Erasing the line between two flat faces in the same plane (a square and a triangle drawn against it, say) joins them into one face, as in SketchUp, instead of deleting both.

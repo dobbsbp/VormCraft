@@ -327,6 +327,18 @@ body {
   background: rgba(47, 160, 90, 0.08);
 }
 
+.point {
+  fill: none;
+  stroke: #1f5fd6;
+  stroke-width: 2;
+}
+
+.point.selected {
+  fill: #1f5fd6;
+  stroke: #ffffff;
+  stroke-width: 1.5;
+}
+
 .snap {
   stroke: #1d1f23;
   stroke-width: 1.2;

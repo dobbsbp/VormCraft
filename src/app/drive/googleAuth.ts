@@ -1,4 +1,5 @@
 import { DRIVE_SCOPE, type TokenSource } from './driveApi';
+import { accessDeniedMessage } from './preview';
 
 /** VormCraft's web sign-in ID at Google (public: every web page that signs in shows its own). */
 export const GOOGLE_WEB_CLIENT_ID = '893145123622-39trbq3b7vu1mv4g7va9f0uq8tjasu0h.apps.googleusercontent.com';
@@ -25,6 +26,18 @@ interface Gis {
       revoke(token: string, done?: () => void): void;
     };
   };
+}
+
+/** Google sign-in as the Drive commands use it (the web version's, or the Windows app's). */
+export interface GoogleAuth {
+  /** Whether a token is in hand (no sign-in needed). */
+  readonly ready: boolean;
+  /** For Drive calls: the token in hand, or a new one (asking the person only if `interactive`). */
+  source(interactive: () => boolean): TokenSource;
+  /** Sign in. `chooseAccount` shows the account chooser even if one is remembered. */
+  signIn(chooseAccount: boolean): Promise<string>;
+  remember(email: string): void;
+  signOut(): Promise<void>;
 }
 
 /** Sign-in was needed but could not be done without the person (the token ran out). */
@@ -59,7 +72,7 @@ function loadGis(): Promise<Gis> {
  * needs a pop-up, which browsers only allow right after a click, so a token that runs out during
  * autosave waits for the next time the person uses the Drive button or saves.
  */
-export class WebGoogleAuth {
+export class WebGoogleAuth implements GoogleAuth {
   private token: string | null = null;
   private expires = 0;
   private client: TokenClient | null = null;
@@ -89,7 +102,7 @@ export class WebGoogleAuth {
           this.token = r.access_token;
           this.expires = Date.now() + (r.expires_in ?? 3600) * 1000;
           resolve(r.access_token);
-        } else reject(new Error(r.error === 'access_denied' ? 'Google Drive access was not allowed.' : `Google sign-in failed${r.error_description ? `: ${r.error_description}` : ''}`));
+        } else reject(new Error(r.error === 'access_denied' ? accessDeniedMessage() : `Google sign-in failed${r.error_description ? `: ${r.error_description}` : ''}`));
       };
       this.client ??= gis.accounts.oauth2.initTokenClient({ client_id: GOOGLE_WEB_CLIENT_ID, scope: DRIVE_SCOPE, callback: done });
       this.client.callback = done;

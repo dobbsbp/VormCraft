@@ -3,7 +3,7 @@ import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
 import type { Vec3 } from '../core/math/vec3';
-import type { FaceId, HalfEdgeId, MaterialId, Model } from '../core/model/Model';
+import type { FaceId, HalfEdgeId, MaterialId, Model, VertexId } from '../core/model/Model';
 import { modelBounds } from '../core/ops/group';
 import type { Document } from '../doc/Document';
 import type { GroupId } from '../doc/Groups';
@@ -26,6 +26,8 @@ export type PointerKind = 'move' | 'down' | 'up' | 'dblclick';
 export interface Overlay {
   selectedFaces: Iterable<FaceId>;
   selectedEdges: Iterable<HalfEdgeId>;
+  /** Selected points (vertices where lines meet), drawn as squares. */
+  selectedPoints?: Iterable<VertexId>;
   selectedLabels: Iterable<LabelId>;
   selectedGuides: Iterable<GuideId>;
   selectedGroups: Iterable<GroupId>;
@@ -722,6 +724,13 @@ export class Viewer implements SceneView {
         const text = snap.locked && label ? `${label} (locked)` : label;
         if (text) parts.push(`<text x="${s[0] + 12}" y="${s[1] + 22}" class="snap-label">${text}</text>`);
       }
+    }
+    // Points: selected ones filled, the one under the cursor outlined.
+    const m = this.model;
+    const selectedPoints = new Set(this.overlay.selectedPoints ?? []);
+    for (const v of new Set([...selectedPoints, ...(this.overlay.preview.points ?? [])])) {
+      const s = m.vertices.has(v) ? proj.toScreen(m.pos(v)) : null;
+      if (s) parts.push(`<rect x="${s[0] - 5}" y="${s[1] - 5}" width="10" height="10" class="point${selectedPoints.has(v) ? ' selected' : ''}"/>`);
     }
     parts.push(...this.drawLabels(proj));
     const lasso = this.overlay.preview.lasso;
