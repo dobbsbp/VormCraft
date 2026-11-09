@@ -1,8 +1,12 @@
-# Changelog
+﻿# Changelog
 
 What changed in each version of VormCraft. The section for a version is also shown in the app's
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
+
+## 0.5.4
+
+- New pages on vormcraft.app: About (vormcraft.app/about), Privacy Policy (vormcraft.app/privacy) and Terms of Use (vormcraft.app/terms). The Help menu links to the Privacy Policy and Terms of Use. You can now reach VormCraft at info@vormcraft.app.
 
 ## 0.5.3
 

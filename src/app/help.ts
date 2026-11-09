@@ -11,6 +11,10 @@ export const LINKS = {
   support: 'https://github.com/sponsors/dobbsbp',
   /** The newest Windows installer. */
   windowsApp: 'https://github.com/dobbsbp/VormCraft/releases/latest',
+  /** The pages around the app (public/about, public/privacy, public/terms). */
+  about: 'https://vormcraft.app/about/',
+  privacy: 'https://vormcraft.app/privacy/',
+  terms: 'https://vormcraft.app/terms/',
 };
 
 /** Open a web page in the user's browser (the desktop app hands it to the system). */
@@ -108,6 +112,8 @@ export function helpMenu(actions: { checkForUpdates(): void; about(): void; supp
     { label: 'VormCraft on GitHub', run: () => void openLink(LINKS.project) },
     { label: 'Support VormCraft ♥', run: actions.support },
     'separator',
+    { label: 'Privacy Policy', run: () => void openLink(LINKS.privacy) },
+    { label: 'Terms of Use', run: () => void openLink(LINKS.terms) },
     { label: 'About VormCraft', run: actions.about },
   ];
 }

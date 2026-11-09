@@ -219,6 +219,10 @@ In Indonesia you can also scan this QRIS code with any bank or e-wallet app:
 
 <img src="src/app/assets/qris.jpeg" alt="QRIS payment code for VormCraft" width="280">
 
+## Contact and privacy
+
+Questions, problems or ideas: open an [issue](../../issues) or email **info@vormcraft.app**. Your designs stay on your device or in your own Google Drive; see the [Privacy Policy](https://vormcraft.app/privacy/) and [Terms of Use](https://vormcraft.app/terms/).
+
 ## License
 
 [MIT](LICENSE). Free to use, change and share, including commercially. VormCraft includes open-source libraries under their own licences: see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

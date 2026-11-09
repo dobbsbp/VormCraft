@@ -25,6 +25,9 @@
         },
         {
           "url": "https://drive.google.com/*"
+        },
+        {
+          "url": "https://vormcraft.app/*"
         }
       ]
     },
