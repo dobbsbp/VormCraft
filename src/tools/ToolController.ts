@@ -1,13 +1,14 @@
-import type { FaceId, HalfEdgeId, MaterialId, Model } from '../core/model/Model';
+import { Model, type FaceId, type HalfEdgeId, type MaterialId } from '../core/model/Model';
 import { erase } from '../core/ops/erase';
 import { inheritMaterials, unpaintMaterial } from '../core/ops/materials';
 import type { Document, DocumentSnapshot } from '../doc/Document';
-import type { GroupId } from '../doc/Groups';
+import type { Group, GroupId } from '../doc/Groups';
 import type { VersionKind } from '../doc/Versions';
 import { openVersion, recordVersion } from '../io/versions';
 import type { SkpImport, SkpPart } from '../io/skpImport';
 import { ALL_PARTS, applyScene, captureScene, type SceneId, type SceneParts, type SceneView } from '../doc/Scenes';
 import { extractGeometry, mergeGeometry, modelBounds, scaleModel } from '../core/ops/group';
+import { mergeFlatFaces, shapesOf, unifySolids } from '../core/ops/mergeShapes';
 import { reverseFaces } from '../core/ops/orient';
 import { scaling, selectionVertices, transformVertices } from '../core/ops/transform';
 import { pointVertices } from '../core/ops/points';
@@ -742,6 +743,84 @@ export class ToolController {
       ),
     );
     if (id !== null) this.selection.set([], [], [], [id]);
+  }
+
+  /**
+   * What Merge Shapes would do with the selection: join solids (separate solids and groups; the
+   * person then chooses to unify them or keep them as one group), merge flat faces lying in one
+   * plane, or why it cannot.
+   */
+  mergeShapesPlan(): { kind: 'solids' | 'flat'; count: number } | { error: string } {
+    const { solids, flat } = shapesOf(this.doc.model, this.selection.faces);
+    const groups = this.selection.groups.size;
+    if (flat.length && (solids.length || groups)) return { error: 'Merge Shapes joins solids with solids, or flat faces with flat faces: select one kind' };
+    if (flat.length) return flat.length < 2 ? { error: 'Select two or more flat faces to merge (Shift adds to the selection)' } : { kind: 'flat', count: flat.length };
+    const count = solids.length + groups;
+    return count < 2 ? { error: 'Select two or more shapes to merge (Shift adds to the selection)' } : { kind: 'solids', count };
+  }
+
+  /**
+   * Merge the selected shapes. Flat faces in one plane become the face(s) they cover together.
+   * Solids and groups: 'unify' joins them into one solid (a boolean union, so faces inside it go);
+   * 'group' keeps every shape as it is and puts them together in one new group. Unifying only
+   * groups gives a group; otherwise the result joins the geometry being edited.
+   */
+  mergeShapes(mode: 'unify' | 'group'): void {
+    const plan = this.mergeShapesPlan();
+    if ('error' in plan) {
+      this.error = plan.error;
+      this.onUpdate();
+      return;
+    }
+    const model = this.doc.model;
+    const { solids, flat } = shapesOf(model, this.selection.faces);
+    if (plan.kind === 'flat') {
+      let merged: FaceId[] = [];
+      this.run(() => this.apply(() => void (merged = mergeFlatFaces(model, flat)), undefined, null, 'Merge shapes'));
+      if (merged.length) this.selection.set(merged, []);
+      return;
+    }
+    const shapeFaces = solids.flatMap((s) => [...s]);
+    const groups = [...this.selection.groups];
+    if (mode === 'group') {
+      this.selection.set(shapeFaces, [], [], groups);
+      this.makeGroup();
+      return;
+    }
+    let made: GroupId | null = null;
+    let added: FaceId[] = [];
+    this.run(() =>
+      this.apply(
+        () => {
+          const work = new Model();
+          if (shapeFaces.length) mergeGeometry(work, extractGeometry(model, shapeFaces, []));
+          const name = groups.length ? this.doc.groups.get(groups[0])?.name : undefined;
+          const children: Group[] = [];
+          for (const id of groups) {
+            const g = this.doc.groups.get(id);
+            if (!g) continue;
+            mergeGeometry(work, g.model, g.material);
+            children.push(...this.doc.groups.children(id));
+            this.doc.groups.items.delete(id);
+          }
+          unifySolids(work, shapesOf(work, work.faces.keys()).solids);
+          if (shapeFaces.length === 0) {
+            made = this.doc.groups.add(work, this.doc.editing, { name });
+            for (const c of children) c.parent = made;
+          } else {
+            for (const c of children) c.parent = this.doc.editing;
+            const before = new Set(model.faces.keys());
+            mergeGeometry(model, work);
+            added = [...model.faces.keys()].filter((f) => !before.has(f));
+          }
+        },
+        undefined,
+        null,
+        'Merge shapes',
+      ),
+    );
+    if (made !== null) this.selection.set([], [], [], [made]);
+    else if (added.length) this.selection.set(added, []);
   }
 
   /**

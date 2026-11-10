@@ -29,7 +29,7 @@ function menu(entries: MenuEntry[], prefix = ''): Map<string, boolean> {
   return out;
 }
 
-const host = { entityInfo: () => {} };
+const host = { entityInfo: () => {}, mergeShapes: () => {} };
 
 describe('right-click', () => {
   it('selects what is under the cursor, unless it is already part of the selection', () => {

@@ -4,6 +4,10 @@ What changed in each version of VormCraft. The section for a version is also sho
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
+## Unreleased
+
+- Merge Shapes in the right-click menu: select two or more shapes (Shift-click) and right-click. Overlapping flat faces in one plane merge into one face. For solids and groups you choose Unify (one solid, with the faces inside removed) or Keep shapes (put together in one group, unchanged).
+
 ## 0.5.5
 
 - Push/Pull: a face pushed level with the face next to it now merges with it (pull a step up to the height beside it and the line between them goes). Hold Ctrl to keep the edges.

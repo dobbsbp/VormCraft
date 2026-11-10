@@ -8,6 +8,8 @@ export type MenuEntry =
 /** What the menu needs from the app (things the controller cannot do on its own). */
 export interface MenuHost {
   entityInfo(): void;
+  /** Merge Shapes: asks whether to unify solids or keep them as one group, then merges. */
+  mergeShapes(): void;
 }
 
 /**
@@ -40,6 +42,7 @@ export function contextMenuItems(c: ToolController, host: MenuHost): MenuEntry[]
   entries.push(
     { label: 'Explode', run: () => c.explodeSelection(), disabled: groups === 0 },
     { label: 'Make Group', run: () => c.makeGroup(), disabled: !shapes, shortcut: 'Ctrl+G' },
+    { label: 'Merge Shapes…', run: () => host.mergeShapes(), disabled: 'error' in c.mergeShapesPlan() },
     'separator',
     {
       label: 'Select',

@@ -6,7 +6,7 @@ import type { ToolId } from '../tools/types';
 import type { StandardView } from '../view/navigation';
 import { Viewer } from '../view/Viewer';
 import { FileCommands } from './fileCommands';
-import { confirmDialog } from './dialogs';
+import { choiceDialog, confirmDialog } from './dialogs';
 import { createFileHost, isTauri } from './files';
 import { ICONS } from './icons';
 import type { Command } from './commands';
@@ -272,7 +272,26 @@ async function start(): Promise<void> {
     typing = null;
     player.stop();
     controller.contextPick(sample);
-    menu.open(contextMenuItems(controller, { entityInfo: showEntityInfo }), x, y);
+    menu.open(contextMenuItems(controller, { entityInfo: showEntityInfo, mergeShapes }), x, y);
+  };
+  // Merge Shapes: flat faces merge at once; separate solids ask how to join them.
+  const mergeShapes = async () => {
+    const plan = controller.mergeShapesPlan();
+    if ('kind' in plan && plan.kind === 'solids') {
+      const choice = await choiceDialog(
+        'Merge shapes',
+        `You selected ${plan.count} separate solids.
+
+Unify: join them into one solid. Where they overlap or touch, the faces inside are removed.
+
+Keep shapes: leave every solid as it is and put them together in one group.`,
+        [
+          { label: 'Keep shapes', value: 'group' },
+          { label: 'Unify', value: 'unify' },
+        ],
+      );
+      if (choice) controller.mergeShapes(choice);
+    } else controller.mergeShapes('unify');
   };
   const view: ViewActions = {
     setFaces: (faces) => {
