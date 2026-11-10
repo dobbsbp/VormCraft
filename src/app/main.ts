@@ -254,6 +254,17 @@ async function start(): Promise<void> {
     checkUpdates: () => void lifecycle.checkForUpdates(),
     about: () => void lifecycle.about(),
     saveCopy: () => void files.saveCopyWithoutHistory(),
+    exportMenu: (anchor) => {
+      const r = anchor.getBoundingClientRect();
+      menu.open(
+        [
+          { label: 'STL (for 3D printing)', run: () => void files.exportStl() },
+          { label: 'OBJ (for other 3D programs)', run: () => void files.exportObj() },
+        ],
+        r.left - 2,
+        r.bottom,
+      );
+    },
     help: (anchor) => {
       const r = anchor.getBoundingClientRect();
       menu.open(helpMenu({ checkForUpdates: keep.checkUpdates, about: keep.about, support: showSupport }), r.left - 2, r.bottom);
@@ -285,7 +296,9 @@ async function start(): Promise<void> {
 
 Unify: join them into one solid. Where they overlap or touch, the faces inside are removed.
 
-Keep shapes: leave every solid as it is and put them together in one group.`,
+Keep shapes: leave every solid as it is and put them together in one group.${
+          plan.flatLeft ? `\n\n${plan.flatLeft === 1 ? 'A flat face is' : `${plan.flatLeft} flat faces are`} selected too (such as the circle left inside a Follow Me ring). Unify leaves ${plan.flatLeft === 1 ? 'it' : 'them'} as ${plan.flatLeft === 1 ? 'it is' : 'they are'}.` : ''
+        }`,
         [
           { label: 'Keep shapes', value: 'group' },
           { label: 'Unify', value: 'unify' },
@@ -550,6 +563,8 @@ interface KeepActions {
   saveCopy(): void;
   /** The Help menu, under its toolbar button. */
   help(anchor: HTMLElement): void;
+  /** The Export menu (STL or OBJ), under its toolbar button. */
+  exportMenu(anchor: HTMLElement): void;
   /** Google Drive (null while it is switched off). */
   readonly drive: DriveCommands | null;
   /** The Google Drive menu, under its toolbar button. */
@@ -727,10 +742,8 @@ function buildToolbar(viewer: Viewer, controller: ToolController, files: FileCom
   const redoButton = iconButton(ICONS.redo, 'Redo (Ctrl+Y)', () => controller.redo());
   bar.append(undoButton, redoButton);
   sep();
-  bar.append(
-    textButton(ICONS.exportFile, 'STL', 'Export STL (binary, for 3D printing)', () => void files.exportStl()),
-    textButton(ICONS.exportFile, 'OBJ', 'Export OBJ', () => void files.exportObj()),
-  );
+  const exportButton = textButton(ICONS.exportFile, 'Export', 'Export: STL (for 3D printing) or OBJ', () => keep.exportMenu(exportButton));
+  bar.append(exportButton);
   sep();
   bar.append(iconButton(ICONS.zoomExtents, withShortcut('Zoom Extents'), () => viewer.zoomExtents()));
   bar.append(iconButton(ICONS.previousView, withShortcut('Previous View'), () => previousView(viewer, controller)));

@@ -74,7 +74,8 @@ export const ICONS = {
   save: svg('<path d="M4 4h13l3 3v13H4Z"/><path d="M8 4v5h8V4M8 20v-6h8v6"/>'),
   undo: svg('<path d="M9 7 4 12l5 5"/><path d="M4 12h11a5 5 0 0 1 0 10h-3"/>'),
   redo: svg('<path d="m15 7 5 5-5 5"/><path d="M20 12H9a5 5 0 0 0 0 10h3"/>'),
-  exportFile: svg('<path d="M12 3v11M8 10l4 4 4-4"/><path d="M4 17v4h16v-4"/>'),
+  // An arrow leaving a tray (Import's arrow goes into a stack).
+  exportFile: svg('<path d="M12 15V3M8 7l4-4 4 4"/><path d="M4 13v8h16v-8"/>'),
   guides: svg('<path d="M2 8h20M2 16h20" stroke-dasharray="3 2"/><path d="M8 3v18" stroke-dasharray="3 2"/>'),
   guidesDelete: svg('<path d="M2 8h12M2 16h8" stroke-dasharray="3 2"/><path d="M15 13l6 6M21 13l-6 6"/>'),
 } as const;

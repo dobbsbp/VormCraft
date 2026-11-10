@@ -4,6 +4,11 @@ What changed in each version of VormCraft. The section for a version is also sho
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
+## 0.5.8
+
+- Merge Shapes: solids now merge even when flat faces are selected with them (such as the circle left inside a Follow Me ring), and when it cannot merge, it says why instead of being greyed out.
+- The toolbar's STL and OBJ buttons are now one Export button (STL for 3D printing, or OBJ), with an outward arrow so it no longer looks like Import.
+
 ## 0.5.7
 
 - Google Drive saving now works with any Google account: Google has verified VormCraft. The "in testing" warning is gone.

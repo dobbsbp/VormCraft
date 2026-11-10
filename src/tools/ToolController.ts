@@ -747,16 +747,21 @@ export class ToolController {
 
   /**
    * What Merge Shapes would do with the selection: join solids (separate solids and groups; the
-   * person then chooses to unify them or keep them as one group), merge flat faces lying in one
-   * plane, or why it cannot.
+   * person then chooses to unify them or keep them as one group; flat faces selected with them,
+   * such as the circle left inside a Follow Me ring, are left alone), merge flat faces lying in
+   * one plane, or why it cannot.
    */
-  mergeShapesPlan(): { kind: 'solids' | 'flat'; count: number } | { error: string } {
+  mergeShapesPlan(): { kind: 'solids' | 'flat'; count: number; flatLeft: number } | { error: string } {
     const { solids, flat } = shapesOf(this.doc.model, this.selection.faces);
-    const groups = this.selection.groups.size;
-    if (flat.length && (solids.length || groups)) return { error: 'Merge Shapes joins solids with solids, or flat faces with flat faces: select one kind' };
-    if (flat.length) return flat.length < 2 ? { error: 'Select two or more flat faces to merge (Shift adds to the selection)' } : { kind: 'flat', count: flat.length };
-    const count = solids.length + groups;
-    return count < 2 ? { error: 'Select two or more shapes to merge (Shift adds to the selection)' } : { kind: 'solids', count };
+    const count = solids.length + this.selection.groups.size;
+    if (count >= 2) return { kind: 'solids', count, flatLeft: flat.length };
+    if (count === 1 && flat.length)
+      return {
+        error:
+          'Only one of the selected shapes is a closed solid; the others are flat faces or open surfaces. A box drawn on a face is part of that face, not a solid of its own: draw it apart from other faces, or make each solid a group (Ctrl+G), to merge it',
+      };
+    if (flat.length >= 2) return { kind: 'flat', count: flat.length, flatLeft: 0 };
+    return { error: 'Select two or more shapes to merge (Shift adds to the selection)' };
   }
 
   /**
@@ -783,7 +788,7 @@ export class ToolController {
     const shapeFaces = solids.flatMap((s) => [...s]);
     const groups = [...this.selection.groups];
     if (mode === 'group') {
-      this.selection.set(shapeFaces, [], [], groups);
+      this.selection.set([...shapeFaces, ...flat], [], [], groups);
       this.makeGroup();
       return;
     }
@@ -821,6 +826,10 @@ export class ToolController {
     );
     if (made !== null) this.selection.set([], [], [], [made]);
     else if (added.length) this.selection.set(added, []);
+    if (this.error === null && plan.flatLeft) {
+      this.notice = `Unified the solids. ${plan.flatLeft === 1 ? 'A flat face' : `${plan.flatLeft} flat faces`} in the selection ${plan.flatLeft === 1 ? 'was' : 'were'} left as ${plan.flatLeft === 1 ? 'it was' : 'they were'} (only closed solids are unified).`;
+      this.onUpdate();
+    }
   }
 
   /**

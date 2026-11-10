@@ -1,8 +1,13 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import {
   checkWatertight,
+  drawCircle,
+  drawRectangle,
   faceArea,
+  followMe,
+  GROUND_PLANE,
   initBooleanKernel,
+  makePlane,
   mergeFlatFaces,
   Model,
   pushPull,
@@ -182,14 +187,14 @@ describe('Merge Shapes (right-click)', () => {
     sel.set([[...a][0]], []);
     expect(menuEnabled(contextMenuItems(h.controller, host), 'Merge Shapes…')).toBe(false);
     sel.set([[...a][0], [...b][0]], []);
-    expect(h.controller.mergeShapesPlan()).toEqual({ kind: 'solids', count: 2 });
+    expect(h.controller.mergeShapesPlan()).toEqual({ kind: 'solids', count: 2, flatLeft: 0 });
     expect(menuEnabled(contextMenuItems(h.controller, host), 'Merge Shapes…')).toBe(true);
     const f = rect(h.model, 300, 0, 10, 10);
     sel.set([[...a][0], f], []);
     expect('error' in h.controller.mergeShapesPlan()).toBe(true);
     const g = rect(h.model, 305, 5, 10, 10);
     sel.set([f, g], []);
-    expect(h.controller.mergeShapesPlan()).toEqual({ kind: 'flat', count: 2 });
+    expect(h.controller.mergeShapesPlan()).toEqual({ kind: 'flat', count: 2, flatLeft: 0 });
   });
 
   it('unify joins loose solids from one face of each; undo brings them back', () => {
@@ -240,5 +245,50 @@ describe('Merge Shapes (right-click)', () => {
     h.controller.mergeShapes('unify');
     expect(h.doc.model.faces.size).toBe(1);
     expect([...h.controller.selection.faces]).toEqual([a]);
+  });
+});
+
+describe('Merge Shapes with a Follow Me ring (donut)', () => {
+  const host = { entityInfo: () => {}, mergeShapes: () => {} };
+
+  /** A torus swept round a circle on the ground; the circle's face stays inside it, as in the app. */
+  function donut(m: Model) {
+    const disc = drawCircle(m, GROUND_PLANE, [0, 0, 0], 100, 24).inner!;
+    const ring = m.faceHalfEdges(disc).map((e) => Math.min(e, m.he(e).twin));
+    const profile = drawCircle(m, makePlane([100, 0, 0], [0, 1, 0]), [100, 0, 0], 20, 24).inner!;
+    const torus = followMe(m, profile, ring).faces[0];
+    return { disc, torus };
+  }
+
+  it('unifies the ring with a box even when the leftover circle is selected too', () => {
+    const h = harness();
+    const { disc, torus } = donut(h.model);
+    const b = box(h.model, 80, -30, -10, 200, 60, 40);
+    h.controller.selection.set([...h.model.faces.keys()], []);
+    const plan = h.controller.mergeShapesPlan();
+    expect(plan).toEqual({ kind: 'solids', count: 2, flatLeft: 1 });
+    const before = volume(h.model, [...h.model.connectedFaces(torus)]) + volume(h.model, [...b]);
+    h.controller.mergeShapes('unify');
+    expect(h.controller.error).toBeNull();
+    expect(h.controller.notice).toMatch(/flat face/);
+    expect(h.model.faces.has(disc)).toBe(true); // the circle is left alone
+    const { solids } = shapesOf(h.model, [...h.model.faces.keys()].filter((f) => f !== disc));
+    expect(solids).toHaveLength(1);
+    expect(checkWatertight(h.model, [...solids[0]]).watertight).toBe(true);
+    expect(volume(h.model, [...solids[0]])).toBeLessThan(before); // the overlap counted once
+  });
+
+  it('a box drawn on the leftover circle is part of it, and the menu says why it cannot merge', () => {
+    const h = harness();
+    const { disc, torus } = donut(h.model);
+    const r = drawRectangle(h.model, GROUND_PLANE, [-40, -40, 0], 80, 80, disc).inner!;
+    pushPull(h.model, r, 60);
+    h.controller.selection.set([torus, r], []);
+    const entries = contextMenuItems(h.controller, host);
+    expect(menuEnabled(entries, 'Merge Shapes…')).toBe(true);
+    const plan = h.controller.mergeShapesPlan();
+    expect('error' in plan && plan.error).toMatch(/box drawn on a face is part of that face/);
+    h.controller.mergeShapes('unify');
+    expect(h.controller.error).toMatch(/closed solid/);
   });
 });

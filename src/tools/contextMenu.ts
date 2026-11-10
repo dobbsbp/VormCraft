@@ -42,7 +42,8 @@ export function contextMenuItems(c: ToolController, host: MenuHost): MenuEntry[]
   entries.push(
     { label: 'Explode', run: () => c.explodeSelection(), disabled: groups === 0 },
     { label: 'Make Group', run: () => c.makeGroup(), disabled: !shapes, shortcut: 'Ctrl+G' },
-    { label: 'Merge Shapes…', run: () => host.mergeShapes(), disabled: 'error' in c.mergeShapesPlan() },
+    // Clickable whenever two or more things are selected, so it can say why when it cannot merge.
+    { label: 'Merge Shapes…', run: () => host.mergeShapes(), disabled: sel.faces.size + groups < 2 },
     'separator',
     {
       label: 'Select',
