@@ -1,6 +1,6 @@
 import { isTauri } from './files';
 import { GRAPHICS_LABELS, type GraphicsChoice } from './graphics';
-import { driveShown, setDriveShown } from './drive/preview';
+import { DRIVE_IN_TESTING, driveShown, setDriveShown } from './drive/preview';
 import { classifyGpu, onWindows, switchHelp } from './graphicsTip';
 import { cleanSettings, DEFAULT_SETTINGS, type Settings } from './settings';
 
@@ -47,7 +47,7 @@ export function showSettingsDialog(current: Settings, ctx: SettingsContext): Pro
       <fieldset>
         <legend>Google Drive</legend>
         <label class="row"><input type="checkbox" name="drive"> Show Google Drive saving</label>
-        <p class="note">While Google is still verifying VormCraft, only accounts on its test list can sign in. It will work for everyone once Google has verified VormCraft.</p>
+        <p class="note">${DRIVE_IN_TESTING ? 'While Google is still verifying VormCraft, only accounts on its test list can sign in. It will work for everyone once Google has verified VormCraft.' : 'Save and open designs in your own Google Drive. VormCraft can only see the files it saved or that you opened with it.'}</p>
       </fieldset>
       <fieldset class="graphics">
         <legend>Graphics card</legend>

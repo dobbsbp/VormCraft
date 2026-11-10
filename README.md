@@ -100,7 +100,7 @@ Right-click anything to select it and get a menu for it:
 ### Google Drive (optional)
 - Save and open designs in your own Google Drive (the cloud button), from the web version and the Windows app, and optionally keep an autosaved copy there.
 - VormCraft asks only for access to the files it creates or that you open with it, never the rest of your Drive. Saving checks first whether the file was changed elsewhere (Replace or Keep both).
-- While Google finishes verifying VormCraft, signing in works only for accounts on the test list; it will open to everyone once verified.
+- Works with any Google account: VormCraft is verified by Google.
 
 ### Graphics and help
 - Uses the graphics card through WebGL (Direct3D 11 on Windows). On laptops with two graphics chips, the Windows app uses the faster one by default; **Settings → Graphics card** switches between High performance, Power saving and Let Windows decide. If a computer can only draw without the graphics card, VormCraft says so.

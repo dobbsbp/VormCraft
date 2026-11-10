@@ -5,7 +5,7 @@
  */
 const HIDDEN_KEY = 'vormcraft.drive.hidden';
 
-export const DRIVE_IN_TESTING = true;
+export const DRIVE_IN_TESTING = false;
 
 /** What to tell people before they sign in, and when Google turns them away, while in testing. */
 export const DRIVE_TESTING_NOTE =

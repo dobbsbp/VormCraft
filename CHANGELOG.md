@@ -4,6 +4,10 @@ What changed in each version of VormCraft. The section for a version is also sho
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
+## 0.5.7
+
+- Google Drive saving now works with any Google account: Google has verified VormCraft. The "in testing" warning is gone.
+
 ## 0.5.6
 
 - Viewer mode for phones, foldables and tablets: tap the eye (Viewer) next to the logo. The tools are put away. One finger pans; two fingers pinch to zoom and move to orbit, at the same time; a flick keeps the view gliding; double-tap centres on a point. Exit viewer, Zoom to fit, Open, Google Drive and a resolution setting (the gear, if moving the model is slow) are in the corner.
