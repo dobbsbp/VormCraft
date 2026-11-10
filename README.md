@@ -47,7 +47,7 @@ Both versions have the same version number and open the same `.vorm` files.
 - **Follow Me**: sweep a profile along a path, for mouldings, pipes, grooves, chamfers and lathed (turned) shapes.
 - **Move** and **Rotate**: press Ctrl to copy instead (a + shows on the cursor and the copy follows the mouse; copy mode ends with the copy), then type a count (`5x` or `/5`) to make arrays. **Push/Pull** with Ctrl makes a new starting face: an edge loop stays where the face was, so the new sides are separate faces (stacking floors, for example). **Scale** resizes selected geometry; negative factors mirror.
 - **Points**: click where two or more lines meet to select that corner, then Move, Rotate or Scale it; the faces around it stretch (or fold) to follow. The arrow keys lock the axis.
-- **Merge Shapes** (right-click): overlapping flat faces in one plane become one face; for solids and groups, choose **Unify** (one solid, with the faces inside removed) or **Keep shapes** (put together in one group, unchanged).
+- **Merge Shapes** (right-click): overlapping flat faces in one plane become one face; for solids and groups, choose **Unify** (one solid, with the faces inside removed) or **Keep shapes** (put together in one group, unchanged). Flat faces selected along with solids (such as the circle left inside a Follow Me ring) are left as they are, and if a merge isn't possible it says why.
 - **Eraser**, **Tape Measure** (measure, place guides, rescale the model) and **Text** labels.
 - **Reverse Faces**, **Flip Along** red/green/blue, and **Soften/Unsoften Edges** (from the right-click menu).
 - Curves keep their true radius, so circles and arcs export smoothly at any resolution.
@@ -111,8 +111,7 @@ Right-click anything to select it and get a menu for it:
 - Saves to its own `.vorm` file format, including groups, materials, scenes and history. Files from every earlier version keep opening (each format version is tested), including `.benup` files from before the rename. The first save over an older-format file keeps a backup of the original.
 - **Import SketchUp (.skp) files** (Ctrl+I, or the Import button). The file comes in as a group, with its groups and components inside it as groups of their own (each placement of a component becomes its own copy, as VormCraft has no components yet), keeping faces and holes, true circles and arcs, soft edges, paint (colours, transparency and textures at their real size), and, if you choose, its scenes and guides. Faces that SketchUp allows but VormCraft's solids do not are turned round or kept on edges of their own, and the import reports how many. Files are read by [OpenSKP](https://github.com/iamahsanmehmood/openskp), an independent open-source reader; SketchUp 2018 and later read well, some older files cannot be read yet.
 - **Import OBJ and STL** (Ctrl+I, or the Import button). Each object comes in as a group; flat areas are joined back into single faces (a triangulated box becomes six faces you can push and pull) and curved surfaces are smoothed. You choose the file's units (with a live size preview) and whether Y or Z is up. Broken or duplicate triangles are left out and counted.
-- **STL** (binary) export with a watertight check and adjustable curve resolution, for 3D printing.
-- **OBJ** export.
+- **Export** (one toolbar button): **STL** (binary) with a watertight check and adjustable curve resolution, for 3D printing, or **OBJ** for other 3D programs.
 - Unlimited undo and redo.
 - **Search** (Shift+S) finds any tool or command by name.
 
