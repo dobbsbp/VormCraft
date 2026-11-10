@@ -26,6 +26,7 @@ import { SearchBox } from './searchBox';
 import { showSupport } from './supportDialog';
 import { DriveCommands } from './drive/driveCommands';
 import { toolCursor } from './toolCursors';
+import { ViewerMode } from './viewerMode';
 
 const NAV_HINT = 'Orbit: middle-drag · Pan: right-drag · Re-centre: double middle-click · Zoom: wheel · Lock axis: arrow keys';
 
@@ -309,11 +310,31 @@ Keep shapes: leave every solid as it is and put them together in one group.`,
     },
     toggleScenes,
     toggleTools: () => toggleTools(),
+    enterViewer: () => viewerMode.enter(),
     player,
   };
   // Any click in the viewport stops a running slideshow.
   document.getElementById('viewport')!.addEventListener('pointerdown', () => player.stop(), true);
 
+  // Viewer mode (the eye): touch-friendly looking around, with the tools put away.
+  const viewerMode = new ViewerMode(document.getElementById('viewport')!, {
+    viewer,
+    menu,
+    open: () => void files.open(),
+    driveShown: () => drive !== null,
+    driveMenu: (anchor) => keep.driveMenu(anchor),
+    onChange: (on) => {
+      typing = null;
+      if (on) {
+        player.stop();
+        menu.close();
+        controller.setTool('select');
+        controller.selection.clear();
+        for (const p of Object.values(panels)) p.toggle(false);
+      }
+      update();
+    },
+  });
   const toggleTools = buildPalette(toolButtons, setTool);
   const search = new SearchBox(document.getElementById('viewport')!, () => commandList(viewer, controller, files, setTool, toggleMaterials, view, showEntityInfo, keep));
   ({ undoButton, redoButton, materialsButton, viewButtons, driveButton } = buildToolbar(viewer, controller, files, toggleMaterials, view, keep));
@@ -355,6 +376,16 @@ Keep shapes: leave every solid as it is and put them together in one group.`,
   window.addEventListener('keydown', (e) => {
     if (e.target instanceof HTMLInputElement || document.querySelector('dialog[open]')) return;
     const key = e.key;
+    // Viewer mode has no tools: Esc leaves it; Page Up / Page Down still step through scenes.
+    if (viewerMode.active) {
+      if (key === 'Escape') viewerMode.exit();
+      else if (key === 'PageDown' || key === 'PageUp') {
+        e.preventDefault();
+        player.stop();
+        controller.stepScene(key === 'PageDown' ? 1 : -1);
+      }
+      return;
+    }
     if (key === 'Control') {
       if (!e.repeat) ctrlSwitched = controller.toggleCopy();
       return;
@@ -491,6 +522,8 @@ interface ViewActions {
   chooseBackground(): void;
   toggleScenes(): void;
   toggleTools(): void;
+  /** Viewer mode: tools put away, touch navigation (see ViewerMode). */
+  enterViewer(): void;
   player: ScenePlayer;
 }
 
@@ -579,6 +612,7 @@ function commandList(viewer: Viewer, controller: ToolController, files: FileComm
     ...FACE_STYLES.map(([f, label]) => ({ id: `style:${f}`, name: `Style: ${label}`, keywords: ['style', 'display', 'faces', 'view'], run: () => view.setFaces(f) })),
     { id: 'view:projection', name: 'Parallel / Perspective Projection', keywords: ['camera', 'orthographic', 'ortho', 'perspective', 'parallel'], run: view.toggleProjection },
     { id: 'view:background', name: 'Background Colour…', keywords: ['style', 'color', 'sky'], run: view.chooseBackground },
+    { id: 'view:viewer', name: 'Viewer Mode', keywords: ['touch', 'phone', 'tablet', 'mobile', 'look', 'present', 'eye'], run: view.enterViewer },
     { id: 'view:tools', name: 'Show / Hide Tools', keywords: ['palette', 'toolbar', 'icons', 'collapse', 'tab', 'hide', 'room'], run: view.toggleTools },
     { id: 'scenes:panel', name: 'Scenes', keywords: ['scene', 'view', 'pages', 'tabs'], run: view.toggleScenes },
     { id: 'scenes:add', name: 'Add Scene', keywords: ['scene', 'save view'], run: () => controller.addScene() },
@@ -670,6 +704,10 @@ function buildToolbar(viewer: Viewer, controller: ToolController, files: FileCom
   logo.alt = '';
   brand.append(logo, 'VormCraft');
   bar.append(brand);
+  // Viewer mode: easy to spot and tap on a phone or tablet.
+  const viewerButton = textButton(ICONS.eye, 'Viewer', 'Viewer mode: look around the model with touch (one finger pans, two fingers zoom and orbit); the tools are put away', view.enterViewer);
+  viewerButton.classList.add('viewer-enter');
+  bar.append(viewerButton);
   const sep = () => bar.append(Object.assign(document.createElement('span'), { className: 'sep' }));
 
   bar.append(

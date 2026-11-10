@@ -67,6 +67,9 @@ export const ICONS = {
   zoom: svg('<circle cx="10" cy="10" r="6"/><path d="m15 15 6 6M10 7v6M7 10h6"/>'),
   newDoc: svg('<path d="M6 3h8l4 4v14H6Z"/><path d="M14 3v4h4"/>'),
   open: svg('<path d="M3 6h6l2 2h10v11H3Z"/><path d="M3 10h18"/>'),
+  // Viewer mode: an open eye (enter) and the same eye struck through (exit).
+  eye: svg('<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3.25"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/>'),
+  eyeOff: svg('<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3.25"/><path d="M4 20 20 4" stroke-width="2"/>'),
   cloud: svg('<path d="M7 18.5h10a4.25 4.25 0 0 0 .55-8.46A6 6 0 0 0 6.2 9.3 4.6 4.6 0 0 0 7 18.5Z"/>'),
   save: svg('<path d="M4 4h13l3 3v13H4Z"/><path d="M8 4v5h8V4M8 20v-6h8v6"/>'),
   undo: svg('<path d="M9 7 4 12l5 5"/><path d="M4 12h11a5 5 0 0 1 0 10h-3"/>'),

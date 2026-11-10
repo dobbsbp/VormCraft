@@ -1394,3 +1394,133 @@ kbd {
   font: inherit;
   padding: 5px 8px;
 }
+
+/* Viewer mode (the eye): for looking at a model on a phone, foldable or tablet. The tools,
+   panels and status bar go away; a bar in the corner brings them back. */
+.toolbar .viewer-enter {
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  font-weight: 600;
+}
+
+body.viewer-mode .toolbar,
+body.viewer-mode .palette,
+body.viewer-mode .side-panel,
+body.viewer-mode .statusbar,
+body.viewer-mode .context-badge,
+body.viewer-mode .preview-bar,
+body.viewer-mode .graphics-tip {
+  display: none !important;
+}
+
+html:has(body.viewer-mode),
+body.viewer-mode {
+  overscroll-behavior: none;
+}
+
+body.viewer-mode .viewport-canvas {
+  cursor: default;
+}
+
+/* Scene tabs move to the bottom, in reach of a thumb and clear of the bar. */
+body.viewer-mode .scene-tabs {
+  top: auto;
+  bottom: max(12px, env(safe-area-inset-bottom));
+  justify-content: center;
+}
+
+body.viewer-mode .scene-tab {
+  font-size: 14px;
+  padding: 8px 14px;
+  min-height: 40px;
+  touch-action: manipulation;
+}
+
+.viewer-bar {
+  position: absolute;
+  top: max(10px, env(safe-area-inset-top));
+  right: max(10px, env(safe-area-inset-right));
+  z-index: 7;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.viewer-bar[hidden] {
+  display: none;
+}
+
+.viewer-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.viewer-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 44px;
+  height: 44px;
+  padding: 0 10px;
+  border: 1px solid var(--chrome-border);
+  border-radius: 10px;
+  background: var(--chrome);
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.viewer-button[hidden] {
+  display: none;
+}
+
+.viewer-button svg {
+  width: 24px;
+  height: 24px;
+}
+
+.viewer-button:hover {
+  background: var(--button-hover);
+}
+
+.viewer-button.viewer-exit {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  padding: 0 14px;
+}
+
+.viewer-hint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  width: fit-content;
+  bottom: calc(max(12px, env(safe-area-inset-bottom)) + 56px);
+  z-index: 6;
+  max-width: calc(100% - 32px);
+  white-space: pre-line;
+  line-height: 1.5;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: rgba(30, 32, 36, 0.82);
+  color: #fff;
+  font-size: 14px;
+  text-align: center;
+  pointer-events: none;
+  transition: opacity 0.6s;
+}
+
+.viewer-hint[hidden] {
+  display: none;
+}
+
+.viewer-hint.fading {
+  opacity: 0;
+}

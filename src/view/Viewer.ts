@@ -18,6 +18,7 @@ import { buildDisplayData, edgeSegment, faceTriangles, type DisplayData } from '
 import { dragModeFor, Navigator, ViewHistory, type CameraState, type DragMode, type StandardView } from './navigation';
 import { pickHits } from './picking';
 import { cameraProjector, screenRay } from './projector';
+import { DOUBLE_TAP_MS, DOUBLE_TAP_PX, Glide, midpoint, TAP_SLOP_PX, twoFingerStep, type ScreenPoint } from './touchGestures';
 import { SNAP_LABELS, THEME } from './theme';
 
 export type PointerKind = 'move' | 'down' | 'up' | 'dblclick';
@@ -91,6 +92,12 @@ export class Viewer implements SceneView {
   onLabelClick: (id: LabelId, shift: boolean) => void = () => {};
   /** When set (Orbit/Pan/Zoom tools), the left button navigates instead of going to the tools. */
   leftDragNavigation: DragMode | null = null;
+  /**
+   * Viewer mode: touch (and pen) navigates (one finger pans; two fingers pinch to zoom and move to
+   * orbit, both at once; a flick glides on; double-tap centres), nothing goes to the tools, and
+   * there is no right-click menu. The mouse keeps its middle/right buttons and wheel.
+   */
+  viewerMode = false;
 
   private data: DisplayData | null = null;
   private readonly frontMesh: THREE.Mesh;
@@ -132,6 +139,15 @@ export class Viewer implements SceneView {
   private lastWheel = 0;
   private renderQueued = false;
   private readonly resizeObserver: ResizeObserver;
+  /** Fingers (and pens) down in Viewer mode: pointer id → client position. */
+  private readonly touches = new Map<number, ScreenPoint>();
+  /** The current touch gesture: the fingers it follows (one: pan; two: zoom and orbit). */
+  private touchGesture: { ids: number[]; last: ScreenPoint[]; pivot: THREE.Vector3; depth: number } | null = null;
+  /** A single finger that may still be a tap, and the last tap (for double-tap). */
+  private tap: { x: number; y: number; moved: boolean } | null = null;
+  private lastTap: { time: number; x: number; y: number } | null = null;
+  private readonly glide = new Glide();
+  private glideRun = 0;
 
   constructor(
     private readonly container: HTMLElement,
@@ -784,6 +800,104 @@ export class Viewer implements SceneView {
 
   // ------------------------------------------------------------------ input
 
+  /** Draw at this share of the screen's resolution (1 = full; lower is faster on slow devices). */
+  setResolutionScale(scale: number): void {
+    this.renderer.setPixelRatio(Math.max(0.25, window.devicePixelRatio * scale));
+    this.resize();
+  }
+
+  /** Stop a glide that is still running (any new input does). */
+  private stopGlide(): void {
+    this.glideRun++;
+    this.glide.reset();
+  }
+
+  private clientToLocal([x, y]: ScreenPoint): [number, number] {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    return [x - rect.left, y - rect.top];
+  }
+
+  /** (Re)start the touch gesture from the fingers down now, so adding or lifting one never jumps. */
+  private startTouchGesture(): void {
+    this.glide.reset();
+    const ids = [...this.touches.keys()].slice(0, 2);
+    if (!ids.length) {
+      this.touchGesture = null;
+      return;
+    }
+    if (!this.touchGesture) this.rememberView();
+    const last = ids.map((id) => this.touches.get(id)!);
+    const at = last.length === 1 ? last[0] : midpoint(last[0], last[1]);
+    const pivot = this.focusPoint(this.clientToLocal(at));
+    const depth = Math.max(pivot.clone().sub(this.camera.position).dot(this.nav.forward()), this.camera.near);
+    this.touchGesture = { ids, last, pivot, depth };
+  }
+
+  private touchDown(e: PointerEvent): void {
+    e.preventDefault();
+    this.stopGlide();
+    capturePointer(this.renderer.domElement, e.pointerId, true);
+    this.touches.set(e.pointerId, [e.clientX, e.clientY]);
+    this.tap = this.touches.size === 1 ? { x: e.clientX, y: e.clientY, moved: false } : null;
+    this.startTouchGesture();
+  }
+
+  private touchMove(e: PointerEvent): void {
+    this.touches.set(e.pointerId, [e.clientX, e.clientY]);
+    const g = this.touchGesture;
+    if (!g || !g.ids.includes(e.pointerId)) return;
+    if (this.tap && Math.hypot(e.clientX - this.tap.x, e.clientY - this.tap.y) > TAP_SLOP_PX) this.tap.moved = true;
+    const now = g.ids.map((id) => this.touches.get(id)!);
+    const t = performance.now();
+    if (now.length === 1) {
+      const dx = now[0][0] - g.last[0][0];
+      const dy = now[0][1] - g.last[0][1];
+      this.nav.pan(dx, dy, g.depth, this.renderer.domElement.clientHeight);
+      this.glide.move(dx, dy, t);
+    } else {
+      const step = twoFingerStep([g.last[0], g.last[1]], [now[0], now[1]]);
+      if (step.zoomSteps) this.nav.zoomToward(g.pivot, step.zoomSteps);
+      this.nav.orbit(step.orbit[0], step.orbit[1], g.pivot);
+      this.glide.move(step.orbit[0], step.orbit[1], t);
+    }
+    g.last = now;
+    this.requestRender();
+  }
+
+  private touchUp(e: PointerEvent): void {
+    this.touches.delete(e.pointerId);
+    capturePointer(this.renderer.domElement, e.pointerId, false);
+    const g = this.touchGesture;
+    if (this.touches.size) {
+      this.tap = null;
+      this.startTouchGesture(); // carry on with the fingers still down
+      return;
+    }
+    this.touchGesture = null;
+    const now = performance.now();
+    if (this.tap && !this.tap.moved && e.type === 'pointerup') {
+      const last = this.lastTap;
+      if (last && now - last.time < DOUBLE_TAP_MS && Math.hypot(e.clientX - last.x, e.clientY - last.y) < DOUBLE_TAP_PX) {
+        this.lastTap = null;
+        this.recenterOn(this.focusPoint(this.local(e)));
+      } else this.lastTap = { time: now, x: e.clientX, y: e.clientY };
+    } else if (g && e.type === 'pointerup' && this.glide.release(now)) {
+      const run = ++this.glideRun;
+      const pan = g.ids.length === 1;
+      const frame = () => {
+        if (run !== this.glideRun) return;
+        const d = this.glide.step(performance.now());
+        if (!d) return;
+        if (pan) this.nav.pan(d[0], d[1], g.depth, this.renderer.domElement.clientHeight);
+        else this.nav.orbit(d[0], d[1], g.pivot);
+        this.requestRender();
+        requestAnimationFrame(frame);
+      };
+      requestAnimationFrame(frame);
+    }
+    this.tap = null;
+  }
+
   private resize(): void {
     const w = Math.max(1, this.container.clientWidth);
     const h = Math.max(1, this.container.clientHeight);
@@ -856,6 +970,12 @@ export class Viewer implements SceneView {
 
     el.addEventListener('pointerdown', (e) => {
       const screen = this.local(e);
+      if (this.viewerMode && e.pointerType !== 'mouse') {
+        this.touchDown(e);
+        return;
+      }
+      this.stopGlide();
+      if (this.viewerMode && e.button === 0) return; // nothing to click on in Viewer mode
       if (e.button === 0 && !this.leftDragNavigation) {
         this.leftDown = true;
         capturePointer(el, e.pointerId, true);
@@ -888,6 +1008,10 @@ export class Viewer implements SceneView {
     });
 
     el.addEventListener('pointermove', (e) => {
+      if (this.touches.has(e.pointerId)) {
+        this.touchMove(e);
+        return;
+      }
       if (this.drag && e.pointerId === this.drag.pointerId) {
         const dx = e.clientX - this.drag.x;
         const dy = e.clientY - this.drag.y;
@@ -899,10 +1023,14 @@ export class Viewer implements SceneView {
         this.requestRender();
         return;
       }
-      this.onPointer('move', this.sample(this.local(e), e, this.leftDown));
+      if (!this.viewerMode) this.onPointer('move', this.sample(this.local(e), e, this.leftDown));
     });
 
     const endDrag = (e: PointerEvent) => {
+      if (this.touches.has(e.pointerId)) {
+        this.touchUp(e);
+        return;
+      }
       if (e.button === 0 && this.leftDown) {
         this.leftDown = false;
         capturePointer(el, e.pointerId, false);
@@ -917,21 +1045,23 @@ export class Viewer implements SceneView {
       // Right button pressed and released in place: a right-click, not an orbit.
       if (e.type === 'pointerup' && d.button === 2 && Math.hypot(e.clientX - d.startX, e.clientY - d.startY) < 5) {
         if (this.views.size > d.viewsBefore) this.views.pop(); // the orbit that never happened
+        if (this.viewerMode) return;
         this.onContextMenu(this.sample(this.local(e), e, false), [e.clientX, e.clientY]);
         return;
       }
-      this.onPointer('move', this.sample(this.local(e), e, false));
+      if (!this.viewerMode) this.onPointer('move', this.sample(this.local(e), e, false));
     };
     el.addEventListener('pointerup', endDrag);
     el.addEventListener('pointercancel', endDrag);
     el.addEventListener('dblclick', (e) => {
-      if (e.button === 0) this.onPointer('dblclick', this.sample(this.local(e), e, false));
+      if (e.button === 0 && !this.viewerMode) this.onPointer('dblclick', this.sample(this.local(e), e, false));
     });
 
     el.addEventListener(
       'wheel',
       (e) => {
         e.preventDefault();
+        this.stopGlide();
         // Normalise lines/pages to pixels, then about one zoom step per notch (100px).
         const px = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaMode === 2 ? e.deltaY * el.clientHeight : e.deltaY;
         const screen = this.local(e);
@@ -940,7 +1070,7 @@ export class Viewer implements SceneView {
         this.lastWheel = now;
         this.nav.zoomToward(this.focusPoint(screen), -px / 100);
         this.requestRender();
-        this.onPointer('move', this.sample(screen, e, this.leftDown));
+        if (!this.viewerMode) this.onPointer('move', this.sample(screen, e, this.leftDown));
       },
       { passive: false },
     );
