@@ -173,7 +173,8 @@ export type ToolId =
   | 'orbit'
   | 'pan'
   | 'zoom'
-  | 'zoomWindow';
+  | 'zoomWindow'
+  | 'place';
 
 export interface Tool {
   readonly id: ToolId;

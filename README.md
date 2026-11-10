@@ -52,6 +52,11 @@ Both versions have the same version number and open the same `.vorm` files.
 - **Reverse Faces**, **Flip Along** red/green/blue, and **Soften/Unsoften Edges** (from the right-click menu).
 - Curves keep their true radius, so circles and arcs export smoothly at any resolution.
 
+### Library
+- **Library** (toolbar): 49 household objects made for VormCraft at real-world sizes: furniture, kitchen units and appliances, bathroom fittings, electronics, lighting and decor.
+- Search by name or other words ("couch", "fridge", "telly"; typos are fine), narrow by room or kind, and pick a size (beds from Single to King, TVs from 43" to 75", kitchen units 300 to 900 mm wide).
+- Click an object, then click in the model to place it; arrow keys turn it first. Each object comes in as a group with a group for each paint, so parts are easy to recolour. Wall items come in at their usual height, and pendant lights hang from the point you click.
+
 ### Groups
 - Select geometry and press **Ctrl+G** to make a group. A group keeps its geometry to itself, so it never sticks to or merges with anything it touches, and groups can hold other groups.
 - A group selects, moves, rotates, scales, copies, flips and paints as one piece.
@@ -77,7 +82,7 @@ Right-click anything to select it and get a menu for it:
 - **Scenes** save a view: the camera, which groups are hidden, and the display style. Tabs along the top of the viewport jump between them with a smooth camera glide; **Page Down / Page Up** step through them.
 - **Play** runs the scenes as a looping slideshow, with adjustable transition and pause times.
 - Choose per scene what it restores (camera, hidden groups, style), overwrite a scene with **Update**, and rename, reorder or delete scenes in the Scenes panel.
-- Display styles: **Textured**, **Shaded**, **Wireframe** and **X-ray**, plus back edges and a background colour.
+- Display styles: **Textured**, **Shaded**, **Wireframe** and **X-ray** (one toolbar button with a menu), plus back edges and a background colour. The standard views (Iso, Top, Front, Right, Back, Left) are one button with a menu too.
 - **Perspective** or **parallel** projection.
 
 ### Materials
@@ -201,6 +206,7 @@ VormCraft's own geometry kernel is the source of truth. The 3D view only display
 | `src/view` | [Three.js](https://threejs.org/) display: triangulation for drawing, picking that maps every triangle and line back to its model face or edge, display styles, camera navigation (perspective and parallel), and touch gestures for Viewer mode. |
 | `src/tools` | Every tool as a plain state machine, plus the inference/snapping engine, the right-click menu, and the controller that turns each operation into one atomic, undoable step. |
 | `src/doc` | The document (top-level geometry, groups, guides, labels, materials, scenes), snapshots and undo history. |
+| `src/library` | The object library: every item built by code from boxes, cylinders and turned shapes at real sizes, plus its search. |
 | `src/io` | The `.vorm` file format, STL and OBJ export, and tessellation of curved surfaces from their true radii. |
 | `src/app` | The app shell: toolbar, panels (Materials, Scenes, Entity Info, History), context menu, dialogs, icons, Viewer mode, and Google Drive saving (`src/app/drive`). |
 | `src-tauri` | The Tauri desktop shell: native file dialogs and file access, the updater, opening double-clicked `.vorm` files, and the graphics card choice. |
@@ -217,6 +223,7 @@ Features are added as real use calls for them. Ideas on the list:
 
 - Dimensions, section planes, tags/layers, shadows (scenes will save these too)
 - Components (reusable, linked copies) and locking groups
+- More Library categories (building parts, office, outdoor) and saving your own items to the Library
 - A field-of-view control
 - STEP export (true curves, through OpenCascade)
 - Exporting materials with OBJ

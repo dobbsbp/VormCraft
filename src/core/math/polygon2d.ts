@@ -95,16 +95,33 @@ export function triangulate2D(outer: readonly Vec2[], holes: readonly (readonly 
       all.push(p);
     }
   }
-  const idx = earcut(coords, holeStarts.length ? holeStarts : undefined, 2);
-  const tris: [number, number, number][] = [];
-  for (let i = 0; i < idx.length; i += 3) {
-    const a = idx[i];
-    const b = idx[i + 1];
-    const c = idx[i + 2];
-    const area = cross2(sub2(all[b], all[a]), sub2(all[c], all[a]));
-    if (area === 0) continue;
-    tris.push(area > 0 ? [a, b, c] : [a, c, b]);
+  let idx = earcut(coords, holeStarts.length ? holeStarts : undefined, 2);
+  // A full triangulation uses every point: n points and h holes give n + 2h - 2 triangles. Earcut
+  // skips points lying in line with their neighbours (holes in a row along one line), which leaves
+  // the mesh open there; nudging the points by a hair (only for choosing the triangles) avoids it.
+  const expected = all.length + 2 * holes.length - 2;
+  for (let attempt = 1; idx.length / 3 !== expected && attempt <= 3; attempt++) {
+    let size = 0;
+    for (const p of all) size = Math.max(size, Math.abs(p[0]), Math.abs(p[1]));
+    const nudge = (size || 1) * 1e-9 * 100 ** attempt;
+    const jittered = coords.map((c, i) => c + nudge * Math.sin(i * 12.9898 + attempt * 78.233));
+    const again = earcut(jittered, holeStarts.length ? holeStarts : undefined, 2);
+    if (Math.abs(again.length / 3 - expected) < Math.abs(idx.length / 3 - expected)) idx = again;
   }
+  const tris: [number, number, number][] = [];
+  // Earcut winds every triangle the same way. Flat triangles (three points in a line, as where
+  // holes line up with each other or the outline) are kept, wound like the rest: they carry edges
+  // the mesh needs to stay closed, and dropping them would leave a gap.
+  let flip: boolean | undefined;
+  for (let i = 0; i < idx.length; i += 3) {
+    const area = cross2(sub2(all[idx[i + 1]], all[idx[i]]), sub2(all[idx[i + 2]], all[idx[i]]));
+    if (area !== 0) {
+      flip = area < 0;
+      break;
+    }
+  }
+  if (flip === undefined) return tris;
+  for (let i = 0; i < idx.length; i += 3) tris.push(flip ? [idx[i], idx[i + 2], idx[i + 1]] : [idx[i], idx[i + 1], idx[i + 2]]);
   return tris;
 }
 

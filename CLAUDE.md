@@ -16,6 +16,7 @@
 - `src/io` — export and file format. `tessellate.ts` triangulates for export and re-divides curved surfaces from the stored true radii (`maxDeviation`); `export.ts` writes binary STL (refuses non-watertight models unless `allowOpen`) and OBJ; `fileFormat.ts` is the versioned `.vorm` JSON format (bump `FORMAT_VERSION` and keep reading old versions when it changes; `.benup` files from before the rename must keep opening).
 - `src/doc/History.ts` — undo/redo as document snapshots, recorded by `ToolController.apply`.
 - `src-tauri` — the Tauri desktop shell: native dialogs, file access (models and autosave backups), the updater, and `launch_file` (a .vorm double-clicked in Explorer); capabilities in `src-tauri/capabilities/default.json`. `src/app/files.ts` hides browser vs desktop file handling; `src/app/backups.ts` the backup folder.
+- `src/library` — the object library: items built by code from `kit.ts` (boxes, cylinders, lathes; union per part) at real sizes, `catalog.ts` (item type, rooms), `search.ts`. Pure TypeScript (no DOM), tested in `tests/library.test.ts`. Placed by `src/tools/PlaceTool.ts`; panel `src/app/libraryPanel.ts`. Our own items only.
 - `src/app` — app shell (toolbar, status bar, Measurements box), icons (our own SVGs), demo model.
 - `tests` — Vitest, Node environment. View logic is tested with Three.js math/raycasting, no WebGL.
 

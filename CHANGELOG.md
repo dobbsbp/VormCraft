@@ -4,6 +4,12 @@ What changed in each version of VormCraft. The section for a version is also sho
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
+## 0.5.9
+
+- Library (toolbar): 49 household objects at real sizes to place in your model: furniture, kitchen units and appliances, bathroom fittings, electronics, lighting and decor. Search by name or other words (couch, fridge, telly; typos are fine), narrow by room or kind, pick a size (a bed in Single to King, a TV from 43" to 75"), click it, then click in the model. Arrow keys turn it before you place it. Each object comes in as a group, with a group for each paint so parts are easy to recolour.
+- The toolbar fits on one row again: the six standard views and the four face styles are now one button each, with a menu.
+- Fixed: in some layouts (holes lined up in a row, such as four legs under a table top) a face could be left with a gap in its triangles, so later push/pulls or merges on it failed.
+
 ## 0.5.8
 
 - Merge Shapes: solids now merge even when flat faces are selected with them (such as the circle left inside a Follow Me ring), and when it cannot merge, it says why instead of being greyed out.

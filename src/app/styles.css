@@ -1524,3 +1524,137 @@ body.viewer-mode .scene-tab {
 .viewer-hint.fading {
   opacity: 0;
 }
+
+/* Library panel: search, room and kind filters, a grid of items to place. */
+.library-panel {
+  width: 300px;
+}
+
+.library-panel .panel-note {
+  margin: 6px 0;
+}
+
+.library-search,
+.library-room {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 6px 0;
+  padding: 6px 8px;
+  border: 1px solid var(--chrome-border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.library-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 4px 0;
+}
+
+.library-kind {
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 9px;
+  border: 1px solid var(--chrome-border);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.library-kind:hover {
+  background: var(--button-hover);
+}
+
+.library-kind[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.library-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.library-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.library-pick {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 4px;
+  border: 1px solid var(--chrome-border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  text-align: center;
+}
+
+.library-pick:hover,
+.library-pick:focus-visible {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.library-thumb {
+  width: 100%;
+  max-width: 120px;
+  aspect-ratio: 1;
+  height: auto;
+  object-fit: contain;
+}
+
+/* Until its picture is drawn. */
+.library-thumb:not([src]) {
+  visibility: hidden;
+}
+
+.library-name {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.library-size {
+  min-height: 1.3em;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.library-variant {
+  width: 100%;
+  font: inherit;
+  font-size: 11px;
+  padding: 2px 4px;
+  border: 1px solid var(--chrome-border);
+  border-radius: 4px;
+  background: #fff;
+  color: var(--text);
+}
+
+/* Toolbar buttons that open a menu (standard views, face style): a small arrow after the icon. */
+.icon-button.has-menu {
+  width: auto;
+  padding: 0 2px 0 6px;
+  gap: 1px;
+}
+
+.icon-button svg.menu-caret {
+  width: 8px;
+  height: 8px;
+  opacity: 0.7;
+}

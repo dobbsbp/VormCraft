@@ -14,6 +14,7 @@ import { bindingFor, KEY_BINDINGS, withShortcut } from './keymap';
 import { MaterialsPanel } from './materialsPanel';
 import { ScenePlayer } from './scenePlayer';
 import { ScenesPanel } from './scenesPanel';
+import { LibraryPanel } from './libraryPanel';
 import { ContextMenu } from './contextMenuView';
 import { EntityInfoPanel } from './entityInfoPanel';
 import { contextMenuItems } from '../tools/contextMenu';
@@ -84,6 +85,7 @@ async function start(): Promise<void> {
   const scenes = new ScenesPanel(document.getElementById('scenes-panel')!, controller, player);
   player.onChange = () => update();
   const info = new EntityInfoPanel(document.getElementById('info-panel')!, controller);
+  const library = new LibraryPanel(document.getElementById('library-panel')!, controller);
   const history = new HistoryPanel(
     document.getElementById('history-panel')!,
     controller,
@@ -185,10 +187,13 @@ async function start(): Promise<void> {
     renderTabs();
     if (viewButtons) {
       const style = viewer.displayStyle();
-      for (const [f, b] of viewButtons.styles) b.setAttribute('aria-pressed', String(style.faces === f));
+      const current = FACE_STYLES.find(([f]) => f === style.faces) ?? FACE_STYLES[0];
+      viewButtons.style.innerHTML = current[2] + MENU_CARET;
+      viewButtons.style.title = `Style: ${current[1]} (click to change)`;
       viewButtons.projection.innerHTML = viewer.projection === 'parallel' ? ICONS.parallel : ICONS.perspective;
       viewButtons.projection.title = viewer.projection === 'parallel' ? 'Parallel projection (click for perspective)' : 'Perspective (click for parallel projection)';
       viewButtons.scenes.setAttribute('aria-pressed', String(scenes.isOpen));
+      viewButtons.library.setAttribute('aria-pressed', String(library.isOpen));
     }
     const editing = controller.editingName;
     contextBadge.hidden = editing === null;
@@ -234,7 +239,7 @@ async function start(): Promise<void> {
   };
 
   // One side panel at a time.
-  const panels = { materials, scenes, info, history };
+  const panels = { materials, scenes, info, history, library };
   const togglePanel = (which: keyof typeof panels, open = !panels[which].isOpen) => {
     for (const [k, p] of Object.entries(panels)) if (k !== which && open) p.toggle(false);
     panels[which].toggle(open);
@@ -247,6 +252,7 @@ async function start(): Promise<void> {
   };
   const toggleMaterials = () => togglePanel('materials');
   const toggleScenes = () => togglePanel('scenes');
+  const toggleLibrary = () => togglePanel('library');
   const showEntityInfo = () => togglePanel('info', true);
   const keep: KeepActions = {
     toggleHistory: () => togglePanel('history'),
@@ -322,6 +328,24 @@ Keep shapes: leave every solid as it is and put them together in one group.${
       input.click();
     },
     toggleScenes,
+    viewsMenu: (anchor) => {
+      const r = anchor.getBoundingClientRect();
+      menu.open(
+        STANDARD_VIEWS.map(([v, label]) => ({ label: `${label} view`, run: () => viewer.setView(v) })),
+        r.left - 2,
+        r.bottom,
+      );
+    },
+    styleMenu: (anchor) => {
+      const r = anchor.getBoundingClientRect();
+      const current = viewer.displayStyle().faces;
+      menu.open(
+        FACE_STYLES.map(([f, label]) => ({ label: `${f === current ? '✓ ' : ' '}${label}`, run: () => view.setFaces(f) })),
+        r.left - 2,
+        r.bottom,
+      );
+    },
+    toggleLibrary,
     toggleTools: () => toggleTools(),
     enterViewer: () => viewerMode.enter(),
     player,
@@ -534,6 +558,11 @@ interface ViewActions {
   toggleProjection(): void;
   chooseBackground(): void;
   toggleScenes(): void;
+  /** The standard views (Iso, Top, Front…) and the face styles, as menus under their toolbar buttons. */
+  viewsMenu(anchor: HTMLElement): void;
+  styleMenu(anchor: HTMLElement): void;
+  /** The Library panel: ready-made objects to place. */
+  toggleLibrary(): void;
   toggleTools(): void;
   /** Viewer mode: tools put away, touch navigation (see ViewerMode). */
   enterViewer(): void;
@@ -541,11 +570,25 @@ interface ViewActions {
 }
 
 interface ViewButtons {
-  styles: Map<FaceStyle, HTMLButtonElement>;
+  /** Shows the current face style; opens the style menu. */
+  style: HTMLButtonElement;
   projection: HTMLButtonElement;
   scenes: HTMLButtonElement;
   history: HTMLButtonElement;
+  library: HTMLButtonElement;
 }
+
+const STANDARD_VIEWS: [Exclude<StandardView, 'bottom'>, string][] = [
+  ['iso', 'Iso'],
+  ['top', 'Top'],
+  ['front', 'Front'],
+  ['right', 'Right'],
+  ['back', 'Back'],
+  ['left', 'Left'],
+];
+
+/** A small down arrow on toolbar buttons that open a menu. */
+const MENU_CARET = '<svg class="menu-caret" viewBox="0 0 8 8" aria-hidden="true"><path d="M1 2.5 4 5.5 7 2.5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>';
 
 const FACE_STYLES: [FaceStyle, string, string][] = [
   ['textured', 'Textured', ICONS.styleTextured],
@@ -629,6 +672,7 @@ function commandList(viewer: Viewer, controller: ToolController, files: FileComm
     { id: 'view:background', name: 'Background Colour…', keywords: ['style', 'color', 'sky'], run: view.chooseBackground },
     { id: 'view:viewer', name: 'Viewer Mode', keywords: ['touch', 'phone', 'tablet', 'mobile', 'look', 'present', 'eye'], run: view.enterViewer },
     { id: 'view:tools', name: 'Show / Hide Tools', keywords: ['palette', 'toolbar', 'icons', 'collapse', 'tab', 'hide', 'room'], run: view.toggleTools },
+    { id: 'library:panel', name: 'Library', keywords: ['objects', 'furniture', 'components', 'models', 'catalogue', 'catalog', 'place', 'insert', 'kitchen', 'bathroom', 'sofa', 'bed', 'table', 'chair'], run: view.toggleLibrary },
     { id: 'scenes:panel', name: 'Scenes', keywords: ['scene', 'view', 'pages', 'tabs'], run: view.toggleScenes },
     { id: 'scenes:add', name: 'Add Scene', keywords: ['scene', 'save view'], run: () => controller.addScene() },
     { id: 'scenes:update', name: 'Update Scene', keywords: ['scene', 'overwrite'], run: () => (controller.currentScene !== null ? controller.updateScene(controller.currentScene) : controller.notify('Go to a scene first, then update it')) },
@@ -737,6 +781,8 @@ function buildToolbar(viewer: Viewer, controller: ToolController, files: FileCom
   bar.append(
     textButton(ICONS.importFile, 'Import', 'Import a SketchUp (.skp), OBJ or STL file (Ctrl+I)', () => void files.importModel()),
   );
+  const libraryButton = textButton(ICONS.library, 'Library', 'Library: furniture, kitchen, bathroom and more, at real sizes, to place in the model', view.toggleLibrary);
+  bar.append(libraryButton);
   sep();
   const undoButton = iconButton(ICONS.undo, 'Undo (Ctrl+Z)', () => controller.undo());
   const redoButton = iconButton(ICONS.redo, 'Redo (Ctrl+Y)', () => controller.redo());
@@ -747,15 +793,11 @@ function buildToolbar(viewer: Viewer, controller: ToolController, files: FileCom
   sep();
   bar.append(iconButton(ICONS.zoomExtents, withShortcut('Zoom Extents'), () => viewer.zoomExtents()));
   bar.append(iconButton(ICONS.previousView, withShortcut('Previous View'), () => previousView(viewer, controller)));
-  const views: [Exclude<StandardView, 'bottom'>, string][] = [
-    ['iso', 'Iso'],
-    ['top', 'Top'],
-    ['front', 'Front'],
-    ['right', 'Right'],
-    ['back', 'Back'],
-    ['left', 'Left'],
-  ];
-  for (const [view, label] of views) bar.append(iconButton(ICONS[view], `${label} view`, () => viewer.setView(view)));
+  // One button each for the standard views and the face styles, opening a short menu, so the
+  // toolbar fits on one row.
+  const viewsButton = iconButton(ICONS.iso + MENU_CARET, 'Standard views: Iso, Top, Front, Right, Back, Left', () => view.viewsMenu(viewsButton));
+  viewsButton.classList.add('has-menu');
+  bar.append(viewsButton);
   sep();
   const guidesButton = iconButton(ICONS.guides, 'Show/hide guides', () => {
     controller.toggleGuides();
@@ -767,12 +809,9 @@ function buildToolbar(viewer: Viewer, controller: ToolController, files: FileCom
   const materialsButton = iconButton(ICONS.materials, 'Materials (colours and textures)', toggleMaterials);
   bar.append(materialsButton);
   sep();
-  const styles = new Map<FaceStyle, HTMLButtonElement>();
-  for (const [f, label, icon] of FACE_STYLES) {
-    const b = iconButton(icon, `Style: ${label}`, () => view.setFaces(f));
-    styles.set(f, b);
-    bar.append(b);
-  }
+  const style = iconButton(ICONS.styleTextured + MENU_CARET, 'Style (click to change)', () => view.styleMenu(style));
+  style.classList.add('has-menu');
+  bar.append(style);
   const projection = iconButton(ICONS.perspective, 'Perspective (click for parallel projection)', view.toggleProjection);
   bar.append(projection);
   sep();
@@ -787,7 +826,7 @@ function buildToolbar(viewer: Viewer, controller: ToolController, files: FileCom
   bar.append(iconButton(ICONS.settings, 'Settings (autosave, backups, graphics card, history, updates)', keep.settings));
   const help = iconButton(ICONS.help, 'Help: shortcuts, updates, report a problem, about', () => keep.help(help));
   bar.append(help);
-  const viewButtons: ViewButtons = { styles, projection, scenes, history };
+  const viewButtons: ViewButtons = { style, projection, scenes, history, library: libraryButton };
   return { undoButton, redoButton, materialsButton, viewButtons, driveButton };
 }
 

@@ -40,6 +40,7 @@ import { Selection } from './Selection';
 import { TapeMeasureTool } from './TapeMeasureTool';
 import { distance, normalize, sub, type Vec3 } from '../core/math/vec3';
 import { AXES } from './geom';
+import { PlaceTool, type Placeable } from './PlaceTool';
 import type { AxisLock, InferenceHints, Preview, Projector, Ray, Snap, Tool, ToolContext, ToolEvent, ToolId } from './types';
 
 /** A pointer sample from the viewport after picking (the viewer's part of the job). */
@@ -144,6 +145,14 @@ export class ToolController {
       pan: new NavigationTool('pan'),
       zoom: new NavigationTool('zoom'),
       zoomWindow: new ZoomWindowTool((from, to) => this.onZoomWindow(from, to)),
+      place: new PlaceTool(
+        this.ctx,
+        (g) => {
+          this.setTool('select');
+          this.selection.set([], [], [], [g]);
+        },
+        () => this.setTool('select'),
+      ),
     };
     this.tool = this.tools.select;
     this.selection.onChange(() => this.onUpdate());
@@ -927,6 +936,13 @@ export class ToolController {
       this.zoomSelection();
     }
     return top;
+  }
+
+  /** Start placing an item (from the Library): it follows the cursor until clicked into place. */
+  place(item: Placeable): void {
+    this.setTool('place');
+    (this.tools.place as PlaceTool).start(item);
+    this.onUpdate();
   }
 
   /** Zoom the view to a box (Zoom Selection). */
