@@ -18,7 +18,7 @@ The installer is not code-signed yet, so the first time Windows may say "Windows
 
 VormCraft checks for a new version when it starts and installs it with one click (**Install and restart**). You can also use **Check for Updates** in the Help menu (the ? button).
 
-**Everywhere else (Android tablets and folding phones, Chromebooks, Mac, Linux):** open **https://vormcraft.app** in Chrome or Edge and choose **Install** (Chrome menu → *Add to home screen* / *Install app*). It then opens in its own window like any app, works fully offline, and updates itself, asking before it restarts into a new version. Your models never leave your device. A keyboard and mouse are recommended. In the web version, Save downloads the `.vorm` file (instead of saving over it), and autosave copies are kept in the app's own storage.
+**Everywhere else (Android tablets and folding phones, Chromebooks, Mac, Linux):** open **https://vormcraft.app** in Chrome or Edge and choose **Install** (Chrome menu → *Add to home screen* / *Install app*). It then opens in its own window like any app, works fully offline, and updates itself, asking before it restarts into a new version. Your models stay on your device (or in your own Google Drive, if you connect it). A keyboard and mouse are recommended for modeling; on a phone or tablet, tap **Viewer** (the eye) to look around a model with touch. In the web version, Save downloads the `.vorm` file (instead of saving over it), and autosave copies are kept in the app's own storage.
 
 Both versions have the same version number and open the same `.vorm` files.
 
@@ -42,9 +42,12 @@ Both versions have the same version number and open the same `.vorm` files.
   - Push a shape flush to the far side and you get a clean through-hole.
   - Push through a solid whose far side isn't flush and it is cut with a real boolean operation. No manual "intersect faces" step is needed.
   - Double-click a face to repeat the last distance.
+  - Push a face level with the face next to it and they merge into one (hold Ctrl to keep the edge). Pushing a bump back down shortens its sides instead of leaving overlapping faces.
 - **Offset**: copy a face's outline inward or outward, or offset a chain of edges.
 - **Follow Me**: sweep a profile along a path, for mouldings, pipes, grooves, chamfers and lathed (turned) shapes.
 - **Move** and **Rotate**: press Ctrl to copy instead (a + shows on the cursor and the copy follows the mouse; copy mode ends with the copy), then type a count (`5x` or `/5`) to make arrays. **Push/Pull** with Ctrl makes a new starting face: an edge loop stays where the face was, so the new sides are separate faces (stacking floors, for example). **Scale** resizes selected geometry; negative factors mirror.
+- **Points**: click where two or more lines meet to select that corner, then Move, Rotate or Scale it; the faces around it stretch (or fold) to follow. The arrow keys lock the axis.
+- **Merge Shapes** (right-click): overlapping flat faces in one plane become one face; for solids and groups, choose **Unify** (one solid, with the faces inside removed) or **Keep shapes** (put together in one group, unchanged).
 - **Eraser**, **Tape Measure** (measure, place guides, rescale the model) and **Text** labels.
 - **Reverse Faces**, **Flip Along** red/green/blue, and **Soften/Unsoften Edges** (from the right-click menu).
 - Curves keep their true radius, so circles and arcs export smoothly at any resolution.
@@ -60,9 +63,15 @@ Both versions have the same version number and open the same `.vorm` files.
 Right-click anything to select it and get a menu for it:
 - **Entity Info**: a panel with a group's name (editable), contents, size and paint; faces' area and paint; edges' length and smoothing.
 - **Erase**, **Hide**, **Unhide All**
-- **Edit Group**, **Close Group**, **Explode**, **Make Group**
+- **Edit Group**, **Close Group**, **Explode**, **Make Group**, **Merge Shapes…**
 - **Select ▸** bounding edges, connected faces, all connected, all with the same material, all, none
 - **Reverse Faces**, **Flip Along ▸** red/green/blue, **Soften / Unsoften Edges**, **Zoom Selection**
+
+### Viewer mode (phones, foldables and tablets)
+- Tap **Viewer** (the eye, next to the logo) to put the tools away and just look at the model. **Exit viewer** in the corner brings them back (or press Esc).
+- **One finger** pans. **Two fingers** do two things at once: pinch to zoom, and move them together to orbit. A flick keeps the view gliding; a double-tap centres on the point you tapped.
+- The corner bar also has **Zoom to fit**, **Open**, **Google Drive** and a gear to lower the drawing resolution if moving the model is slow on your device.
+- With a mouse, Viewer mode keeps the usual middle-drag orbit, right-drag pan and wheel zoom.
 
 ### Scenes and view styles
 - **Scenes** save a view: the camera, which groups are hidden, and the display style. Tabs along the top of the viewport jump between them with a smooth camera glide; **Page Down / Page Up** step through them.
@@ -87,6 +96,11 @@ Right-click anything to select it and get a menu for it:
 - **Undo after reopening:** the last 100 undo steps are saved in the file too, so Ctrl+Z still goes back after you close and reopen a design. Each step stores only what changed, so 100 steps usually add well under a megabyte.
 - **Save a Copy Without History** for sending a design to someone (it leaves out the undo steps too).
 - **Settings** (gear button): autosave on/off and how often, the backup folder, how long unrecovered backups are kept, history on/off and its size limit, the graphics card, update checks.
+
+### Google Drive (optional)
+- Save and open designs in your own Google Drive (the cloud button), from the web version and the Windows app, and optionally keep an autosaved copy there.
+- VormCraft asks only for access to the files it creates or that you open with it, never the rest of your Drive. Saving checks first whether the file was changed elsewhere (Replace or Keep both).
+- While Google finishes verifying VormCraft, signing in works only for accounts on the test list; it will open to everyone once verified.
 
 ### Graphics and help
 - Uses the graphics card through WebGL (Direct3D 11 on Windows). On laptops with two graphics chips, the Windows app uses the faster one by default; **Settings → Graphics card** switches between High performance, Power saving and Let Windows decide. If a computer can only draw without the graphics card, VormCraft says so.
@@ -113,6 +127,8 @@ Right-click anything to select it and get a menu for it:
 | Pan | Right-drag |
 | Zoom | Mouse wheel (toward the cursor) |
 | Zoom extents | Shift+Z |
+
+In **Viewer mode** on a touch screen: one finger pans; two fingers pinch to zoom and move to orbit; double-tap re-centres.
 
 Standard views (top, front, iso, …), Zoom Window, Previous View, display styles and projection are on the toolbar.
 
@@ -183,13 +199,13 @@ VormCraft's own geometry kernel is the source of truth. The 3D view only display
 | Folder | What's in it |
 | --- | --- |
 | `src/core` | The geometry kernel: a half-edge boundary representation with true polygon faces and holes, modeling operations (push/pull, offset, follow me, imprinting, cleanup), booleans through [Manifold](https://github.com/elalish/manifold), and watertight checks. Plain TypeScript with no graphics, so it is fully testable. |
-| `src/view` | [Three.js](https://threejs.org/) display: triangulation for drawing, picking that maps every triangle and line back to its model face or edge, display styles, camera navigation (perspective and parallel). |
+| `src/view` | [Three.js](https://threejs.org/) display: triangulation for drawing, picking that maps every triangle and line back to its model face or edge, display styles, camera navigation (perspective and parallel), and touch gestures for Viewer mode. |
 | `src/tools` | Every tool as a plain state machine, plus the inference/snapping engine, the right-click menu, and the controller that turns each operation into one atomic, undoable step. |
 | `src/doc` | The document (top-level geometry, groups, guides, labels, materials, scenes), snapshots and undo history. |
 | `src/io` | The `.vorm` file format, STL and OBJ export, and tessellation of curved surfaces from their true radii. |
-| `src/app` | The app shell: toolbar, panels (Materials, Scenes, Entity Info), context menu, dialogs, icons. |
+| `src/app` | The app shell: toolbar, panels (Materials, Scenes, Entity Info, History), context menu, dialogs, icons, Viewer mode, and Google Drive saving (`src/app/drive`). |
 | `src-tauri` | The Tauri desktop shell: native file dialogs and file access, the updater, opening double-clicked `.vorm` files, and the graphics card choice. |
-| `public`, `scripts/offline.ts` | The web app: its manifest and icons, and the build step that makes it work offline and update itself. |
+| `public`, `scripts/offline.ts` | The web app: its manifest and icons, the website's About, Privacy and Terms pages, and the build step that makes it work offline and update itself. |
 | `tests` | Vitest tests covering the kernel, tools, groups, scenes, history, autosave, snapping, display data, and every file format version ever saved. |
 
 Units are millimetres, and Z is up (red = X, green = Y, blue = Z). The full design spec is in [docs/SPEC.md](docs/SPEC.md).
@@ -205,6 +221,7 @@ Features are added as real use calls for them. Ideas on the list:
 - A field-of-view control
 - STEP export (true curves, through OpenCascade)
 - Exporting materials with OBJ
+- Editing with touch (Viewer mode covers looking at models on phones and tablets today)
 - A native Android app (if the web app's saving is not enough on phones and tablets)
 
 Bug reports and suggestions are welcome in [Issues](../../issues).
