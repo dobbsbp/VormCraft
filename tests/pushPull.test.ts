@@ -267,13 +267,39 @@ describe('operations touching face boundaries', () => {
     pushPull(m, strip, -5);
     expectSolid(m);
     expect(volume(m)).toBeCloseTo(100 * 50 * 20 - 20 * 50 * 5);
-    // Pulling it back up flush restores the box; the strip's drawn edges stay, as in SketchUp.
+    // Pulling it back up flush restores the box; the strip merges back into the top (Ctrl keeps its edges).
     const floor = findFace(m, [0, 0, 1], 15);
-    expect(pushPull(m, floor, 5).face).toBe(floor);
+    const kept = m.clone();
+    expect(pushPull(kept, floor, 5, { newStart: true }).face).toBe(floor);
+    expectSolid(kept);
+    expect(kept.faces.size).toBe(8);
+    expect(pushPull(m, floor, 5).face).toBeUndefined();
     expectSolid(m);
     expect(volume(m)).toBeCloseTo(100 * 50 * 20);
-    expect(m.faces.size).toBe(8);
-    expect(m.vertices.size).toBe(12);
+    expect(m.faces.size).toBe(6);
+    expect(m.vertices.size).toBe(8);
+  });
+
+  it('a step pulled up level with the top next to it merges into one top face', () => {
+    const { m, top } = box(100, 100, 50);
+    const half = drawRectangle(m, m.facePlane(top), [0, 0, 50], 50, 100, top).inner!;
+    pushPull(m, half, 20);
+    expectSolid(m);
+    pushPull(m, findFace(m, [0, 0, 1], 50), 20);
+    expectSolid(m);
+    expect(volume(m)).toBeCloseTo(100 * 100 * 70);
+    expect(m.faces.size).toBe(6);
+    expect(m.vertices.size).toBe(8);
+  });
+
+  it('an inset pulled up then pushed back flush leaves a plain box', () => {
+    const { m, top } = box(100, 100, 50);
+    const r = drawRectangle(m, m.facePlane(top), [20, 20, 50], 30, 30, top).inner!;
+    pushPull(m, r, 10);
+    pushPull(m, r, -10);
+    expectSolid(m);
+    expect(volume(m)).toBeCloseTo(100 * 100 * 50);
+    expect(m.faces.size).toBe(6);
   });
 
   it('a circle on a side face pushes flush through horizontally', () => {
@@ -377,6 +403,35 @@ describe('push/pull on an open surface (bump / dent)', () => {
     const tops = [...m.curves.values()].filter((c) => c.center[2] === 20);
     expect(tops).toHaveLength(1);
     expect(tops[0].radius).toBe(10);
+  });
+
+  it('pushing a bump back shortens its walls instead of folding new ones over them', () => {
+    const m = new Model();
+    const host = drawRectangle(m, GROUND_PLANE, [0, 0, 0], 100, 100).inner!;
+    const inner = drawRectangle(m, GROUND_PLANE, [20, 20, 0], 30, 30, host).inner!;
+    pushPull(m, inner, 10);
+    expect(pushPull(m, inner, -4).face).toBe(inner);
+    m.validate();
+    expect(m.faces.size).toBe(1 + 4 + 1);
+    expect(findFace(m, [0, 0, 1], 6)).toBe(inner);
+    // Past flush, the bump turns into a dent.
+    pushPull(m, inner, -10);
+    m.validate();
+    expect(m.faces.size).toBe(1 + 4 + 1);
+    expect(m.vertices.size).toBe(12);
+    expect(findFace(m, [0, 0, 1], -4)).toBe(inner);
+  });
+
+  it('pushing a bump back exactly flush leaves the flat sheet', () => {
+    const m = new Model();
+    const host = drawRectangle(m, GROUND_PLANE, [0, 0, 0], 100, 100).inner!;
+    const inner = drawRectangle(m, GROUND_PLANE, [20, 20, 0], 30, 30, host).inner!;
+    pushPull(m, inner, 10);
+    pushPull(m, inner, -10);
+    m.validate();
+    expect(m.faces.size).toBe(1);
+    expect(m.vertices.size).toBe(4);
+    expect(faceArea(m, [...m.faces.keys()][0])).toBeCloseTo(100 * 100);
   });
 });
 

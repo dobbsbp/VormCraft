@@ -2,12 +2,13 @@ import { booleanInPlace, booleanKernelReady, manifoldVolume } from '../boolean/m
 import { offsetPlane, planesCoincide, toPlane2D } from '../math/plane';
 import { interiorPoint, intersectSegments, pointInRegion, type Vec2 } from '../math/polygon2d';
 import { ANGLE_TOL, TOL } from '../math/tolerance';
-import { add, dot, scale, type Vec3 } from '../math/vec3';
+import { add, dot, length, scale, sub, type Vec3 } from '../math/vec3';
 import { Model, type CurveId, type FaceId, type HalfEdgeId, type VertexId } from '../model/Model';
 import { findFaceAt } from '../model/query';
-import { mergeCoplanarFaces, onCircle, removeCollinearVertices } from './cleanup';
+import { facesCoplanar, mergeCoplanarFaces, mergeFaces, onCircle, removeCollinearVertices } from './cleanup';
 import { drawEdges } from './edges';
 import { imprintSegments, type ImprintSegment } from './imprint';
+import { BendError, transformVertices, translation } from './transform';
 
 export type PushPullMode = 'none' | 'extrude' | 'flush-through' | 'boolean';
 
@@ -29,9 +30,10 @@ const OVERSHOOT = 0.01;
  * - On a closed solid, pulling out adds material and pushing in removes it. If a push lands exactly
  *   on an opposite face of the solid, both faces are removed and the side walls kept (a through-hole);
  *   otherwise Manifold computes the boolean, so cuts follow whatever the solid looks like.
+ * A face that ends up level with a neighbouring face merges with it, as walls that line up do.
  * With `newStart` (Ctrl, SketchUp's "new starting face"), the new side walls stay separate faces:
  * an edge loop is left where the face was instead of the walls merging with the neighbouring
- * faces they line up with (stacking floors, for example). Pushing into a solid is unchanged.
+ * faces they line up with (stacking floors, for example), and a face pushed level keeps its edges.
  */
 export function pushPull(model: Model, faceId: FaceId, distance: number, opts: { newStart?: boolean } = {}): PushPullResult {
   if (Math.abs(distance) <= TOL) return { mode: 'none', face: faceId, faces: [] };
@@ -41,11 +43,11 @@ export function pushPull(model: Model, faceId: FaceId, distance: number, opts: {
     const flush = tryFlushPushThrough(model, faceId, distance, shell);
     if (flush) return flush;
   }
-  if (!opts.newStart || distance < 0) return booleanPushPull(model, faceId, distance, shell);
+  if (!opts.newStart || distance < 0) return booleanPushPull(model, faceId, distance, shell, !opts.newStart);
   // A new starting face on a solid: an ordinary pull (so whatever the new part touches is joined
   // properly), then the face's old outline drawn back where it shows, like lines drawn by hand.
   const outline = outlineSegments(model, faceId);
-  const result = booleanPushPull(model, faceId, distance, shell);
+  const result = booleanPushPull(model, faceId, distance, shell, false);
   redrawOutline(model, outline);
   return result;
 }
@@ -107,6 +109,10 @@ export function extrudeOpenFace(model: Model, faceId: FaceId, distance: number, 
  * `keepEdges` (a new starting face).
  */
 function extrudeAttachedFace(model: Model, faceId: FaceId, distance: number, keepEdges: boolean): PushPullResult {
+  if (!keepEdges) {
+    const retracted = retractBump(model, faceId, distance);
+    if (retracted) return retracted;
+  }
   const n = model.face(faceId).normal;
   const rings = model.faceVertexLoops(faceId);
   const edgeCurves = ringEdgeCurves(model, rings);
@@ -122,8 +128,92 @@ function extrudeAttachedFace(model: Model, faceId: FaceId, distance: number, kee
   if (keepEdges) return { mode: 'extrude', face: cap, faces: [...walls, cap] };
   const touched = new Set<VertexId>();
   mergeCoplanarFaces(model, walls, touched);
+  const face = mergeLevelOutline(model, cap, touched);
   removeCollinearVertices(model, touched);
-  return { mode: 'extrude', face: cap, faces: [...walls.filter((w) => model.faces.has(w)), cap] };
+  return { mode: 'extrude', face, faces: [...walls, cap].filter((f) => model.faces.has(f)) };
+}
+
+/**
+ * Pushing a bump (or dent) of an open surface back the way it came, as SketchUp does: its walls
+ * shorten instead of new walls folding back over them. Pushed all the way back, the walls go and
+ * the face joins the surface again; pushed further, the bump carries on into a dent. Applies when
+ * every corner of the face has an edge running straight back along the push and every edge of
+ * the face borders a wall reaching back along those edges; null otherwise.
+ */
+function retractBump(model: Model, faceId: FaceId, d: number): PushPullResult | null {
+  const n = model.face(faceId).normal;
+  const along = scale(n, Math.sign(d));
+  const rings = model.faceVertexLoops(faceId);
+  const partner = new Map<VertexId, VertexId>();
+  let depth = Infinity;
+  let deepest = 0;
+  for (const v of rings.flat()) {
+    for (const h of model.outgoing(v)) {
+      const e = sub(model.pos(model.dest(h)), model.pos(v));
+      const len = length(e);
+      if (len <= TOL || dot(e, along) < len - TOL) continue;
+      partner.set(v, model.dest(h));
+      depth = Math.min(depth, len);
+      deepest = Math.max(deepest, len);
+      break;
+    }
+    if (!partner.has(v)) return null;
+  }
+  const walls = new Set<FaceId>();
+  for (const h of model.faceHalfEdges(faceId)) {
+    const wall = model.faceOf(model.he(h).twin);
+    if (wall === null) return null;
+    const corners = new Set(model.faceVertexLoops(wall).flat());
+    if (!corners.has(partner.get(model.he(h).origin)!) || !corners.has(partner.get(model.dest(h))!)) return null;
+    walls.add(wall);
+  }
+
+  const dist = Math.abs(d);
+  if (dist < depth - TOL) {
+    try {
+      transformVertices(model, new Set(partner.keys()), translation(scale(n, d)));
+    } catch (err) {
+      if (err instanceof BendError) return null;
+      throw err;
+    }
+    return { mode: 'extrude', face: faceId, faces: [faceId] };
+  }
+
+  // All the way back: the walls must be just the strips between the face and where it was.
+  if (deepest - depth > TOL) return null;
+  const allowed = new Set([...partner.keys(), ...partner.values()]);
+  for (const w of walls) if (!model.faceVertexLoops(w).flat().every((v) => allowed.has(v))) return null;
+  const released = [faceId, ...walls].flatMap((f) => model.faceHalfEdges(f));
+  const material = model.face(faceId).material;
+  model.removeFace(faceId);
+  for (const w of walls) model.removeFace(w);
+  const back = (r: VertexId[]) => r.map((v) => partner.get(v)!);
+  model.addFace(back(rings[0]), rings.slice(1).map(back), { normal: n, id: faceId, material });
+  model.purgeFree(released);
+  if (dist - depth > TOL) return extrudeAttachedFace(model, faceId, Math.sign(d) * (dist - depth), false);
+  const touched = new Set<VertexId>(partner.values());
+  const face = mergeLevelOutline(model, faceId, touched);
+  removeCollinearVertices(model, touched);
+  return { mode: 'extrude', face, faces: [] };
+}
+
+/**
+ * Remove the edges of a face's outline that now lie flat between two level faces (it was pushed
+ * level with its neighbours), merging the faces on each side. Other edges are left alone, so
+ * lines drawn on purpose elsewhere stay. Returns the face if it is still separate.
+ */
+function mergeLevelOutline(model: Model, faceId: FaceId, touched: Set<VertexId>): FaceId | undefined {
+  const outline = model.faceHalfEdges(faceId).map((h) => [model.he(h).origin, model.dest(h)] as const);
+  for (const [a, b] of outline) {
+    if (!model.vertices.has(a) || !model.vertices.has(b)) continue;
+    const h = model.halfEdgeBetween(a, b);
+    if (h === undefined) continue;
+    const f = model.faceOf(h);
+    const g = model.faceOf(model.he(h).twin);
+    if (f === null || g === null || f === g || !facesCoplanar(model, f, g)) continue;
+    mergeFaces(model, f, g, f === faceId ? g : f, touched);
+  }
+  return model.faces.has(faceId) ? faceId : undefined;
 }
 
 function buildWalls(model: Model, rings: VertexId[][], top: Map<VertexId, VertexId>): FaceId[] {
@@ -270,7 +360,7 @@ function prismInsideSolid(model: Model, faceId: FaceId, d: number, shell: Set<Fa
   return Math.abs(full - inside) <= 1e-6 * Math.max(1, full);
 }
 
-function booleanPushPull(model: Model, faceId: FaceId, d: number, shell: Set<FaceId>): PushPullResult {
+function booleanPushPull(model: Model, faceId: FaceId, d: number, shell: Set<FaceId>, mergeCap: boolean): PushPullResult {
   const n = model.face(faceId).normal;
   let start = 0;
   let end = d;
@@ -303,6 +393,8 @@ function booleanPushPull(model: Model, faceId: FaceId, d: number, shell: Set<Fac
   const toolFaces = [...result.toolFaceIds.values()].filter((f) => f !== capId && model.faces.has(f));
   const touched = new Set<VertexId>(result.newVertices);
   mergeCoplanarFaces(model, toolFaces, touched);
+  // A face pushed level with a neighbour (a step pulled up to the next one) joins it, unless Ctrl.
+  if (face !== undefined && mergeCap) face = mergeLevelOutline(model, face, touched);
   removeCollinearVertices(model, touched);
 
   const live = new Set<FaceId>();
