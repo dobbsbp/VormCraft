@@ -35,6 +35,11 @@ export function isSoftEdge(model: Model, e: HalfEdgeId, curvedFaces = facesWithC
   return c >= SOFT_EDGE_COS && c < 1 - 1e-9;
 }
 
+/** Whether an edge is drawn (and can be picked): neither hidden by the user nor soft. */
+export function isEdgeShown(model: Model, e: HalfEdgeId, curvedFaces = facesWithCurveEdges(model)): boolean {
+  return !model.he(e).hidden && !isSoftEdge(model, e, curvedFaces);
+}
+
 /**
  * The whole smooth surface a face belongs to: the faces reachable across soft edges (all the
  * facets of a cylinder wall, say). A flat face on its own is a surface of one face.
@@ -54,12 +59,12 @@ export function smoothSurface(model: Model, face: FaceId, curvedFaces = facesWit
   return [...seen];
 }
 
-/** The visible (non-soft) edges bounding a set of faces, as canonical edge ids. */
+/** The visible (neither soft nor hidden) edges bounding a set of faces, as canonical edge ids. */
 export function surfaceOutline(model: Model, faces: Iterable<FaceId>, curvedFaces = facesWithCurveEdges(model)): HalfEdgeId[] {
   const out = new Set<HalfEdgeId>();
   for (const f of faces) {
     for (const h of model.faceHalfEdges(f)) {
-      if (!isSoftEdge(model, h, curvedFaces)) out.add(Math.min(h, model.he(h).twin));
+      if (isEdgeShown(model, h, curvedFaces)) out.add(Math.min(h, model.he(h).twin));
     }
   }
   return [...out];

@@ -292,7 +292,7 @@ describe('Text tool (labels)', () => {
     click(H, [10, 10, 20]);
     click(H, [30, 20, 0], { kind: 'endpoint', face: null });
     click(H, [40, 30, 0], { face: null });
-    expect([...H.doc.labels.items.values()].map((l) => l.text)).toEqual(['30 mm', '600 mm²', '(30, 20, 0)']);
+    expect([...H.doc.labels.items.values()].map((l) => l.text)).toEqual(['30 mm', '600 mm²', '(30 mm, 20 mm, 0 mm)']);
   });
 
   it('typing replaces the text of the label just placed; one undo per change', () => {
@@ -304,7 +304,7 @@ describe('Text tool (labels)', () => {
     H.controller.typed('Mounting hole M4');
     expect([...H.doc.labels.items.values()][0].text).toBe('Mounting hole M4');
     H.controller.undo();
-    expect([...H.doc.labels.items.values()][0].text).toBe('(0, 0, 0)');
+    expect([...H.doc.labels.items.values()][0].text).toBe('(0 mm, 0 mm, 0 mm)');
     H.controller.undo();
     expect(H.doc.labels.items.size).toBe(0);
   });

@@ -48,7 +48,9 @@ Both versions have the same version number and open the same `.vorm` files.
 - **Move** and **Rotate**: press Ctrl to copy instead (a + shows on the cursor and the copy follows the mouse; copy mode ends with the copy), then type a count (`5x` or `/5`) to make arrays. **Push/Pull** with Ctrl makes a new starting face: an edge loop stays where the face was, so the new sides are separate faces (stacking floors, for example). **Scale** resizes selected geometry; negative factors mirror.
 - **Points**: click where two or more lines meet to select that corner, then Move, Rotate or Scale it; the faces around it stretch (or fold) to follow. The arrow keys lock the axis.
 - **Merge Shapes** (right-click): overlapping flat faces in one plane become one face; for solids and groups, choose **Unify** (one solid, with the faces inside removed) or **Keep shapes** (put together in one group, unchanged). Flat faces selected along with solids (such as the circle left inside a Follow Me ring) are left as they are, and if a merge isn't possible it says why.
-- **Eraser**, **Tape Measure** (measure, place guides, rescale the model) and **Text** labels (Delete, the Eraser, a box or right-click erases them).
+- **Eraser**, **Tape Measure** (measure, place guides, rescale the model) and **Text** labels (Delete, the Eraser, a box or right-click erases them; drag to move, double-click to edit).
+- **Dimension**: click a line (or two points) and pull out to show its length end to end, with dashed extension lines and arrows. Drag the value to move it further out; double-click it to type your own text.
+- **Units** per design: millimetres, centimetres, metres, inches, feet, or feet and inches (3' 6 1/2"). New asks which; click the design's name to change them. A number typed without a unit means the design's unit.
 - **3D Text**: type words, pick one of your computer's fonts, the letter height and depth, and place them as solid letters, standing up or lying flat.
 - **Reverse Faces**, **Flip Along** red/green/blue, and **Soften/Unsoften Edges** (from the right-click menu).
 - Curves keep their true radius, so circles and arcs export smoothly at any resolution.
@@ -63,12 +65,13 @@ Both versions have the same version number and open the same `.vorm` files.
 - A group selects, moves, rotates, scales, copies, flips and paints as one piece.
 - Double-click a group to edit what's inside it; the rest of the model fades while you work. Press Esc (or click outside it) to close it.
 - **Explode** turns a group back into loose geometry; **Hide** and **Unhide All** hide and show groups.
+- **Hide lines**: select lines (or faces, for the lines between them) and press **Ctrl+H** to stop them being drawn; the faces stay as they are. While anything is hidden, the status bar shows **Show** (draws hidden lines dashed, so you can select a few and right-click → **Unhide**) and **Unhide all**.
 - Rename groups and see their size and contents in **Entity Info**.
 
 ### Right-click menu
 Right-click anything to select it and get a menu for it:
 - **Entity Info**: a panel with a group's name (editable), contents, size and paint; faces' area and paint; edges' length and smoothing.
-- **Erase**, **Hide**, **Unhide All**
+- **Erase**, **Hide** (lines or groups, Ctrl+H), **Unhide All** (Ctrl+Shift+H)
 - **Edit Group**, **Close Group**, **Explode**, **Make Group**, **Merge Shapes…**
 - **Select ▸** bounding edges, connected faces, all connected, all with the same material, all, none
 - **Reverse Faces**, **Flip Along ▸** red/green/blue, **Soften / Unsoften Edges**, **Zoom Selection**
@@ -83,7 +86,7 @@ Right-click anything to select it and get a menu for it:
 - **Scenes** save a view: the camera, which groups are hidden, and the display style. Tabs along the top of the viewport jump between them with a smooth camera glide; **Page Down / Page Up** step through them.
 - **Play** runs the scenes as a looping slideshow, with adjustable transition and pause times.
 - Choose per scene what it restores (camera, hidden groups, style), overwrite a scene with **Update**, and rename, reorder or delete scenes in the Scenes panel.
-- Display styles: **Textured**, **Shaded**, **Wireframe** and **X-ray** (one toolbar button with a menu), plus back edges and a background colour. The standard views (Iso, Top, Front, Right, Back, Left) are one button with a menu too.
+- Display styles: **Textured**, **Shaded**, **Wireframe** and **X-ray** (one toolbar button with a menu), plus back edges and a background colour. The standard views (Iso, Top, Front, Right, Back, Left) are one button: each click goes to the next view, and right-click lists them all.
 - **Perspective** or **parallel** projection.
 
 ### Materials
@@ -123,6 +126,7 @@ Right-click anything to select it and get a menu for it:
 
 ### Arranging the workspace
 - Drag tools in the palette to put them in your own order; right-click the palette to move it to the right side or reset the order.
+- Keep only the tools you use: right-click a tool → **Remove from Palette**, or **Customise Tools…** (with an **Essentials** preset). Tools you leave out still work from their keys and Search, and are one click away under **⋯** at the end of the palette. New tools in later versions wait there for you (marked with a dot) instead of filling a palette you have trimmed.
 - Hide the top bar for more room (the arrows at its right end); a small tab brings it back. The design's name shows next to the logo.
 
 ### Navigation
@@ -161,7 +165,7 @@ Standard views (top, front, iso, …), Zoom Window, Previous View, display style
 | K | Back Edges | Shift+S | Search commands |
 | Ctrl+G | Make Group | Esc | Cancel / clear selection / close group |
 | Ctrl+I | Import SketchUp, OBJ or STL | Ctrl+A | Select everything in the model |
-| Ctrl | Copy (Move, Rotate); new starting face (Push/Pull) | | |
+| Ctrl | Copy (Move, Rotate); new starting face (Push/Pull) | Ctrl+H / Ctrl+Shift+H | Hide selection / Unhide all |
 | Delete | Erase selection | Page Down / Page Up | Next / previous scene |
 | Ctrl+Z / Ctrl+Y | Undo / Redo | Ctrl+N / O / S | New / Open / Save |
 | Ctrl+Shift+S | Save As | Esc | Leave an earlier version (History) |

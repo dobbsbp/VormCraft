@@ -1,12 +1,13 @@
 import wasmUrl from 'manifold-3d/manifold.wasm?url';
-import { initBooleanKernel } from '../core';
+import { distance, initBooleanKernel } from '../core';
 import { Document } from '../doc/Document';
 import { ToolController } from '../tools/ToolController';
 import type { ToolId } from '../tools/types';
 import type { StandardView } from '../view/navigation';
 import { Viewer } from '../view/Viewer';
 import { FileCommands } from './fileCommands';
-import { choiceDialog, confirmDialog } from './dialogs';
+import { choiceDialog, confirmDialog, promptDialog } from './dialogs';
+import { formatLength } from '../tools/units';
 import { createFileHost, isTauri } from './files';
 import { ICONS } from './icons';
 import type { Command } from './commands';
@@ -17,7 +18,8 @@ import { ScenesPanel } from './scenesPanel';
 import { LibraryPanel } from './libraryPanel';
 import { showText3DDialog, text3dPlaceable } from './text3dDialog';
 import { ContextMenu } from './contextMenuView';
-import { moveTool, orderTools } from './toolOrder';
+import { choosePaletteTools, moveTool, orderTools, readPaletteChoice, showTool, type PaletteChoice } from './toolOrder';
+import { showCustomiseToolsDialog } from './customiseToolsDialog';
 import type { MenuEntry } from '../tools/contextMenu';
 import { EntityInfoPanel } from './entityInfoPanel';
 import { contextMenuItems } from '../tools/contextMenu';
@@ -31,6 +33,8 @@ import { showSupport } from './supportDialog';
 import { DriveCommands } from './drive/driveCommands';
 import { toolCursor } from './toolCursors';
 import { ViewerMode } from './viewerMode';
+import { defaultUnits, rememberDefaultUnits, showUnitsDialog } from './unitsDialog';
+import { UNIT_CHOICES } from '../doc/Units';
 
 const NAV_HINT = 'Orbit: middle-drag · Pan: right-drag · Re-centre: double middle-click · Zoom: wheel · Lock axis: arrow keys';
 
@@ -58,6 +62,7 @@ const TOOLS: { id: ToolId; icon: string; label: string }[] = [
   { id: 'tape', icon: ICONS.tape, label: 'Tape Measure' },
   { id: 'text', icon: ICONS.text, label: 'Text' },
   { id: 'text3d', icon: ICONS.text3d, label: '3D Text' },
+  { id: 'dimension', icon: ICONS.dimension, label: 'Dimension' },
   { id: 'orbit', icon: ICONS.orbit, label: 'Orbit' },
   { id: 'pan', icon: ICONS.pan, label: 'Pan' },
   { id: 'zoom', icon: ICONS.zoom, label: 'Zoom' },
@@ -67,6 +72,7 @@ const TOOLS: { id: ToolId; icon: string; label: string }[] = [
 async function start(): Promise<void> {
   await initBooleanKernel({ wasmUrl });
   const doc = new Document();
+  doc.units = defaultUnits();
   const viewer = new Viewer(document.getElementById('viewport')!, doc);
   const controller = new ToolController(doc, () => viewer.projector());
   // Settings, autosave, recovery and updates (Lifecycle), and the file commands that use them.
@@ -77,7 +83,17 @@ async function start(): Promise<void> {
     settings: () => lifecycle.settings,
     autosave: lifecycle.autosave,
     onNewerFile: () => void lifecycle.checkForUpdates(),
+    chooseUnits: async () => {
+      const units = await showUnitsDialog('New design', defaultUnits(), 'Create', 'Lengths are shown in these units, and a number typed without a unit means them. You can change them later: click the design’s name next to the logo.');
+      if (units) rememberDefaultUnits(units);
+      return units;
+    },
   });
+  /** Design Properties: the design's units (clicking its name, the units button, Search). */
+  const designProperties = async () => {
+    const units = await showUnitsDialog('Design properties', doc.units, 'OK', 'Lengths are shown in these units, and a number typed without a unit means them. Changing them does not change the size of anything.');
+    if (units) controller.setUnits(units);
+  };
   lifecycle.attach(files);
   // Google Drive (unless switched off: see DriveCommands.available). Switching it on or off in
   // Settings takes effect at once (syncDrive).
@@ -104,9 +120,29 @@ async function start(): Promise<void> {
   const nav = document.getElementById('status-hover')!;
   const vcb = document.getElementById('measurements') as HTMLInputElement;
   const vcbLabel = document.getElementById('measurements-label')!;
+  const unitsButton = document.getElementById('units-button')!;
+  unitsButton.addEventListener('click', () => void designProperties());
   const contextBadge = document.getElementById('context-badge')!;
   contextBadge.addEventListener('click', () => controller.exitGroup());
   const autosaved = document.getElementById('status-saved')!;
+  // Shown only while something is hidden, so hidden lines and groups are never lost from sight:
+  // how much is hidden, Show (hidden lines dashed, to pick and unhide one by one), Unhide all.
+  const hiddenBar = document.getElementById('status-hidden')!;
+  const hiddenLabel = document.createElement('span');
+  const showHiddenButton = Object.assign(document.createElement('button'), { type: 'button' });
+  const unhideButton = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Unhide all', title: 'Show every hidden line and group again (Ctrl+Shift+H)' });
+  hiddenBar.append(hiddenLabel, showHiddenButton, unhideButton);
+  const hiddenLines = {
+    get shown() {
+      return viewer.showHiddenLines;
+    },
+    toggle: () => {
+      viewer.showHiddenLines = !viewer.showHiddenLines;
+      update();
+    },
+  };
+  showHiddenButton.addEventListener('click', hiddenLines.toggle);
+  unhideButton.addEventListener('click', () => controller.unhideAll());
   // While looking at an earlier version: what it is, Restore, Back to now.
   const previewBar = document.getElementById('preview-bar')!;
   const previewText = document.createElement('span');
@@ -163,7 +199,7 @@ async function start(): Promise<void> {
     const docName = document.querySelector<HTMLElement>('.toolbar .doc-name');
     if (docName) {
       docName.textContent = `${files.name}${controller.dirty ? ' •' : ''}`;
-      docName.title = controller.dirty ? `${files.name} (changes not saved)` : files.name;
+      docName.title = `${controller.dirty ? `${files.name} (changes not saved)` : files.name} · click for Design Properties (units)`;
     }
     if (isTauri()) {
       const { getCurrentWindow } = await import('@tauri-apps/api/window');
@@ -177,6 +213,9 @@ async function start(): Promise<void> {
     hint.textContent = controller.hint();
     hint.classList.toggle('is-error', controller.error !== null);
     vcbLabel.textContent = tool.vcbLabel() || 'Measurements';
+    const unitChoice = UNIT_CHOICES.find((c) => c.unit === doc.units.unit)!;
+    unitsButton.textContent = doc.units.unit === 'ftin' ? 'ft/in' : doc.units.unit;
+    unitsButton.title = `Units: ${unitChoice.label} (click to change)`;
     vcb.disabled = tool.vcbLabel() === '';
     if (typing === null) vcb.value = tool.vcbValue();
     for (const [id, b] of toolButtons) b.setAttribute('aria-pressed', String(id === tool.id));
@@ -199,6 +238,10 @@ async function start(): Promise<void> {
       const current = FACE_STYLES.find(([f]) => f === style.faces) ?? FACE_STYLES[0];
       viewButtons.style.innerHTML = current[2] + MENU_CARET;
       viewButtons.style.title = `Style: ${current[1]} (click to change)`;
+      const [, viewName, viewIcon] = view.currentView();
+      const nextName = STANDARD_VIEWS[(STANDARD_VIEWS.findIndex(([, n]) => n === viewName) + 1) % STANDARD_VIEWS.length][1];
+      viewButtons.views.innerHTML = viewIcon;
+      viewButtons.views.title = `View: ${viewName} (click for ${nextName}; right-click for all views)`;
       viewButtons.projection.innerHTML = viewer.projection === 'parallel' ? ICONS.parallel : ICONS.perspective;
       viewButtons.projection.title = viewer.projection === 'parallel' ? 'Parallel projection (click for perspective)' : 'Perspective (click for parallel projection)';
       viewButtons.scenes.setAttribute('aria-pressed', String(scenes.isOpen));
@@ -206,6 +249,14 @@ async function start(): Promise<void> {
     }
     const editing = controller.editingName;
     contextBadge.hidden = editing === null;
+    const hidden = controller.hiddenCount();
+    hiddenBar.hidden = hidden.groups + hidden.lines === 0;
+    hiddenLabel.textContent = `${hiddenText(hidden)} hidden`;
+    // Nothing left to show: switch it off, so lines hidden later are not drawn dashed.
+    if (hidden.lines === 0 && viewer.showHiddenLines) viewer.showHiddenLines = false;
+    showHiddenButton.hidden = hidden.lines === 0;
+    showHiddenButton.textContent = viewer.showHiddenLines ? 'Stop showing' : 'Show';
+    showHiddenButton.title = viewer.showHiddenLines ? 'Stop drawing hidden lines' : 'Draw hidden lines dashed, so you can select them and unhide a few (right-click → Unhide)';
     if (editing !== null) contextBadge.textContent = `Editing ${editing} · Close`;
     materialsButton?.setAttribute('aria-pressed', String(materials.isOpen));
     viewer.leftDragNavigation = tool.id === 'orbit' || tool.id === 'pan' || tool.id === 'zoom' ? tool.id : null;
@@ -240,10 +291,21 @@ async function start(): Promise<void> {
     typing = null;
     controller.labelClicked(id, shift);
   };
+  viewer.onLabelDrag = (id, ray, done) => controller.dragLabel(id, ray, done);
+  viewer.onLabelDoubleClick = async (id) => {
+    const l = doc.labels.items.get(id);
+    if (!l) return;
+    typing = null;
+    const measured = l.end ? formatLength(distance(l.anchor, l.end)) : '';
+    const text = l.end
+      ? await promptDialog('Dimension', `Text to show (leave it empty for the measured length, ${measured})`, l.text || measured, 'OK', true)
+      : await promptDialog('Label', 'Text', l.text);
+    if (text !== null) controller.setLabelText(id, text);
+  };
   viewer.onLabelContextMenu = (id, [x, y]) => {
     typing = null;
     controller.labelContextPick(id);
-    menu.open(contextMenuItems(controller, { entityInfo: showEntityInfo, mergeShapes }), x, y);
+    menu.open(contextMenuItems(controller, { entityInfo: showEntityInfo, mergeShapes, hiddenLines }), x, y);
   };
   viewer.onPointer = (kind, sample) => {
     if (kind === 'move') controller.pointerMove(sample);
@@ -281,6 +343,7 @@ async function start(): Promise<void> {
   const toggleLibrary = () => togglePanel('library');
   const showEntityInfo = () => togglePanel('info', true);
   const keep: KeepActions = {
+    designProperties: () => void designProperties(),
     toggleHistory: () => togglePanel('history'),
     settings: () => void lifecycle.openSettings().then(() => syncDrive()),
     checkUpdates: () => void lifecycle.checkForUpdates(),
@@ -316,7 +379,7 @@ async function start(): Promise<void> {
     typing = null;
     player.stop();
     controller.contextPick(sample);
-    menu.open(contextMenuItems(controller, { entityInfo: showEntityInfo, mergeShapes }), x, y);
+    menu.open(contextMenuItems(controller, { entityInfo: showEntityInfo, mergeShapes, hiddenLines }), x, y);
   };
   // Merge Shapes: flat faces merge at once; separate solids ask how to join them.
   const mergeShapes = async () => {
@@ -339,7 +402,16 @@ Keep shapes: leave every solid as it is and put them together in one group.${
       if (choice) controller.mergeShapes(choice);
     } else controller.mergeShapes('unify');
   };
+  // The standard view the Views button last went to; its next click goes on to the one after.
+  let standardView = 0;
   const view: ViewActions = {
+    goToView: (v) => {
+      standardView = Math.max(0, STANDARD_VIEWS.findIndex(([s]) => s === v));
+      viewer.setView(v);
+      update();
+    },
+    nextView: () => view.goToView(STANDARD_VIEWS[(standardView + 1) % STANDARD_VIEWS.length][0]),
+    currentView: () => STANDARD_VIEWS[standardView],
     setFaces: (faces) => {
       viewer.setDisplayStyle({ faces });
       update();
@@ -357,7 +429,7 @@ Keep shapes: leave every solid as it is and put them together in one group.${
     viewsMenu: (anchor) => {
       const r = anchor.getBoundingClientRect();
       menu.open(
-        STANDARD_VIEWS.map(([v, label]) => ({ label: `${label} view`, run: () => viewer.setView(v) })),
+        STANDARD_VIEWS.map(([v, label], i) => ({ label: `${i === standardView ? '✓ ' : ' '}${label} view`, run: () => view.goToView(v) })),
         r.left - 2,
         r.bottom,
       );
@@ -376,6 +448,7 @@ Keep shapes: leave every solid as it is and put them together in one group.${
     toggleTopBar: () => toggleTopBar(),
     togglePaletteSide: () => togglePaletteSide(),
     resetToolOrder: () => resetToolOrder(),
+    customiseTools: () => palette.customise(),
     enterViewer: () => viewerMode.enter(),
     player,
   };
@@ -407,6 +480,10 @@ Keep shapes: leave every solid as it is and put them together in one group.${
   const toggleTopBar = () => topBar.toggle();
   const togglePaletteSide = () => palette.setSide(palette.side() === 'left' ? 'right' : 'left');
   const resetToolOrder = () => palette.resetOrder();
+  if (palette.fresh.length) {
+    const names = palette.fresh.map((id) => TOOLS.find((t) => t.id === id)!.label).join(', ');
+    controller.notify(`New in this version: ${names}. Find it under ⋯ (More tools) at the end of the tools to add it.`);
+  }
   const search = new SearchBox(document.getElementById('viewport')!, () => commandList(viewer, controller, files, setTool, toggleMaterials, view, showEntityInfo, keep));
   ({ undoButton, redoButton, materialsButton, viewButtons, driveButton } = buildToolbar(viewer, controller, files, toggleMaterials, view, keep));
   const syncDrive = async () => {
@@ -474,6 +551,7 @@ Keep shapes: leave every solid as it is and put them together in one group.${
         o: () => void files.open(),
         n: () => void files.newDocument(),
         g: () => controller.makeGroup(),
+        h: () => (e.shiftKey ? controller.unhideAll() : controller.hideSelection()),
         i: () => void files.importModel(),
         // Everything in the model (not the page's text and buttons).
         a: () => controller.selectAll(),
@@ -581,6 +659,12 @@ function editSelectedGroup(controller: ToolController): void {
 }
 
 /** Back to the view before the last orbit, pan, zoom or standard view. */
+/** "3 lines, 1 group", for the Unhide all button. */
+function hiddenText({ groups, lines }: { groups: number; lines: number }): string {
+  const count = (n: number, one: string) => (n ? `${n} ${one}${n === 1 ? '' : 's'}` : '');
+  return [count(lines, 'line'), count(groups, 'group')].filter(Boolean).join(', ');
+}
+
 function previousView(viewer: Viewer, controller: ToolController): void {
   if (!viewer.previousView()) controller.notify('No previous view');
 }
@@ -588,11 +672,17 @@ function previousView(viewer: Viewer, controller: ToolController): void {
 /** Everything the Search box can run: all tools, then file, edit, view and guide actions. */
 /** View actions the toolbar and Search share. */
 interface ViewActions {
+  /** Go to a standard view (Iso, Top, Front…). */
+  goToView(v: StandardViewId): void;
+  /** The Views button: on to the next standard view, round in order. */
+  nextView(): void;
+  /** The standard view the Views button shows (the one it last went to). */
+  currentView(): (typeof STANDARD_VIEWS)[number];
   setFaces(faces: FaceStyle): void;
   toggleProjection(): void;
   chooseBackground(): void;
   toggleScenes(): void;
-  /** The standard views (Iso, Top, Front…) and the face styles, as menus under their toolbar buttons. */
+  /** All the standard views (right-click on the Views button) and the face styles, as menus under their toolbar buttons. */
   viewsMenu(anchor: HTMLElement): void;
   styleMenu(anchor: HTMLElement): void;
   /** The Library panel: ready-made objects to place. */
@@ -604,12 +694,16 @@ interface ViewActions {
   togglePaletteSide(): void;
   /** Put the tools back in their usual order (they can be dragged to new places). */
   resetToolOrder(): void;
+  /** Choose which tools are in the palette. */
+  customiseTools(): void;
   /** Viewer mode: tools put away, touch navigation (see ViewerMode). */
   enterViewer(): void;
   player: ScenePlayer;
 }
 
 interface ViewButtons {
+  /** Shows the current standard view; a click goes to the next one. */
+  views: HTMLButtonElement;
   /** Shows the current face style; opens the style menu. */
   style: HTMLButtonElement;
   projection: HTMLButtonElement;
@@ -618,13 +712,15 @@ interface ViewButtons {
   library: HTMLButtonElement;
 }
 
-const STANDARD_VIEWS: [Exclude<StandardView, 'bottom'>, string][] = [
-  ['iso', 'Iso'],
-  ['top', 'Top'],
-  ['front', 'Front'],
-  ['right', 'Right'],
-  ['back', 'Back'],
-  ['left', 'Left'],
+type StandardViewId = Exclude<StandardView, 'bottom'>;
+
+const STANDARD_VIEWS: [StandardViewId, string, string][] = [
+  ['iso', 'Iso', ICONS.iso],
+  ['top', 'Top', ICONS.top],
+  ['front', 'Front', ICONS.front],
+  ['right', 'Right', ICONS.right],
+  ['back', 'Back', ICONS.back],
+  ['left', 'Left', ICONS.left],
 ];
 
 /** A small down arrow on toolbar buttons that open a menu. */
@@ -639,6 +735,8 @@ const FACE_STYLES: [FaceStyle, string, string][] = [
 
 /** Keeping work safe and the app current (toolbar and Search share these). */
 interface KeepActions {
+  /** Design Properties: the design's units and precision. */
+  designProperties(): void;
   toggleHistory(): void;
   settings(): void;
   checkUpdates(): void;
@@ -667,7 +765,7 @@ function commandList(viewer: Viewer, controller: ToolController, files: FileComm
     id: `view:${v}`,
     name: `${v[0].toUpperCase()}${v.slice(1)} View`,
     keywords: ['camera', 'standard view'],
-    run: () => viewer.setView(v),
+    run: () => view.goToView(v),
   }));
   return [
     ...tools,
@@ -684,6 +782,7 @@ function commandList(viewer: Viewer, controller: ToolController, files: FileComm
       : []),
     { id: 'file:copy', name: 'Save a Copy Without History…', keywords: ['file', 'share', 'send', 'export'], run: keep.saveCopy },
     { id: 'file:history', name: 'History (earlier versions)', keywords: ['versions', 'restore', 'backup', 'go back', 'revert'], run: keep.toggleHistory },
+    { id: 'file:properties', name: 'Design Properties (Units)…', keywords: ['units', 'millimetres', 'centimetres', 'metres', 'inches', 'feet', 'precision', 'model info'], run: keep.designProperties },
     { id: 'app:settings', name: 'Settings', keywords: ['preferences', 'options', 'autosave', 'backup folder'], run: keep.settings },
     { id: 'app:update', name: 'Check for Updates', keywords: ['version', 'upgrade', 'new version'], run: keep.checkUpdates },
     { id: 'help:keys', name: 'Keyboard and Mouse', keywords: ['shortcuts', 'keys', 'help'], shortcut: 'F1', run: showShortcuts },
@@ -713,6 +812,7 @@ function commandList(viewer: Viewer, controller: ToolController, files: FileComm
     { id: 'view:viewer', name: 'Viewer Mode', keywords: ['touch', 'phone', 'tablet', 'mobile', 'look', 'present', 'eye'], run: view.enterViewer },
     { id: 'view:topbar', name: 'Show / Hide Top Bar', keywords: ['toolbar', 'menu', 'header', 'hide', 'room', 'full screen', 'top'], run: view.toggleTopBar },
     { id: 'view:tools-side', name: 'Move Tools to the Other Side', keywords: ['palette', 'left', 'right', 'dock', 'layout', 'position'], run: view.togglePaletteSide },
+    { id: 'view:tools-customise', name: 'Customise Tools…', keywords: ['palette', 'toolset', 'remove', 'add', 'essentials', 'minimal', 'layout'], run: view.customiseTools },
     { id: 'view:tools-reset', name: 'Reset Tool Order', keywords: ['palette', 'order', 'layout', 'arrange', 'default'], run: view.resetToolOrder },
     { id: 'view:tools', name: 'Show / Hide Tools', keywords: ['palette', 'toolbar', 'icons', 'collapse', 'tab', 'hide', 'room'], run: view.toggleTools },
     { id: 'library:panel', name: 'Library', keywords: ['objects', 'furniture', 'components', 'models', 'catalogue', 'catalog', 'place', 'insert', 'kitchen', 'bathroom', 'sofa', 'bed', 'table', 'chair'], run: view.toggleLibrary },
@@ -732,8 +832,18 @@ function commandList(viewer: Viewer, controller: ToolController, files: FileComm
     { id: 'select:connected', name: 'Select Connected Faces', keywords: ['selection'], run: () => controller.selectConnectedFaces() },
     { id: 'select:allconnected', name: 'Select All Connected', keywords: ['selection'], run: () => controller.selectAllConnected() },
     { id: 'select:material', name: 'Select All with Same Material', keywords: ['selection', 'paint'], run: () => controller.selectSameMaterial() },
-    { id: 'group:hide', name: 'Hide Selected Groups', keywords: ['hide', 'visibility', 'group'], run: () => controller.hideSelection() },
-    { id: 'group:unhide', name: 'Unhide All', keywords: ['show', 'unhide', 'visibility', 'group'], run: () => controller.unhideAll() },
+    { id: 'group:hide', name: 'Hide Selection', keywords: ['hide', 'visibility', 'group', 'lines', 'edges'], shortcut: 'Ctrl+H', run: () => controller.hideSelection() },
+    { id: 'edit:unhide', name: 'Unhide Selected Lines', keywords: ['show', 'unhide', 'lines', 'edges'], run: () => controller.unhideSelection() },
+    {
+      id: 'view:hiddenLines',
+      name: 'Show Hidden Lines (on/off)',
+      keywords: ['hidden', 'lines', 'edges', 'dashed', 'unhide'],
+      run: () => {
+        viewer.showHiddenLines = !viewer.showHiddenLines;
+        controller.notify(viewer.showHiddenLines ? 'Hidden lines shown dashed: select some, then right-click → Unhide' : 'Hidden lines not shown');
+      },
+    },
+    { id: 'group:unhide', name: 'Unhide All', keywords: ['show', 'unhide', 'visibility', 'group', 'lines', 'edges'], shortcut: 'Ctrl+Shift+H', run: () => controller.unhideAll() },
     { id: 'guides:toggle', name: 'Show/Hide Guides', keywords: ['guide', 'construction'], run: () => controller.toggleGuides() },
     { id: 'guides:delete', name: 'Delete All Guides', keywords: ['guide', 'construction'], run: () => controller.deleteGuides() },
   ];
@@ -755,6 +865,11 @@ function setToolCursor(id: ToolId, copy: boolean): void {
 const PALETTE_KEY = 'vormcraft.palette.hidden';
 const PALETTE_ORDER_KEY = 'vormcraft.palette.order';
 const PALETTE_SIDE_KEY = 'vormcraft.palette.side';
+const PALETTE_TOOLS_KEY = 'vormcraft.palette.tools';
+/** Tools that are always in the palette. */
+const KEEP_TOOLS: readonly ToolId[] = ['select'];
+/** The Essentials preset: the tools most models are made with. */
+const ESSENTIAL_TOOLS: readonly ToolId[] = ['select', 'eraser', 'line', 'rectangle', 'circle', 'arc2', 'pushpull', 'offset', 'move', 'rotate', 'scale', 'tape', 'dimension', 'paint', 'orbit', 'pan', 'zoom'];
 const TOOLBAR_KEY = 'vormcraft.toolbar.hidden';
 
 /** Layout choices are kept on this device; without storage they last for the session. */
@@ -783,13 +898,18 @@ interface PaletteControls {
   /** Whether the tools are in a different order from the usual one. */
   reordered(): boolean;
   resetOrder(): void;
+  /** Choose which tools are in the palette (a list with presets). */
+  customise(): void;
+  /** Tools from a newer version left out of a chosen palette when it opened (offered as new). */
+  readonly fresh: ToolId[];
 }
 
 /**
  * The tool palette, with a bar at the top that tucks it away into a narrow tab (for more room to
- * model); clicking the tab brings the tools back. Tools can be dragged to new places, the palette
- * can sit on the left or the right of the view, and right-clicking it offers those (and `more`).
- * All of it is remembered on the device.
+ * model); clicking the tab brings the tools back. Tools can be dragged to new places, left out
+ * (they stay under the ⋯ More tools button at the end), the palette can sit on the left or the
+ * right of the view, and right-clicking it offers those (and `more`). All of it is remembered on
+ * the device.
  */
 function buildPalette(buttons: Map<ToolId, HTMLButtonElement>, setTool: (id: ToolId) => void, menu: ContextMenu, more: () => MenuEntry[]): PaletteControls {
   const app = document.querySelector<HTMLElement>('.app')!;
@@ -821,13 +941,65 @@ function buildPalette(buttons: Map<ToolId, HTMLButtonElement>, setTool: (id: Too
     // A damaged order: the usual one.
   }
   let order = orderTools(saved, ids);
+  let savedChoice: unknown = null;
+  try {
+    savedChoice = JSON.parse(stored(PALETTE_TOOLS_KEY) ?? 'null');
+  } catch {
+    // A damaged choice: every tool.
+  }
+  let { choice, fresh } = readPaletteChoice(savedChoice, ids, KEEP_TOOLS);
+  const label = (id: ToolId) => TOOLS.find((t) => t.id === id)!.label;
+  // The tools left out of the palette, one click away (with a dot while some are new).
+  const moreButton = iconButton(ICONS.more, '', () => {
+    const r = moreButton.getBoundingClientRect();
+    const hidden = order.filter((id) => choice.hidden.includes(id));
+    const unseen = choice.unseen;
+    if (unseen.length) setChoice({ ...choice, unseen: [] });
+    menu.open(
+      [
+        ...hidden.map((id) => ({ label: unseen.includes(id) ? `${label(id)} (new)` : label(id), run: () => setTool(id) })),
+        'separator',
+        { label: 'Add to Palette', items: hidden.map((id) => ({ label: label(id), run: () => setChoice(showTool(choice, id, true, KEEP_TOOLS)) })) },
+        { label: 'Customise Tools…', run: () => void customise() },
+      ],
+      r.right + 2,
+      r.top,
+    );
+  });
+  moreButton.classList.add('palette-more');
   const toolOf = new Map<HTMLElement, ToolId>();
   for (const t of TOOLS) {
     const b = iconButton(t.icon, `${withShortcut(t.label, t.id)} · drag to move`, () => setTool(t.id));
     buttons.set(t.id, b);
     toolOf.set(b, t.id);
   }
-  const layout = () => palette.append(...order.map((id) => buttons.get(id)!));
+  const layout = () => {
+    for (const id of choice.hidden) buttons.get(id)!.remove();
+    palette.append(...order.filter((id) => !choice.hidden.includes(id)).map((id) => buttons.get(id)!));
+    if (choice.hidden.length) palette.append(moreButton);
+    else moreButton.remove();
+    moreButton.classList.toggle('has-new', choice.unseen.length > 0);
+    moreButton.title = `More tools: ${choice.hidden.map(label).join(', ')}${choice.unseen.length ? ` (new: ${choice.unseen.map(label).join(', ')})` : ''}`;
+  };
+  const setChoice = (next: PaletteChoice<ToolId>) => {
+    choice = next;
+    store(PALETTE_TOOLS_KEY, choice.hidden.length || choice.unseen.length ? JSON.stringify(choice) : null);
+    layout();
+  };
+  const customise = async () => {
+    const shown = await showCustomiseToolsDialog(
+      TOOLS,
+      new Set(ids.filter((id) => !choice.hidden.includes(id))),
+      KEEP_TOOLS,
+      [
+        { label: 'Essentials', tools: ESSENTIAL_TOOLS },
+        { label: 'All tools', tools: ids },
+      ],
+    );
+    if (shown) setChoice(choosePaletteTools(ids, shown, KEEP_TOOLS));
+  };
+  // Remember what the palette now knows about, so new tools are only new once.
+  if (fresh.length) setChoice(choice);
   const setOrder = (next: ToolId[]) => {
     order = next;
     store(PALETTE_ORDER_KEY, order.join() === ids.join() ? null : JSON.stringify(order));
@@ -910,11 +1082,19 @@ function buildPalette(buttons: Map<ToolId, HTMLButtonElement>, setTool: (id: Too
     setSide,
     reordered: () => order.join() !== ids.join(),
     resetOrder: () => setOrder(ids),
+    customise: () => void customise(),
+    fresh,
   };
   palette.addEventListener('contextmenu', (e) => {
     e.preventDefault();
+    const b = e.target instanceof Element ? e.target.closest<HTMLElement>('.icon-button') : null;
+    const tool = b ? toolOf.get(b) : undefined;
     menu.open(
       [
+        ...(tool ? [{ label: `Remove ${label(tool)} from Palette`, run: () => setChoice(showTool(choice, tool, false, KEEP_TOOLS)), disabled: KEEP_TOOLS.includes(tool) }] : []),
+        { label: 'Customise Tools…', run: () => void customise() },
+        { label: 'Show All Tools', run: () => setChoice(choosePaletteTools(ids, ids, KEEP_TOOLS)), disabled: choice.hidden.length === 0 },
+        'separator',
         controls.side() === 'left' ? { label: 'Move Tools to the Right', run: () => setSide('right') } : { label: 'Move Tools to the Left', run: () => setSide('left') },
         { label: 'Reset Tool Order', run: controls.resetOrder, disabled: !controls.reordered() },
         { label: palette.classList.contains('collapsed') ? 'Show Tools' : 'Hide Tools', run: flip },
@@ -953,6 +1133,8 @@ function buildToolbar(viewer: Viewer, controller: ToolController, files: FileCom
   logo.alt = '';
   logo.title = 'VormCraft';
   const docName = Object.assign(document.createElement('span'), { className: 'doc-name' });
+  // The design's name opens Design Properties (its units).
+  docName.addEventListener('click', keep.designProperties);
   brand.append(logo, docName);
   bar.append(brand);
   // Viewer mode: easy to spot and tap on a phone or tablet.
@@ -985,10 +1167,13 @@ function buildToolbar(viewer: Viewer, controller: ToolController, files: FileCom
   sep();
   bar.append(iconButton(ICONS.zoomExtents, withShortcut('Zoom Extents'), () => viewer.zoomExtents()));
   bar.append(iconButton(ICONS.previousView, withShortcut('Previous View'), () => previousView(viewer, controller)));
-  // One button each for the standard views and the face styles, opening a short menu, so the
-  // toolbar fits on one row.
-  const viewsButton = iconButton(ICONS.iso + MENU_CARET, 'Standard views: Iso, Top, Front, Right, Back, Left', () => view.viewsMenu(viewsButton));
-  viewsButton.classList.add('has-menu');
+  // One button for the standard views (a click goes on to the next; right-click lists them all)
+  // and one for the face styles, opening a short menu, so the toolbar fits on one row.
+  const viewsButton = iconButton(ICONS.iso, '', view.nextView);
+  viewsButton.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    view.viewsMenu(viewsButton);
+  });
   bar.append(viewsButton);
   sep();
   const guidesButton = iconButton(ICONS.guides, 'Show/hide guides', () => {
@@ -1024,7 +1209,7 @@ function buildToolbar(viewer: Viewer, controller: ToolController, files: FileCom
   const showBar = iconButton(ICONS.expandDown, 'Show the top bar', view.toggleTopBar);
   showBar.classList.add('toolbar-show');
   bar.append(hide, showBar);
-  const viewButtons: ViewButtons = { style, projection, scenes, history, library: libraryButton };
+  const viewButtons: ViewButtons = { views: viewsButton, style, projection, scenes, history, library: libraryButton };
   return { undoButton, redoButton, materialsButton, viewButtons, driveButton };
 }
 

@@ -4,6 +4,18 @@ What changed in each version of VormCraft. The section for a version is also sho
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
+## 0.5.11
+
+- Hide lines: select lines, or faces to hide the lines between them, and press Ctrl+H (or right-click and choose Hide). The faces stay as they are; only the black line goes. Groups can be hidden the same way.
+- Unhide all (Ctrl+Shift+H, or right-click) brings back everything hidden. While anything is hidden, the status bar says how much, with buttons to show the hidden lines or bring everything back.
+- Show hidden lines draws them dashed, so you can click a few and right-click → Unhide to bring back only those.
+- The Views button now goes to the next standard view each time you click it (Iso, Top, Front, Right, Back, Left). Right-click it to pick one from the list.
+- Units for each design: millimetres, centimetres, metres, inches, feet, or feet and inches (like 3' 6 1/2"). New asks which to use. Click the design's name (or the units button by the Measurements box) to change them; nothing changes size. A number typed without a unit means the design's unit.
+- Dimension tool: click a line, or two points, and pull out to show its length from end to end, with dashed lines and arrows. Drag the value to move it further out, and double-click it to type your own text.
+- Labels can be dragged to a new place, and double-clicked to change their text.
+- Choose your tools: right-click a tool to remove it from the palette, or use Customise Tools (with an Essentials set). Tools you leave out still work from their keys and Search, and wait under the ... button at the end of the palette. New tools in later versions wait there too if you have trimmed your palette.
+- Designs saved with this version use file format 7 and need this version or later to open.
+
 ## 0.5.10
 
 - 3D Text (in the tools): type some words, pick a font, letter height and how far to push them out, and place them as solid letters, standing up or lying flat. They can be painted, pushed, cut and 3D printed like any shape.

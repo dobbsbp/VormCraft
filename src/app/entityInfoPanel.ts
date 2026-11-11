@@ -2,18 +2,12 @@ import { faceArea } from '../core/check/measure';
 import { distance } from '../core/math/vec3';
 import { modelBounds } from '../core/ops/group';
 import type { ToolController } from '../tools/ToolController';
-import { formatLength } from '../tools/units';
+import { formatArea, formatLength, formatLengths } from '../tools/units';
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLElementTagNameMap[K]> = {}, ...children: (Node | string)[]): HTMLElementTagNameMap[K] {
   const e = Object.assign(document.createElement(tag), props);
   e.append(...children);
   return e;
-}
-
-/** Square millimetres, or square metres once that reads better. */
-export function formatArea(mm2: number): string {
-  if (mm2 >= 1e6) return `${Math.round(mm2 / 1e4) / 100} m²`;
-  return `${Math.round(mm2 * 100) / 100} mm²`;
 }
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -88,7 +82,7 @@ export class EntityInfoPanel {
         el('p', { className: 'panel-note' }, 'Group'),
         el('label', { className: 'panel-field' }, el('span', {}, 'Name'), name),
         this.row('Contents', [plural(faces, 'face'), plural(edges, 'edge'), sub.length > 1 ? plural(sub.length - 1, 'group') + ' inside' : ''].filter(Boolean).join(', ')),
-        this.row('Size', b ? b.max.map((x, i) => formatLength(x - b.min[i]).replace(' mm', '')).join(' × ') + ' mm' : 'empty'),
+        this.row('Size', b ? formatLengths(b.max.map((x, i) => x - b.min[i]), ' × ') : 'empty'),
         this.row('Paint', this.materialName(g.material)),
         el('div', { className: 'panel-row' }, edit),
       );
@@ -110,7 +104,7 @@ export class EntityInfoPanel {
     const points = [...sel.points].filter((v) => model.vertices.has(v));
     const parts = [plural(sel.groups.size, 'group'), plural(faces.length, 'face'), plural(edges.length, 'edge'), plural(points.length, 'point'), plural(sel.guides.size, 'guide'), plural(sel.labels.size, 'label')].filter((p) => !p.startsWith('0 '));
     out.push(el('p', { className: 'panel-note' }, parts.join(', ')));
-    if (points.length === 1) out.push(this.row('Position', model.pos(points[0]).map((x) => formatLength(x).replace(' mm', '')).join(', ') + ' mm'));
+    if (points.length === 1) out.push(this.row('Position', formatLengths(model.pos(points[0]), ', ')));
     if (faces.length) {
       const paints = new Set(faces.map((f) => model.face(f).material));
       out.push(

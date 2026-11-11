@@ -252,6 +252,7 @@ export function duplicateVertices(model: Model, vertices: ReadonlySet<VertexId>)
     const c = copyCurve(h.curve);
     if (c !== null) model.setEdgeCurve(ca, cb, c);
     if (h.soft !== undefined) model.setEdgeSoft(ca, cb, h.soft);
+    if (h.hidden) model.setEdgeHidden(ca, cb, true);
   }
   // Vertices that ended up without edges (isolated in the source) are not worth copying.
   for (const [v, c] of map) {

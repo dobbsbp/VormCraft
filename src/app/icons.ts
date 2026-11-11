@@ -27,6 +27,10 @@ export const ICONS = {
   history: svg('<path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/><path d="M12 8v4l3 2"/>'),
   // A cog: eight teeth round a ring.
   settings: svg('<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/><circle cx="12" cy="12" r="6.5"/>'),
+  /** More tools (the tools left out of the palette). */
+  /** Dimension: two extension lines and a measured line with arrow ends between them. */
+  dimension: svg('<path d="M4 6v12M20 6v12" stroke-dasharray="2 2"/><path d="M4 12h16"/><path d="M7.5 9.5 4.5 12l3 2.5M16.5 9.5l3 2.5-3 2.5"/><path d="M9 8.5h6" opacity="0.6"/>'),
+  more: svg('<circle cx="6" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="18" cy="12" r="1.4" fill="currentColor"/>'),
   // Chevrons for tucking the tool palette away and bringing it back.
   collapseLeft: svg('<path d="M14 6l-6 6 6 6"/><path d="M19 6l-6 6 6 6" opacity="0.5"/>'),
   collapseUp: svg('<path d="M6 14l6-6 6 6"/><path d="M6 19l6-6 6 6" opacity="0.5"/>'),

@@ -56,6 +56,7 @@ function copyGeometry(src: Model, dst: Model, faces: Iterable<FaceId>, edges: It
     const c = curve(h.curve);
     if (c !== null) dst.setEdgeCurve(a, b, c);
     if (h.soft !== undefined) dst.setEdgeSoft(a, b, h.soft);
+    if (h.hidden) dst.setEdgeHidden(a, b, true);
   };
 
   const faceList = [...faces].filter((f) => src.faces.has(f));

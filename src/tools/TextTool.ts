@@ -4,9 +4,8 @@ import { faceArea } from '../core/check/measure';
 import type { LabelId } from '../doc/Labels';
 import { rayPlane } from './geom';
 import type { Preview, Tool, ToolContext, ToolEvent } from './types';
-import { formatLength } from './units';
+import { formatArea, formatLength } from './units';
 
-const fmt = (x: number) => String(Math.round(x * 100) / 100 + 0);
 
 /**
  * Text: click a point, edge or face, then click where the label goes. The label starts with the
@@ -86,8 +85,8 @@ export class TextTool implements Tool {
     if (kind !== 'endpoint' && edge !== undefined && edge !== null && model.halfEdges.has(edge)) {
       return formatLength(distance(model.pos(model.he(edge).origin), model.pos(model.dest(edge))));
     }
-    if (kind !== 'endpoint' && e.face !== null && model.faces.has(e.face)) return `${fmt(faceArea(model, e.face))} mm²`;
-    return `(${p.map(fmt).join(', ')})`;
+    if (kind !== 'endpoint' && e.face !== null && model.faces.has(e.face)) return formatArea(faceArea(model, e.face));
+    return `(${p.map((x) => formatLength(x)).join(', ')})`;
   }
 
   /** Start editing an existing label (clicked with this tool). */

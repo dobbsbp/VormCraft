@@ -32,6 +32,7 @@ const OTHER_KEYS: [string, string][] = [
   ['Ctrl+Z / Ctrl+Y', 'Undo / Redo'],
   ['Ctrl+A', 'Select everything in the model'],
   ['Ctrl+G', 'Make Group'],
+  ['Ctrl+H / Ctrl+Shift+H', 'Hide the selected lines or groups / Unhide all'],
   ['Delete', 'Erase the selection'],
   ['Esc', 'Cancel; clear the selection; close a group; leave an earlier version'],
   ['Page Down / Page Up', 'Next / previous scene'],

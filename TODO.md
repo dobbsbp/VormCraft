@@ -18,6 +18,9 @@ CHANGELOG.md when it ships.
   default sans-serif without saying so.
 
 ## Rough edges (UX)
+- Dimensions keep their own ends: moving the geometry on its own leaves them behind (move them
+  together, or redraw). Zoom Extents does not count dimensions and labels.
+- After Ctrl+H the line under the cursor stays highlighted until the mouse moves.
 - A box drawn on a face becomes part of that face (a bump), not a solid of its own. Merge Shapes
   explains this, but it still surprises people. A "make this a solid/group" hint or command could
   help.

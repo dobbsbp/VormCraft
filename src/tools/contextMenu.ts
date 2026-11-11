@@ -10,6 +10,8 @@ export interface MenuHost {
   entityInfo(): void;
   /** Merge Shapes: asks whether to unify solids or keep them as one group, then merges. */
   mergeShapes(): void;
+  /** Whether hidden lines are drawn dashed (so they can be picked), and switching that. */
+  hiddenLines?: { shown: boolean; toggle(): void };
 }
 
 /**
@@ -22,16 +24,18 @@ export function contextMenuItems(c: ToolController, host: MenuHost): MenuEntry[]
   const geometry = sel.faces.size + sel.edges.size;
   const anything = sel.size > 0;
   const groups = sel.groups.size;
-  const onlyGroups = groups > 0 && geometry === 0 && sel.guides.size === 0 && sel.labels.size === 0;
-  const anyHidden = [...doc.groups.items.values()].some((g) => g.hidden);
+  const hidden = c.hiddenCount();
   const shapes = geometry + groups > 0;
 
   const entries: MenuEntry[] = [
     { label: 'Entity Info', run: () => host.entityInfo() },
     { label: 'Erase', run: () => c.deleteSelection(), disabled: !anything, shortcut: 'Delete' },
-    { label: 'Hide', run: () => c.hideSelection(), disabled: !onlyGroups },
+    { label: 'Hide', run: () => c.hideSelection(), disabled: !c.canHide(), shortcut: 'Ctrl+H' },
   ];
-  if (anyHidden) entries.push({ label: 'Unhide All', run: () => c.unhideAll() });
+  if (c.canUnhide()) entries.push({ label: 'Unhide', run: () => c.unhideSelection() });
+  if (hidden.groups + hidden.lines > 0) entries.push({ label: 'Unhide All', run: () => c.unhideAll(), shortcut: 'Ctrl+Shift+H' });
+  const lines = host.hiddenLines;
+  if (lines && hidden.lines > 0) entries.push({ label: lines.shown ? '✓ Show Hidden Lines' : 'Show Hidden Lines', run: () => lines.toggle() });
   entries.push('separator');
 
   if (groups === 1 && geometry === 0) {

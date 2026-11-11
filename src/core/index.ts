@@ -19,7 +19,7 @@ export { drawEdges, insertSegment, type DrawEdgesResult } from './ops/edges';
 export { arcAroundCenter, arcFromBulge, arcPoints, arcThroughPoints, drawArc, drawPie, DEFAULT_ARC_SEGMENTS, type Arc } from './ops/arcs';
 export { connectedVertices, scalePieces } from './ops/scale';
 export { applyAffine, BendError, duplicateVertices, rotation, scaling, selectionVertices, transformVertices, translation, type Affine } from './ops/transform';
-export { facesWithCurveEdges, isSoftEdge, smoothSurface, surfaceOutline } from './model/surfaces';
+export { facesWithCurveEdges, isEdgeShown, isSoftEdge, smoothSurface, surfaceOutline } from './model/surfaces';
 export { followMe, type FollowMeMode, type FollowMeResult } from './ops/followMe';
 export { inheritMaterials, paintFaces, unpaintMaterial } from './ops/materials';
 export { reverseFaces } from './ops/orient';

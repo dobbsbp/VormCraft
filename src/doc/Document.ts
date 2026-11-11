@@ -4,6 +4,7 @@ import { Guides } from './Guides';
 import { Labels } from './Labels';
 import { Materials } from './Materials';
 import { Scenes } from './Scenes';
+import { DEFAULT_UNITS, type DisplayUnits } from './Units';
 import { Versions } from './Versions';
 import type { Step } from './History';
 
@@ -15,11 +16,14 @@ export interface DocumentSnapshot {
   readonly labels: Labels;
   readonly materials: Materials;
   readonly scenes: Scenes;
+  /** Missing in undo steps saved before units could be chosen (they keep the units as they are). */
+  readonly units?: DisplayUnits;
 }
 
 /**
  * Everything that is saved: the top-level geometry, the groups (each with geometry of its own),
- * the construction guides, the text labels, the materials and the scenes.
+ * the construction guides, the text labels, the materials, the scenes and the units lengths are
+ * shown in.
  */
 export class Document {
   /** The top-level geometry (outside every group). */
@@ -29,6 +33,8 @@ export class Document {
   readonly labels: Labels;
   readonly materials: Materials;
   readonly scenes: Scenes;
+  /** The units lengths are shown and typed in (the model itself is always in millimetres). */
+  units: DisplayUnits = DEFAULT_UNITS;
   /** The design's version history (saved in the file, not part of undo). */
   readonly versions = new Versions();
   /** The group being edited (opened with a double-click), or null at the top level. Not saved. */
@@ -61,7 +67,7 @@ export class Document {
   }
 
   snapshot(): DocumentSnapshot {
-    return { model: this.root.clone(), groups: this.groups.clone(), guides: this.guides.clone(), labels: this.labels.clone(), materials: this.materials.clone(), scenes: this.scenes.clone() };
+    return { model: this.root.clone(), groups: this.groups.clone(), guides: this.guides.clone(), labels: this.labels.clone(), materials: this.materials.clone(), scenes: this.scenes.clone(), units: this.units };
   }
 
   /**
@@ -77,6 +83,7 @@ export class Document {
     this.labels.copyFrom(s.labels);
     this.materials.copyFrom(s.materials);
     this.scenes.copyFrom(s.scenes);
+    if (s.units) this.units = s.units;
     this.editing = path.find((id) => this.groups.has(id)) ?? null;
   }
 }

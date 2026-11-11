@@ -34,6 +34,11 @@ export interface HalfEdge {
    * surface), false for an edge that must always show; unset leaves it to the automatic rule.
    */
   soft?: boolean;
+  /**
+   * Hidden by the user (Hide), set on both halves: not drawn, picked or box-selected. Unlike a soft
+   * edge, the faces either side stay separate faces.
+   */
+  hidden?: true;
 }
 
 export interface Loop {
@@ -226,6 +231,16 @@ export class Model {
     }
   }
 
+  /** Hide the edge a–b (true) or show it again (false). */
+  setEdgeHidden(a: VertexId, b: VertexId, hidden: boolean): void {
+    const id = this.halfEdgeBetween(a, b);
+    if (id === undefined) throw new Error(`No edge ${a}-${b}`);
+    for (const h of [this.he(id), this.he(this.he(id).twin)]) {
+      if (hidden) h.hidden = true;
+      else delete h.hidden;
+    }
+  }
+
   /** Remove every edge whose two sides are free, then every vertex left without edges. */
   purgeFree(candidates?: Iterable<HalfEdgeId>): void {
     const touched = new Set<VertexId>();
@@ -251,6 +266,7 @@ export class Model {
     const b = h2.origin;
     const curve = h1.curve;
     const soft = h1.soft;
+    const hidden = h1.hidden;
     const sides = [h1, h2].map((h) => ({ loop: h.loop, prev: h.prev, next: h.next, wasFirst: h.loop !== null && this.loop(h.loop).first === h.id }));
     this.detach(h1);
     this.detach(h2);
@@ -260,6 +276,10 @@ export class Model {
     if (soft !== undefined) {
       this.setEdgeSoft(a, m, soft);
       this.setEdgeSoft(m, b, soft);
+    }
+    if (hidden) {
+      this.setEdgeHidden(a, m, true);
+      this.setEdgeHidden(m, b, true);
     }
     const bm = this.he(mb).twin;
     const ma = this.he(am).twin;

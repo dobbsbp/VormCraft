@@ -169,6 +169,7 @@ export type ToolId =
   | 'rotate'
   | 'tape'
   | 'text'
+  | 'dimension'
   | 'eraser'
   | 'orbit'
   | 'pan'

@@ -19,6 +19,7 @@ describe('files from every format version open', () => {
     ['format-v4.vorm', 4],
     ['format-v5.vorm', 5],
     ['format-v6.vorm', 6],
+    ['format-v7.vorm', 7],
   ])('%s', (name, version) => {
     const text = fixture(name);
     expect(JSON.parse(text).version).toBe(version);
@@ -32,7 +33,7 @@ describe('files from every format version open', () => {
       expect(doc.materials.items.size).toBe(2);
       expect([...doc.root.faces.values()].some((f) => f.material !== undefined)).toBe(true);
       expect([...doc.root.halfEdges.values()].some((h) => h.soft === false)).toBe(true);
-      expect(doc.labels.items.size).toBe(version >= 5 ? 2 : 1);
+      expect(doc.labels.items.size).toBe(version >= 7 ? 3 : version >= 5 ? 2 : 1);
     }
     if (version >= 3) {
       expect(doc.groups.items.size).toBe(2);
@@ -59,6 +60,10 @@ describe('files from every format version open', () => {
       expect(before[1].labels.items.size).toBe(1);
       expect(before[0].guides.lines()).toHaveLength(0);
     }
+    // Version 7 keeps lines the user hid, the design's units and dimensions.
+    expect([...doc.root.halfEdges.values()].filter((h) => h.hidden)).toHaveLength(version >= 7 ? 2 : 0);
+    expect(doc.units).toEqual(version >= 7 ? { unit: 'cm', precision: 1 } : { unit: 'mm', precision: 2 });
+    expect([...doc.labels.items.values()].filter((l) => l.end)).toHaveLength(version >= 7 ? 1 : 0);
     // Opened and saved again, it is in the current format and still opens.
     const again = parseDocument(serializeDocument(doc));
     expect(JSON.parse(serializeDocument(again)).version).toBe(FORMAT_VERSION);
@@ -66,7 +71,7 @@ describe('files from every format version open', () => {
   });
 
   it('there is a fixture for the current format version', () => {
-    const names = ['format-v1.benup', 'format-v2.vorm', 'format-v3.vorm', 'format-v4.vorm', 'format-v5.vorm', 'format-v6.vorm'];
+    const names = ['format-v1.benup', 'format-v2.vorm', 'format-v3.vorm', 'format-v4.vorm', 'format-v5.vorm', 'format-v6.vorm', 'format-v7.vorm'];
     expect(names.some((n) => n.includes(`v${FORMAT_VERSION}.`))).toBe(true);
   });
 });

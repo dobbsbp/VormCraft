@@ -73,7 +73,7 @@ export function applyToTargets(doc: Document, t: Targets, steps: Affine[], copy:
     }
     for (const id of t.labels) {
       const l = doc.labels.items.get(id);
-      if (l) doc.labels.add(applyAffine(a, l.anchor), applyAffine(a, l.position), l.text);
+      if (l) doc.labels.add(applyAffine(a, l.anchor), applyAffine(a, l.position), l.text, l.end && applyAffine(a, l.end));
     }
     for (const id of t.guides) {
       const g = doc.guides.items.get(id);
@@ -94,6 +94,7 @@ function moveLabels(doc: Document, ids: LabelId[], a: Affine): void {
     if (!l) continue;
     l.anchor = applyAffine(a, l.anchor);
     l.position = applyAffine(a, l.position);
+    if (l.end) l.end = applyAffine(a, l.end);
   }
 }
 
@@ -105,6 +106,7 @@ export function previewEdges(doc: Document, t: Targets, a: Affine): Vec3Pair[] {
   for (const e of m.edges()) {
     const p = m.he(e).origin;
     const q = m.dest(e);
+    if (m.he(e).hidden) continue;
     if (t.vertices.has(p) || t.vertices.has(q)) out.push([at(p), at(q)]);
   }
   for (const id of t.groups) {

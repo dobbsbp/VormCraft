@@ -98,6 +98,7 @@ export function infer(input: InferenceInput): Snap | null {
       if (m.outgoing(v.id).size > 0) offer({ kind: 'endpoint', point: v.pos }, pointTol);
     }
     for (const e of m.edges()) {
+      if (m.he(e).hidden) continue;
       const a = m.pos(m.he(e).origin);
       const b = m.pos(m.dest(e));
       offer({ kind: 'midpoint', point: scale(add(a, b), 0.5), ...(own ? { edge: e } : {}) }, pointTol);
@@ -117,6 +118,7 @@ export function infer(input: InferenceInput): Snap | null {
         if (x) offer({ kind: 'guideIntersection', point: x, guide: g.id }, pointTol);
       }
       for (const e of model.edges()) {
+        if (model.he(e).hidden) continue;
         const a = model.pos(model.he(e).origin);
         const b = model.pos(model.dest(e));
         const x = intersectLines(g.point, g.dir, a, sub(b, a));

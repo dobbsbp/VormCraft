@@ -182,8 +182,11 @@ export function progressDialog(title: string, message: string): { set(message: s
   };
 }
 
-/** Ask for a line of text (a name). Resolves to the trimmed text, or null if cancelled. */
-export function promptDialog(title: string, label: string, value: string, okLabel = 'OK'): Promise<string | null> {
+/**
+ * Ask for a line of text (a name). Resolves to the trimmed text, or null if cancelled; with
+ * `allowEmpty`, an empty answer is allowed (and resolves to '').
+ */
+export function promptDialog(title: string, label: string, value: string, okLabel = 'OK', allowEmpty = false): Promise<string | null> {
   const dlg = document.createElement('dialog');
   dlg.className = 'modal';
   dlg.innerHTML = `
@@ -199,6 +202,7 @@ export function promptDialog(title: string, label: string, value: string, okLabe
   dlg.querySelector('label span')!.textContent = label;
   const input = dlg.querySelector('input')!;
   input.value = value;
+  input.required = !allowEmpty;
   dlg.querySelector('button[value="ok"]')!.textContent = okLabel;
   document.body.append(dlg);
   return new Promise((resolve) => {
@@ -211,7 +215,7 @@ export function promptDialog(title: string, label: string, value: string, okLabe
     dlg.addEventListener('cancel', () => finish(null));
     dlg.querySelector('form')!.addEventListener('submit', (e) => {
       e.preventDefault();
-      finish(input.value.trim() || null);
+      finish(allowEmpty ? input.value.trim() : input.value.trim() || null);
     });
     dlg.showModal();
     input.select();

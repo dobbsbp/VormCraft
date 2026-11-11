@@ -2,6 +2,7 @@ import { Model, type FaceId, type HalfEdgeId, type MaterialId } from '../core/mo
 import { erase } from '../core/ops/erase';
 import { inheritMaterials, unpaintMaterial } from '../core/ops/materials';
 import type { Document, DocumentSnapshot } from '../doc/Document';
+import type { DisplayUnits } from '../doc/Units';
 import type { Group, GroupId } from '../doc/Groups';
 import type { VersionKind } from '../doc/Versions';
 import { openVersion, recordVersion } from '../io/versions';
@@ -38,10 +39,14 @@ import { ZoomWindowTool } from './ZoomWindowTool';
 import { SelectTool } from './SelectTool';
 import { Selection } from './Selection';
 import { TapeMeasureTool } from './TapeMeasureTool';
-import { distance, normalize, sub, type Vec3 } from '../core/math/vec3';
-import { AXES } from './geom';
+import { distance, normalize, scale, sub, type Vec3 } from '../core/math/vec3';
+import { makePlane } from '../core/math/plane';
+import { dimensionDragPoint, dimensionLayout } from './dimension';
+import { AXES, rayPlane } from './geom';
 import { PlaceTool, type Placeable } from './PlaceTool';
 import type { AxisLock, InferenceHints, Preview, Projector, Ray, Snap, Tool, ToolContext, ToolEvent, ToolId } from './types';
+import { formatLength, setActiveUnits } from './units';
+import { DimensionTool } from './DimensionTool';
 
 /** A pointer sample from the viewport after picking (the viewer's part of the job). */
 export interface PointerSample {
@@ -102,6 +107,7 @@ export class ToolController {
     readonly doc: Document,
     private readonly projector: () => Projector,
   ) {
+    setActiveUnits(doc.units);
     this.ctx = {
       doc,
       selection: this.selection,
@@ -141,6 +147,7 @@ export class ToolController {
       move: new MoveTool(this.ctx),
       rotate: new RotateTool(this.ctx),
       text: new TextTool(this.ctx),
+      dimension: new DimensionTool(this.ctx),
       orbit: new NavigationTool('orbit'),
       pan: new NavigationTool('pan'),
       zoom: new NavigationTool('zoom'),
@@ -204,6 +211,7 @@ export class ToolController {
 
   private afterDocumentChange(): void {
     this.revision++;
+    setActiveUnits(this.doc.units);
     this.selection.prune(this.doc.model, this.doc.labels, this.doc.guides, (g) => this.doc.groups.get(g)?.parent === this.doc.editing && !this.doc.groups.isHidden(g));
     this.onModelChanged();
     this.onUpdate();
@@ -280,6 +288,14 @@ export class ToolController {
     this.dirty = false;
     this.error = null;
     this.afterDocumentChange();
+  }
+
+  /** Show and take lengths in other units (one undo step); nothing in the model changes size. */
+  setUnits(units: DisplayUnits): void {
+    if (units.unit === this.doc.units.unit && units.precision === this.doc.units.precision) return;
+    this.editDocument('Units', () => {
+      this.doc.units = { ...units };
+    });
   }
 
   markSaved(): void {
@@ -464,6 +480,49 @@ export class ToolController {
     this.onUpdate();
   }
 
+  /** Where a label being dragged was before the drag (put back if the drag ends nowhere new). */
+  private labelDrag: { id: LabelId; from: Vec3 } | null = null;
+
+  /**
+   * Drag a label's text, or a dimension (its line stays parallel to what it measures; only how far
+   * out it sits changes). It follows the cursor, and becomes one undo step on release (`done`).
+   */
+  dragLabel(id: LabelId, ray: Ray, done: boolean): void {
+    const l = this.doc.labels.items.get(id);
+    if (!l || this.tool.id === 'eraser') return;
+    if (this.labelDrag?.id !== id) this.labelDrag = { id, from: l.position };
+    const from = this.labelDrag.from;
+    const p = l.end ? dimensionDragPoint(l.anchor, l.end, ray) : rayPlane(ray, makePlane(from, scale(ray.dir, -1)));
+    const to = p ? (l.end ? dimensionLayout(l.anchor, l.end, p).mid : p) : l.position;
+    if (!done) {
+      l.position = to;
+      this.onUpdate();
+      return;
+    }
+    this.labelDrag = null;
+    l.position = from;
+    if (distance(from, to) < 1e-9) return;
+    this.editDocument(l.end ? 'Move dimension' : 'Move label', () => this.doc.labels.setPosition(id, to));
+  }
+
+  /**
+   * Change a label's or dimension's text (one undo step). A dimension given its measured length,
+   * or nothing, shows the measured length again (and follows the design's units).
+   */
+  setLabelText(id: LabelId, text: string): void {
+    const l = this.doc.labels.items.get(id);
+    if (!l) return;
+    const measured = l.end ? formatLength(distance(l.anchor, l.end)) : null;
+    const next = l.end && (text.trim() === '' || text.trim() === measured) ? '' : text;
+    if (!l.end && next.trim() === '') {
+      this.error = 'A label needs some text (Delete erases it)';
+      this.onUpdate();
+      return;
+    }
+    if (next === l.text) return;
+    this.editDocument(l.end ? 'Edit dimension' : 'Edit label', () => this.doc.labels.setText(id, next));
+  }
+
   /** A label was right-clicked: it becomes the selection (unless already selected) for the menu. */
   labelContextPick(id: LabelId): void {
     if (!this.selection.labels.has(id)) this.selection.toggleLabel(id, false);
@@ -472,7 +531,8 @@ export class ToolController {
 
   /** Select every face and edge. */
   selectAll(): void {
-    this.selection.set(this.doc.model.faces.keys(), this.doc.model.edges(), [], this.doc.groups.children(this.doc.editing).filter((g) => !g.hidden).map((g) => g.id));
+    const model = this.doc.model;
+    this.selection.set(model.faces.keys(), [...model.edges()].filter((e) => !model.he(e).hidden), [], this.doc.groups.children(this.doc.editing).filter((g) => !g.hidden).map((g) => g.id));
   }
 
   /** The top level and every group that is not hidden. */
@@ -602,30 +662,88 @@ export class ToolController {
     this.goToScene(items[next].id);
   }
 
-  /** Hide the selected groups (one undo step). */
+  /** Whether Hide has something to work on: selected groups, or lines (see `softenTargets`). */
+  canHide(): boolean {
+    return this.selection.groups.size > 0 || this.softenTargets().length > 0;
+  }
+
+  /**
+   * Hide the selected groups, and the selected lines (with the lines between selected faces), as
+   * one undo step. Hidden lines are not drawn; the faces either side stay as they are.
+   */
   hideSelection(): void {
     const groups = [...this.selection.groups];
-    if (!groups.length) {
-      this.error = 'Select the groups to hide';
+    const edges = this.softenTargets();
+    if (!groups.length && !edges.length) {
+      this.error = 'Select the lines or groups to hide';
       this.onUpdate();
       return;
     }
+    const model = this.doc.model;
     this.editDocument('Hide', () => {
       for (const id of groups) {
         const g = this.doc.groups.get(id);
         if (g) g.hidden = true;
       }
+      for (const e of edges) model.setEdgeHidden(model.he(e).origin, model.dest(e), true);
+    });
+    // What was hidden cannot stay selected (Delete would erase lines nobody can see).
+    if (this.error === null) {
+      this.selection.clear();
+      this.onUpdate();
+    }
+  }
+
+  /** How many groups and lines are hidden, in the whole design (counted once per change). */
+  hiddenCount(): { groups: number; lines: number } {
+    if (this.hidden?.revision !== this.revision || this.hidden.doc !== this.doc) {
+      let lines = 0;
+      for (const m of this.doc.allModels()) for (const e of m.edges()) if (m.he(e).hidden) lines++;
+      const groups = [...this.doc.groups.items.values()].filter((g) => g.hidden).length;
+      this.hidden = { revision: this.revision, doc: this.doc, groups, lines };
+    }
+    return { groups: this.hidden.groups, lines: this.hidden.lines };
+  }
+
+  private hidden: { revision: number; doc: Document; groups: number; lines: number } | null = null;
+
+  /** Selected lines that are hidden (they can be picked while hidden lines are shown). */
+  private hiddenSelectedEdges(): HalfEdgeId[] {
+    const model = this.doc.model;
+    return [...this.selection.edges].filter((e) => model.halfEdges.has(e) && model.he(e).hidden);
+  }
+
+  /** Whether Unhide has selected hidden lines to show again. */
+  canUnhide(): boolean {
+    return this.hiddenSelectedEdges().length > 0;
+  }
+
+  /** Show the selected hidden lines again (one undo step). */
+  unhideSelection(): void {
+    const edges = this.hiddenSelectedEdges();
+    if (!edges.length) {
+      this.error = 'Select hidden lines to unhide (Show Hidden Lines draws them dashed)';
+      this.onUpdate();
+      return;
+    }
+    const model = this.doc.model;
+    this.editDocument('Unhide', () => {
+      for (const e of edges) model.setEdgeHidden(model.he(e).origin, model.dest(e), false);
     });
   }
 
-  /** Show every hidden group again. */
+  /** Show every hidden group and line again, in the whole design. */
   unhideAll(): void {
-    if (![...this.doc.groups.items.values()].some((g) => g.hidden)) {
+    const { groups, lines } = this.hiddenCount();
+    if (!groups && !lines) {
       this.notify('Nothing is hidden');
       return;
     }
     this.editDocument('Unhide all', () => {
       for (const g of this.doc.groups.items.values()) delete g.hidden;
+      for (const m of this.doc.allModels()) {
+        for (const e of [...m.edges()]) if (m.he(e).hidden) m.setEdgeHidden(m.he(e).origin, m.dest(e), false);
+      }
     });
   }
 
@@ -982,7 +1100,7 @@ export class ToolController {
     this.onUpdate();
   }
 
-  /** Edges the selection softens: selected edges, and edges between two selected faces. */
+  /** Edges the selection softens or hides: selected edges, and edges between two selected faces. */
   private softenTargets(): HalfEdgeId[] {
     const model = this.doc.model;
     const out = new Set([...this.selection.edges].filter((e) => model.halfEdges.has(e)));
@@ -1043,7 +1161,7 @@ export class ToolController {
     }
     for (const id of this.selection.labels) {
       const l = this.doc.labels.items.get(id);
-      if (l) pts.push(l.anchor, l.position);
+      if (l) pts.push(l.anchor, l.position, ...(l.end ? [l.end] : []));
     }
     if (!pts.length) return null;
     const min: Vec3 = [Math.min(...pts.map((p) => p[0])), Math.min(...pts.map((p) => p[1])), Math.min(...pts.map((p) => p[2]))];

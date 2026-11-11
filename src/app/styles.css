@@ -220,6 +220,23 @@ body {
   text-overflow: ellipsis;
 }
 
+/* The design's units, by the Measurements box; opens Design Properties. */
+.units-button {
+  padding: 1px 8px;
+  border: 1px solid var(--chrome-border);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.units-button:hover {
+  color: var(--text);
+  background: var(--chrome);
+}
+
 .measurements {
   display: flex;
   align-items: center;
@@ -574,6 +591,25 @@ body {
 
 .viewport-overlay .leader-dot {
   fill: #3c4048;
+}
+
+/* Dimensions: faded dashed lines, arrows at both ends, the value in the middle. */
+.viewport-overlay .dim-ext,
+.viewport-overlay .dim-line {
+  stroke: #3c4048;
+  stroke-width: 1;
+  stroke-dasharray: 5 3;
+  opacity: 0.55;
+  fill: none;
+}
+
+.viewport-overlay .dim-arrow {
+  fill: #3c4048;
+  opacity: 0.7;
+}
+
+.model-label.dimension {
+  cursor: move;
 }
 
 /* Materials panel (right side). */
@@ -1056,6 +1092,34 @@ body {
   color: var(--text-muted);
   font-size: 12px;
   white-space: nowrap;
+}
+
+/* Shown while lines or groups are hidden: how much, Show (dashed), Unhide all. */
+.status-hidden {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.status-hidden[hidden],
+.status-hidden button[hidden] {
+  display: none;
+}
+
+.status-hidden button {
+  padding: 1px 10px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.status-hidden button:hover {
+  background: var(--chrome);
 }
 
 /* The bar shown while looking at an earlier version. */
@@ -1659,8 +1723,9 @@ body.viewer-mode .scene-tab {
   opacity: 0.7;
 }
 
-/* The design's name next to the logo. */
+/* The design's name next to the logo (opens Design Properties). */
 .toolbar .doc-name {
+  cursor: pointer;
   max-width: 260px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1807,4 +1872,46 @@ body.viewer-mode .scene-tab {
 
 .panel-tab-body .panel-row {
   margin-top: 10px;
+}
+
+/* ⋯ More tools at the end of the palette; a dot while it holds tools new in this version. */
+.palette-more {
+  position: relative;
+}
+
+.palette-more.has-new::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* Customise Tools: a tick box per tool, in two columns. */
+.customise-tools .tool-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px 16px;
+  margin: 8px 0 12px;
+}
+
+.customise-tools .tool-icon svg {
+  width: 18px;
+  height: 18px;
+  vertical-align: middle;
+}
+
+.customise-tools .presets {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+@media (max-width: 520px) {
+  .customise-tools .tool-list {
+    grid-template-columns: 1fr;
+  }
 }

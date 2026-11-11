@@ -1,4 +1,5 @@
 import { Document } from '../doc/Document';
+import type { DisplayUnits } from '../doc/Units';
 import { checkWatertightAll, exportObj, exportStl } from '../io/export';
 import { FILE_EXTENSION, fileFormatVersion, FORMAT_VERSION, NewerFormatError, OLD_FILE_EXTENSIONS, parseDocument, serializeDocument } from '../io/fileFormat';
 import type { ToolController } from '../tools/ToolController';
@@ -31,6 +32,8 @@ export interface FileOptions {
   autosave?: AutoSaver;
   /** A file from a newer version of the app was opened: offer the update. */
   onNewerFile?: () => void;
+  /** Ask which units a new design uses (null: cancelled); without it, new designs use millimetres. */
+  chooseUnits?: () => Promise<DisplayUnits | null>;
 }
 
 /**
@@ -70,7 +73,11 @@ export class FileCommands {
 
   async newDocument(): Promise<void> {
     if (!(await this.confirmDiscard())) return;
-    this.controller.replaceDocument(new Document());
+    const units = this.options.chooseUnits ? await this.options.chooseUnits() : undefined;
+    if (units === null) return;
+    const doc = new Document();
+    if (units) doc.units = units;
+    this.controller.replaceDocument(doc);
     this.name = 'Untitled';
     this.path = undefined;
     this.drive = undefined;

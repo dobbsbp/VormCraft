@@ -8,6 +8,7 @@ import { Guides } from '../doc/Guides';
 import { Labels } from '../doc/Labels';
 import { Materials, type Material } from '../doc/Materials';
 import { ALL_PARTS, DEFAULT_STYLE, Scenes, type Scene } from '../doc/Scenes';
+import { DEFAULT_UNITS, validUnits, type DisplayUnits } from '../doc/Units';
 import type { Version } from '../doc/Versions';
 import { hashText } from './hash';
 import { applyPatch, diffLines, type Patch } from './lineDiff';
@@ -16,7 +17,7 @@ import { applyPatch, diffLines, type Patch } from './lineDiff';
 export const FILE_EXTENSION = 'vorm';
 /** Extensions of files saved before the app was renamed (they still open). */
 export const OLD_FILE_EXTENSIONS = ['benup'];
-export const FORMAT_VERSION = 6;
+export const FORMAT_VERSION = 7;
 
 /**
  * Geometry as stored: vertices, faces as vertex-id loops (outer first, then holes), every edge with
@@ -27,10 +28,11 @@ interface GeometryData {
   curves: { id: number; kind: 'circle'; center: Vec3; normal: Vec3; radius: number; segments: number }[];
   faces: { id: number; normal: Vec3; loops: number[][]; material?: string }[];
   /**
-   * [a, b, curveId | null, soft?] for every edge, including loose (wire) edges. `soft` is 1 for a
-   * soft edge, 0 for one that always shows, and absent for automatic (version 2).
+   * [a, b, curveId | null, soft?, hidden?] for every edge, including loose (wire) edges. `soft` is 1
+   * for a soft edge, 0 for one that always shows, and absent (or null before `hidden`) for automatic
+   * (version 2); `hidden` is 1 for an edge the user hid (version 7).
    */
-  edges: ([number, number, number | null] | [number, number, number | null, 0 | 1])[];
+  edges: ([number, number, number | null] | [number, number, number | null, 0 | 1 | null] | [number, number, number | null, 0 | 1 | null, 1])[];
 }
 
 /**
@@ -39,16 +41,20 @@ interface GeometryData {
  * Version 2 adds edge smoothing (a fourth entry per edge) and materials (colours and textures,
  * with each face's material). Version 3 adds groups, each with geometry of its own; version 4
  * hidden groups and scenes (saved views); version 5 the design's version history (compressed);
- * version 6 the last undo steps (each stored as only what changed: see `encodeUndo`).
+ * version 6 the last undo steps (each stored as only what changed: see `encodeUndo`); version 7
+ * hidden edges (a fifth entry per edge), the units lengths are shown in, and dimensions (labels with an `end`). Geometry is always in
+ * millimetres (`units`).
  * Older versions still open, and so do files from before the app was renamed (format tag 'benup').
  */
 interface FileV3 extends GeometryData {
   format: 'vormcraft' | 'benup';
-  version: 1 | 2 | 3 | 4 | 5 | 6;
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7;
   units: 'mm';
+  /** The units lengths are shown and typed in (version 7; millimetres before). */
+  displayUnits?: DisplayUnits;
   guides: { visible: boolean; lines: { point: Vec3; dir: Vec3 }[]; points: { pos: Vec3 }[] };
-  /** Text labels (optional: files saved before labels existed have none). */
-  labels?: { anchor: Vec3; position: Vec3; text: string }[];
+  /** Text labels (optional: files saved before labels existed have none), and dimensions (with `end`, version 7). */
+  labels?: { anchor: Vec3; position: Vec3; text: string; end?: Vec3 }[];
   /** Materials (version 2); textures are embedded as data URLs. */
   materials?: Material[];
   /** Groups (version 3), parents before the groups inside them. */
@@ -78,7 +84,9 @@ function geometryData(m: Model): GeometryData {
     faces: [...m.faces.values()].map((f) => ({ id: f.id, normal: f.normal, loops: m.faceVertexLoops(f.id), ...(f.material !== undefined ? { material: f.material } : {}) })),
     edges: [...m.edges()].map((e) => {
       const h = m.he(e);
-      return h.soft === undefined ? [h.origin, m.dest(e), h.curve] : [h.origin, m.dest(e), h.curve, h.soft ? 1 : 0];
+      const soft = h.soft === undefined ? null : h.soft ? 1 : 0;
+      if (h.hidden) return [h.origin, m.dest(e), h.curve, soft, 1];
+      return soft === null ? [h.origin, m.dest(e), h.curve] : [h.origin, m.dest(e), h.curve, soft];
     }),
   };
 }
@@ -100,15 +108,16 @@ function documentFile(doc: Document): FileV3 {
   const ordered = doc.groups.children(null).flatMap((g) => doc.groups.subtree(g.id));
   return {
     format: 'vormcraft',
-    version: 6,
+    version: 7,
     units: 'mm',
+    displayUnits: { unit: doc.units.unit, precision: doc.units.precision },
     ...geometryData(doc.root),
     guides: {
       visible: doc.guides.visible,
       lines: doc.guides.lines().map((g) => ({ point: g.point, dir: g.dir })),
       points: doc.guides.points().map((g) => ({ pos: g.pos })),
     },
-    labels: [...doc.labels.items.values()].map((l) => ({ anchor: l.anchor, position: l.position, text: l.text })),
+    labels: [...doc.labels.items.values()].map((l) => ({ anchor: l.anchor, position: l.position, text: l.text, ...(l.end ? { end: l.end } : {}) })),
     materials: [...doc.materials.items.values()],
     groups: ordered.map((g) => ({ id: g.id, name: g.name, parent: g.parent, ...(g.material !== undefined ? { material: g.material } : {}), ...(g.hidden ? { hidden: true } : {}), ...geometryData(g.model) })),
     scenes: { transition: doc.scenes.transition, delay: doc.scenes.delay, items: doc.scenes.items },
@@ -162,7 +171,9 @@ const encoded = new WeakMap<StepState, { newer: unknown; data: string; full: boo
 /** The design text of an undo step. */
 function stepText(s: StepState): string {
   if ('saved' in s) return s.text();
-  return linedJson(documentFile(new Document(s.model, s.guides, s.labels, s.materials, s.groups, s.scenes)));
+  const doc = new Document(s.model, s.guides, s.labels, s.materials, s.groups, s.scenes);
+  if (s.units) doc.units = s.units;
+  return linedJson(documentFile(doc));
 }
 
 /**
@@ -268,9 +279,10 @@ function readGeometry(f: Partial<GeometryData>, materials: Materials): Model {
     if (face.material !== undefined && !materials.get(face.material)) throw new Error(`face ${face.id} uses missing material ${face.material}`);
     model.addFace(face.loops[0], face.loops.slice(1), { normal: vec(face.normal, 'face normal'), id: face.id, material: face.material });
   }
-  for (const [a, b, curve, soft] of f.edges ?? []) {
+  for (const [a, b, curve, soft, hidden] of f.edges ?? []) {
     model.addEdge(a, b);
-    if (soft !== undefined) model.setEdgeSoft(a, b, soft === 1);
+    if (soft !== undefined && soft !== null) model.setEdgeSoft(a, b, soft === 1);
+    if (hidden === 1) model.setEdgeHidden(a, b, true);
     if (curve !== null) {
       if (!model.curves.has(curve)) throw new Error(`edge ${a}-${b} references missing curve ${curve}`);
       model.setEdgeCurve(a, b, curve);
@@ -341,9 +353,11 @@ export function parseDocument(text: string): Document {
   const labels = new Labels();
   for (const l of f.labels ?? []) {
     if (typeof l.text !== 'string') throw new FileFormatError('The file is damaged: a label has no text.');
-    labels.add(l.anchor, l.position, l.text);
+    labels.add(l.anchor, l.position, l.text, l.end === undefined ? undefined : vec(l.end, 'dimension end'));
   }
   const doc = new Document(model, guides, labels, materials, groups, scenes);
+  // Units that cannot be read fall back to millimetres rather than stopping the design opening.
+  doc.units = validUnits(f.displayUnits) ?? DEFAULT_UNITS;
   // Undo steps: left out if they do not belong to this exact design (or are damaged).
   const u = f.undo;
   if (u && typeof u.base === 'string' && Array.isArray(u.steps) && u.steps.every((s) => typeof s.data === 'string' && typeof s.label === 'string')) {

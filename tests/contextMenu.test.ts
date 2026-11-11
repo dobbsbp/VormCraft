@@ -1,6 +1,9 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { drawPolygon, drawRectangle, findFaceAt, GROUND_PLANE, initBooleanKernel, Model, pushPull, reverseFaces, volume, type Vec3 } from '../src/core';
+import { parseDocument, serializeDocument } from '../src/io/fileFormat';
+import { boxSelect } from '../src/tools/boxSelect';
 import { contextMenuItems, type MenuEntry } from '../src/tools/contextMenu';
+import { buildDisplayData } from '../src/view/displayData';
 import type { PointerSample } from '../src/tools/ToolController';
 import { harness } from './helpers/tools';
 
@@ -121,6 +124,96 @@ describe('menu commands', () => {
     expect(h.model.he(shared).soft).toBe(false);
     h.controller.selection.set([top], []);
     expect(h.controller.canSoften()).toBe(false);
+  });
+
+  it('Hide the lines between selected faces: not drawn or box-selected, faces kept apart; Unhide All, undoably', () => {
+    const h = harness();
+    solid(h.model, 0, 0);
+    const m = h.model;
+    const top = findFaceAt(m, [50, 50, 100])!;
+    const side = findFaceAt(m, [50, 0, 50])!;
+    const shared = m.faceHalfEdges(top).find((e) => m.faceOf(m.he(e).twin) === side)!;
+    const shown = () => [...buildDisplayData(m).segmentEdges];
+    expect(shown()).toHaveLength(12);
+    h.controller.selection.set([top, side], []);
+    expect(menu(contextMenuItems(h.controller, host)).get('Hide')).toBe(true);
+    h.controller.hideSelection();
+    expect(m.he(shared).hidden).toBe(true);
+    expect(m.he(m.he(shared).twin).hidden).toBe(true);
+    expect(shown()).toHaveLength(11);
+    expect(m.faces.size).toBe(6);
+    // Nothing hidden stays selected, Select All and a box selection leave it out.
+    expect(h.controller.selection.size).toBe(0);
+    h.controller.selectAll();
+    expect(h.controller.selection.edges.size).toBe(11);
+    const flat = { toScreen: (p: Vec3): [number, number] => [p[0], p[1]] };
+    expect(boxSelect(m, flat, { from: [-10, -10], to: [110, 110] }, false).edges).toHaveLength(11);
+    expect(h.controller.hiddenCount()).toEqual({ groups: 0, lines: 1 });
+    expect(menu(contextMenuItems(h.controller, host)).get('Unhide All')).toBe(true);
+    // Saved with the design.
+    const again = parseDocument(serializeDocument(h.doc));
+    expect([...again.root.halfEdges.values()].filter((x) => x.hidden)).toHaveLength(2);
+    h.controller.unhideAll();
+    expect(m.he(shared).hidden).toBeUndefined();
+    expect(shown()).toHaveLength(12);
+    expect(menu(contextMenuItems(h.controller, host)).has('Unhide All')).toBe(false);
+    h.controller.undo();
+    expect(m.he(shared).hidden).toBe(true);
+    h.controller.undo();
+    expect(m.he(shared).hidden).toBeUndefined();
+  });
+
+  it('Show Hidden Lines draws them last (dashed) so they can be picked; Unhide shows just the selected ones', () => {
+    const h = harness();
+    solid(h.model, 0, 0);
+    const m = h.model;
+    const top = findFaceAt(m, [50, 50, 100])!;
+    const lines = m.faceHalfEdges(top).map((e) => Math.min(e, m.he(e).twin));
+    h.controller.selection.set([], lines.slice(0, 2));
+    h.controller.hideSelection();
+    expect(buildDisplayData(m).hiddenFrom).toBe(10);
+    const shown = buildDisplayData(m, undefined, true);
+    expect(shown.hiddenFrom).toBe(10);
+    expect([...shown.segmentEdges.slice(10)].sort()).toEqual(lines.slice(0, 2).sort());
+    const toggles: boolean[] = [];
+    const lineHost = { ...host, hiddenLines: { shown: false, toggle: () => toggles.push(true) } };
+    expect(menu(contextMenuItems(h.controller, lineHost)).get('Show Hidden Lines')).toBe(true);
+    expect(menu(contextMenuItems(h.controller, lineHost)).has('Unhide')).toBe(false);
+    // Picking one dashed line selects it; Unhide brings back only that one.
+    h.controller.selection.set([], [lines[0]]);
+    expect(menu(contextMenuItems(h.controller, lineHost)).get('Unhide')).toBe(true);
+    h.controller.unhideSelection();
+    expect(m.he(lines[0]).hidden).toBeUndefined();
+    expect(m.he(lines[1]).hidden).toBe(true);
+    expect(h.controller.history.undoLabel).toBe('Unhide');
+    expect(h.controller.hiddenCount().lines).toBe(1);
+  });
+
+  it('Hide a selected line; a line split in two stays hidden on both halves', () => {
+    const h = harness();
+    const m = h.model;
+    const f = drawRectangle(m, GROUND_PLANE, [0, 0, 0], 100, 100).inner!;
+    const e = m.faceHalfEdges(f)[0];
+    h.controller.selection.set([], [Math.min(e, m.he(e).twin)]);
+    h.controller.hideSelection();
+    const a = m.he(e).origin;
+    const b = m.dest(e);
+    const mid = m.addVertex([(m.pos(a)[0] + m.pos(b)[0]) / 2, (m.pos(a)[1] + m.pos(b)[1]) / 2, 0]);
+    m.splitEdge(e, mid);
+    expect(m.he(m.halfEdgeBetween(a, mid)!).hidden).toBe(true);
+    expect(m.he(m.halfEdgeBetween(mid, b)!).hidden).toBe(true);
+    m.validate();
+  });
+
+  it('Hide with nothing to hide says what to select', () => {
+    const h = harness();
+    solid(h.model, 0, 0);
+    h.controller.selection.set([findFaceAt(h.model, [50, 50, 100])!], []);
+    expect(h.controller.canHide()).toBe(false);
+    h.controller.hideSelection();
+    expect(h.controller.error).toMatch(/lines or groups/);
+    h.controller.unhideAll();
+    expect(h.controller.history.undoLabel).not.toBe('Unhide all');
   });
 
   it('Flip Along mirrors the selection across its own centre', () => {

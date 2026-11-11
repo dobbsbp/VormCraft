@@ -45,6 +45,7 @@ export function polygonSelect(model: Model, projector: Projector, polygon: P2[],
 
   const edges: HalfEdgeId[] = [];
   for (const e of model.edges()) {
+    if (model.he(e).hidden) continue;
     const a = at(model.he(e).origin);
     const b = at(model.dest(e));
     if (crossing ? segmentTouches(a, b) : inside(a) && inside(b)) edges.push(e);

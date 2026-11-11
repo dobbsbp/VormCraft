@@ -11,8 +11,10 @@ import type { Guide, GuideId, Guides } from '../doc/Guides';
 import type { LabelId, Labels } from '../doc/Labels';
 import type { Material, Materials } from '../doc/Materials';
 import { DEFAULT_STYLE, type CameraView, type DisplayStyle, type FaceStyle, type SceneView } from '../doc/Scenes';
+import { dimensionLayout } from '../tools/dimension';
 import type { PointerSample } from '../tools/ToolController';
-import type { Preview, PreviewColor, PreviewLines, Projector, Snap } from '../tools/types';
+import type { Preview, PreviewColor, PreviewLines, Projector, Ray, Snap } from '../tools/types';
+import { formatLength } from '../tools/units';
 import { surfaceOutline } from '../core/model/surfaces';
 import { buildDisplayData, edgeSegment, faceTriangles, type DisplayData } from './displayData';
 import { dragModeFor, Navigator, ViewHistory, type CameraState, type DragMode, type StandardView } from './navigation';
@@ -92,6 +94,10 @@ export class Viewer implements SceneView {
   onLabelClick: (id: LabelId, shift: boolean) => void = () => {};
   /** A text label was right-clicked (open the menu for it). */
   onLabelContextMenu: (id: LabelId, client: [number, number]) => void = () => {};
+  /** A label or dimension is being dragged (`done` on release): the pick ray under the cursor. */
+  onLabelDrag: (id: LabelId, ray: Ray, done: boolean) => void = () => {};
+  /** A label or dimension was double-clicked (change its text). */
+  onLabelDoubleClick: (id: LabelId) => void = () => {};
   /** When set (Orbit/Pan/Zoom tools), the left button navigates instead of going to the tools. */
   leftDragNavigation: DragMode | null = null;
   /**
@@ -111,6 +117,9 @@ export class Viewer implements SceneView {
   private readonly edges: THREE.LineSegments;
   /** The same edges drawn through faces, dashed (Back Edges view, K). */
   private readonly backEdges: THREE.LineSegments;
+  /** Lines the user hid, drawn dashed (and pickable) while `showHiddenLines` is on. */
+  private readonly hiddenEdges: THREE.LineSegments;
+  private hiddenLinesShown = false;
   /** Geometry other than the model being edited: groups, and the rest of the model while a group is open. */
   private readonly layerGroup = new THREE.Group();
   private layers: Layer[] = [];
@@ -191,7 +200,8 @@ export class Viewer implements SceneView {
     );
     this.backEdges.visible = false;
     this.backEdges.renderOrder = -1;
-    this.scene.add(this.frontMesh, this.backMesh, this.edges, this.backEdges, this.layerGroup, buildAxes(), this.guideGroup, this.overlayGroup);
+    this.hiddenEdges = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineDashedMaterial({ color: THEME.edge, dashSize: 4, gapSize: 3, transparent: true, opacity: 0.6 }));
+    this.scene.add(this.frontMesh, this.backMesh, this.edges, this.backEdges, this.hiddenEdges, this.layerGroup, buildAxes(), this.guideGroup, this.overlayGroup);
 
     this.svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     this.svg.classList.add('viewport-overlay');
@@ -229,7 +239,7 @@ export class Viewer implements SceneView {
   /** Rebuild the display copy from the model and guides. Call after every model change. */
   refresh(): void {
     const editing = this.doc.editing;
-    const data = buildDisplayData(this.model, editing === null ? undefined : this.doc.groups.inheritedMaterial(editing));
+    const data = buildDisplayData(this.model, editing === null ? undefined : this.doc.groups.inheritedMaterial(editing), this.hiddenLinesShown);
     this.data = data;
     const g = this.frontMesh.geometry;
     g.setAttribute('position', new THREE.BufferAttribute(data.positions, 3));
@@ -245,10 +255,15 @@ export class Viewer implements SceneView {
     this.sphere = this.computeSphere();
     const eg = this.edges.geometry;
     eg.setAttribute('position', new THREE.BufferAttribute(data.edgePositions, 3));
+    eg.setDrawRange(0, data.hiddenFrom * 2);
     eg.computeBoundingSphere();
     this.backEdges.computeLineDistances();
+    const hg = this.hiddenEdges.geometry;
+    hg.setAttribute('position', new THREE.BufferAttribute(data.edgePositions.slice(data.hiddenFrom * 6), 3));
+    hg.computeBoundingSphere();
+    this.hiddenEdges.computeLineDistances();
     const dash = Math.max(this.sceneSphere().radius / 120, 0.5);
-    Object.assign(this.backEdges.material as THREE.LineDashedMaterial, { dashSize: dash, gapSize: dash * 0.75 });
+    for (const l of [this.backEdges, this.hiddenEdges]) Object.assign(l.material as THREE.LineDashedMaterial, { dashSize: dash, gapSize: dash * 0.75 });
     this.rebuildGuides();
     this.rebuildOverlay();
   }
@@ -383,6 +398,18 @@ export class Viewer implements SceneView {
       this.layerGroup.add(front, back, edges);
       this.layers.push({ owner, data, front, back, edges });
     }
+  }
+
+  /** Whether lines the user hid are drawn dashed, so they can be picked (and unhidden). */
+  get showHiddenLines(): boolean {
+    return this.hiddenLinesShown;
+  }
+
+  set showHiddenLines(on: boolean) {
+    if (on === this.hiddenLinesShown) return;
+    this.hiddenLinesShown = on;
+    this.refresh();
+    this.requestRender();
   }
 
   /** Show edges hidden behind faces as dashed lines. Returns the new state. */
@@ -759,7 +786,7 @@ export class Viewer implements SceneView {
     this.svg.innerHTML = parts.join('');
   }
 
-  /** Position the label elements and return their leader lines (SVG). */
+  /** Position the label elements and return their leader lines and dimension lines (SVG). */
   private drawLabels(proj: Projector): string[] {
     const leaders: string[] = [];
     const selected = new Set(this.overlay.selectedLabels);
@@ -778,8 +805,14 @@ export class Viewer implements SceneView {
         el.addEventListener('pointerdown', (e) => {
           e.stopPropagation();
           e.preventDefault();
-          if (e.button === 0) this.onLabelClick(id, e.shiftKey);
-          else if (e.button === 2) this.onLabelContextMenu(id, [e.clientX, e.clientY]);
+          if (e.button === 0) {
+            this.onLabelClick(id, e.shiftKey);
+            this.dragLabel(id, e);
+          } else if (e.button === 2) this.onLabelContextMenu(id, [e.clientX, e.clientY]);
+        });
+        el.addEventListener('dblclick', (e) => {
+          e.stopPropagation();
+          this.onLabelDoubleClick(id);
         });
         el.addEventListener('contextmenu', (e) => e.preventDefault());
         this.labelLayer.append(el);
@@ -792,14 +825,87 @@ export class Viewer implements SceneView {
         continue;
       }
       el.style.display = '';
-      if (el.textContent !== label.text) el.textContent = label.text;
       el.classList.toggle('selected', selected.has(label.id));
+      if (label.end) {
+        const dim = this.drawDimension(proj, label.anchor, label.end, label.position);
+        const text = label.text || formatLength(dim.length);
+        if (el.textContent !== text) el.textContent = text;
+        el.classList.add('dimension');
+        if (!dim.mid) {
+          el.style.display = 'none';
+          continue;
+        }
+        el.style.transform = `translate(${dim.mid[0]}px, ${dim.mid[1]}px) translate(-50%, -50%)`;
+        leaders.push(...dim.svg);
+        continue;
+      }
+      if (el.textContent !== label.text) el.textContent = label.text;
       // The text sits at the label position, on the side away from the anchor.
       const left = p[0] < a[0];
       el.style.transform = `translate(${p[0]}px, ${p[1]}px) translate(${left ? '-100%' : '0'}, -50%)`;
       leaders.push(`<path d="M${a[0]} ${a[1]}L${p[0]} ${p[1]}" class="leader"/><circle cx="${a[0]}" cy="${a[1]}" r="2.5" class="leader-dot"/>`);
     }
     return leaders;
+  }
+
+  /**
+   * A dimension on screen: dashed extension lines out from both ends of the measured line, a
+   * little past the dimension line, and the dimension line with an arrow at each end, so it is
+   * clear the value runs from end to end. Returns the SVG, the length and where the text goes.
+   */
+  private drawDimension(proj: Projector, a: Vec3, b: Vec3, position: Vec3): { svg: string[]; length: number; mid: [number, number] | null } {
+    const l = dimensionLayout(a, b, position);
+    const [sa, sb, sf, st, sm] = [a, b, l.from, l.to, l.mid].map((p) => proj.toScreen(p));
+    if (!sa || !sb || !sf || !st || !sm) return { svg: [], length: l.length, mid: null };
+    const svg: string[] = [];
+    const unit = (p: [number, number], q: [number, number]): [number, number] | null => {
+      const d = Math.hypot(q[0] - p[0], q[1] - p[1]);
+      return d < 1e-6 ? null : [(q[0] - p[0]) / d, (q[1] - p[1]) / d];
+    };
+    const line = (p: [number, number], q: [number, number], cls: string) => svg.push(`<path d="M${p[0]} ${p[1]}L${q[0]} ${q[1]}" class="${cls}"/>`);
+    // Extension lines: from a small gap off the line's ends to a little past the dimension line.
+    for (const [s, f] of [
+      [sa, sf],
+      [sb, st],
+    ] as const) {
+      const u = unit(s, f);
+      if (!u || Math.hypot(f[0] - s[0], f[1] - s[1]) < 4) continue;
+      line([s[0] + u[0] * 3, s[1] + u[1] * 3], [f[0] + u[0] * 8, f[1] + u[1] * 8], 'dim-ext');
+    }
+    line(sf, st, 'dim-line');
+    // Arrow heads at both ends, pointing out to the extension lines.
+    const along = unit(st, sf);
+    if (along) {
+      for (const [tip, dir] of [
+        [sf, along],
+        [st, [-along[0], -along[1]]],
+      ] as const) {
+        const back: [number, number] = [tip[0] - dir[0] * 9, tip[1] - dir[1] * 9];
+        const side: [number, number] = [-dir[1] * 3.5, dir[0] * 3.5];
+        svg.push(`<path d="M${tip[0]} ${tip[1]}L${back[0] + side[0]} ${back[1] + side[1]}L${back[0] - side[0]} ${back[1] - side[1]}Z" class="dim-arrow"/>`);
+      }
+    }
+    return { svg, length: l.length, mid: sm };
+  }
+
+  /** Follow a press on a label: once it moves a few pixels it is a drag (reported with the pick ray). */
+  private dragLabel(id: LabelId, down: PointerEvent): void {
+    let dragging = false;
+    const rayAt = (e: PointerEvent) => screenRay(this.view(), this.clientToLocal([e.clientX, e.clientY]), this.viewport());
+    const move = (e: PointerEvent) => {
+      if (!dragging && Math.hypot(e.clientX - down.clientX, e.clientY - down.clientY) < 4) return;
+      dragging = true;
+      this.onLabelDrag(id, rayAt(e), false);
+      this.requestRender();
+    };
+    const up = (e: PointerEvent) => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      if (dragging) this.onLabelDrag(id, rayAt(e), true);
+      this.requestRender();
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
   }
 
   // ------------------------------------------------------------------ input

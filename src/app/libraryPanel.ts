@@ -1,6 +1,7 @@
 import { modelBounds } from '../core/ops/group';
 import type { LibraryItem, LibraryPart, Room } from '../library';
 import type { ToolController } from '../tools/ToolController';
+import { formatLengths } from '../tools/units';
 import { renderThumbnail } from '../view/thumbnails';
 
 type LibraryModule = typeof import('../library');
@@ -176,8 +177,7 @@ export class LibraryPanel {
   private sizeText(item: LibraryItem): string {
     const b = modelBounds(this.partsOf(item).map((p) => p.model));
     if (!b) return '';
-    const [w, d, h] = [0, 1, 2].map((i) => Math.round(b.max[i] - b.min[i]));
-    return `${w} × ${d} × ${h} mm`;
+    return formatLengths([0, 1, 2].map((i) => Math.round(b.max[i] - b.min[i])), ' × ');
   }
 
   private thumbnail(item: LibraryItem): string | null {

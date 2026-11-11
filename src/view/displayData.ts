@@ -1,5 +1,5 @@
 import { cross, normalize, type Vec3 } from '../core/math/vec3';
-import { facesWithCurveEdges, isSoftEdge } from '../core/model/surfaces';
+import { facesWithCurveEdges, isEdgeShown, isSoftEdge } from '../core/model/surfaces';
 import type { FaceId, HalfEdgeId, MaterialId, Model } from '../core/model/Model';
 
 export { isSoftEdge };
@@ -28,10 +28,12 @@ export interface DisplayData {
   triangleFaces: Uint32Array;
   /** Triangles grouped by material, in order. */
   groups: DisplayGroup[];
-  /** Two endpoints (6 floats) per visible edge. */
+  /** Two endpoints (6 floats) per visible edge, then per hidden edge when they are shown. */
   edgePositions: Float32Array;
   /** Model edge id (lower half-edge id of the pair) of each segment in `edgePositions`. */
   segmentEdges: Uint32Array;
+  /** Segments from here on are hidden edges (drawn dashed); equal to the count when none are. */
+  hiddenFrom: number;
 }
 
 /**
@@ -46,7 +48,8 @@ export function faceUVAxes(normal: Vec3): { u: Vec3; v: Vec3 } {
 }
 
 /** `fallback`: paint for faces without their own (a group's paint). */
-export function buildDisplayData(model: Model, fallback?: MaterialId): DisplayData {
+/** With `showHidden`, edges hidden by the user come last (after `hiddenFrom`), to draw dashed and pick. */
+export function buildDisplayData(model: Model, fallback?: MaterialId, showHidden = false): DisplayData {
   const byMaterial = new Map<MaterialId | null, FaceId[]>();
   for (const f of model.faces.values()) {
     const key = f.material ?? fallback ?? null;
@@ -83,10 +86,18 @@ export function buildDisplayData(model: Model, fallback?: MaterialId): DisplayDa
   const edgePositions: number[] = [];
   const segmentEdges: number[] = [];
   const curvedFaces = facesWithCurveEdges(model);
+  const hidden: HalfEdgeId[] = [];
   for (const e of model.edges()) {
-    if (isSoftEdge(model, e, curvedFaces)) continue;
-    const h = model.he(e);
-    edgePositions.push(...model.pos(h.origin), ...model.pos(model.dest(e)));
+    if (!isEdgeShown(model, e, curvedFaces)) {
+      if (showHidden && model.he(e).hidden && !isSoftEdge(model, e, curvedFaces)) hidden.push(e);
+      continue;
+    }
+    edgePositions.push(...model.pos(model.he(e).origin), ...model.pos(model.dest(e)));
+    segmentEdges.push(e);
+  }
+  const hiddenFrom = segmentEdges.length;
+  for (const e of hidden) {
+    edgePositions.push(...model.pos(model.he(e).origin), ...model.pos(model.dest(e)));
     segmentEdges.push(e);
   }
   return {
@@ -97,6 +108,7 @@ export function buildDisplayData(model: Model, fallback?: MaterialId): DisplayDa
     groups,
     edgePositions: Float32Array.from(edgePositions),
     segmentEdges: Uint32Array.from(segmentEdges),
+    hiddenFrom,
   };
 }
 
