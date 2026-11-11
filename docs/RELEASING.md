@@ -59,3 +59,23 @@ next version by hand once.
 The installer is not code-signed, so the first time someone runs it Windows shows
 "Windows protected your PC". They click **More info → Run anyway**. Updates installed from inside
 the app do not show this. A code-signing certificate can be added to the workflow later.
+
+## Troubleshooting: the website step failed
+
+A release run has two jobs: `windows` (the installer and the GitHub Release) and `web` (the web
+app on https://vormcraft.app). If `windows` succeeds but `web` fails, the release itself is fine:
+the installer is published and installed copies will update. Only the website is still on the
+older version.
+
+1. Open the failed run in the **Actions** tab and read the `web` job's log.
+2. If the problem is on GitHub's side (for example "No artifacts named github-pages were found"),
+   re-running the job usually does not help. Check whether a newer major version of the Pages
+   actions (`actions/configure-pages`, `actions/upload-pages-artifact`, `actions/deploy-pages`)
+   has come out, update `.github/workflows/release.yml`, and push.
+3. Publish the website on its own: **Actions → Release → Run workflow** on `main`. This runs only
+   the `web` job (no new installer).
+4. Check that https://vormcraft.app/version.json shows the new version.
+
+The original run stays marked as failed in the Actions history. That is expected and harmless.
+This happened with v0.5.8: its `web` job failed on old Pages action versions, the workflow was
+moved to the current ones, and the website was published by a manual run.
