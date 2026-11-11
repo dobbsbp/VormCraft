@@ -26,8 +26,8 @@ export class TextTool implements Tool {
 
   hint(): string {
     if (this.anchor) return 'Click where the label goes.';
-    if (this.editing !== null) return 'Type the label text and press Enter (Esc to stop editing), or click to start another label.';
-    return 'Click a point, edge or face to label it, or click a label to edit it.';
+    if (this.editing !== null) return 'Type the label text and press Enter, Delete to erase the label, Esc to stop editing; or click to start another label.';
+    return 'Click a point, edge or face to label it, or click a label to edit it (Delete erases a clicked label).';
   }
 
   vcbLabel(): string {
@@ -74,6 +74,8 @@ export class TextTool implements Tool {
       id = this.ctx.doc.labels.add(point, position, text);
     });
     this.editing = id;
+    // Selected, so Delete erases it straight away.
+    if (id !== null) this.ctx.selection.set([], [], [], [], [], [id]);
   }
 
   /** What a label says before you type: the edge length, face area, or point coordinates. */

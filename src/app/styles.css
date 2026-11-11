@@ -1658,3 +1658,153 @@ body.viewer-mode .scene-tab {
   height: 8px;
   opacity: 0.7;
 }
+
+/* The design's name next to the logo. */
+.toolbar .doc-name {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The tool palette on the right of the view (right-click the palette, or Search). */
+.app.palette-right {
+  grid-template-columns: 1fr auto auto;
+  grid-template-areas:
+    'toolbar toolbar toolbar'
+    'viewport palette panel'
+    'status status status';
+}
+
+.app.palette-right .palette {
+  border-right: none;
+  border-left: 1px solid var(--chrome-border);
+}
+
+.app.palette-right .palette-toggle svg {
+  transform: scaleX(-1);
+}
+
+/* Dragging a tool to a new place in the palette. */
+.palette.reordering,
+.palette.reordering .icon-button {
+  cursor: grabbing;
+}
+
+.palette .icon-button.dragging {
+  opacity: 0.35;
+}
+
+.palette .icon-button.drop-before {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.palette .icon-button.drop-after {
+  box-shadow: inset -3px 0 0 var(--accent);
+}
+
+/* Hiding the top bar: it shrinks to a thin strip with a tab that brings it back. */
+.toolbar .toolbar-hide {
+  margin-left: auto;
+}
+
+.toolbar .toolbar-show {
+  display: none;
+}
+
+.app.toolbar-hidden .toolbar {
+  justify-content: center;
+  padding: 0;
+}
+
+.app.toolbar-hidden .toolbar > :not(.toolbar-show) {
+  display: none;
+}
+
+.app.toolbar-hidden .toolbar .toolbar-show {
+  display: inline-flex;
+  width: 64px;
+  height: 14px;
+  border-radius: 0 0 6px 6px;
+  color: var(--text-muted);
+}
+
+.app.toolbar-hidden .toolbar .toolbar-show svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* 3D Text: the text box spans the dialog. */
+.modal .row.stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.modal .row.stacked textarea {
+  font: inherit;
+  padding: 6px 8px;
+  resize: vertical;
+}
+
+.modal .note.error {
+  color: var(--danger);
+}
+
+/* The Materials window floats over the view, dragged by its title bar. */
+.side-panel.floating-panel {
+  position: fixed;
+  z-index: 20;
+  width: 300px;
+  max-height: min(640px, calc(100vh - 120px));
+  border: 1px solid var(--chrome-border);
+  border-radius: 10px;
+  background: var(--chrome);
+  box-shadow: 0 10px 30px rgba(20, 24, 30, 0.22);
+}
+
+.side-panel.floating-panel .panel-head {
+  cursor: move;
+  margin: -8px -12px 0;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--chrome-border);
+  position: sticky;
+  top: -8px;
+  background: var(--chrome);
+  z-index: 1;
+}
+
+.panel-tabs {
+  display: flex;
+  gap: 2px;
+  margin: 12px 0 4px;
+  border-bottom: 1px solid var(--chrome-border);
+}
+
+.panel-tab {
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 10px;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  margin-bottom: -1px;
+}
+
+.panel-tab:hover {
+  color: var(--text);
+}
+
+.panel-tab[aria-selected='true'] {
+  border-color: var(--chrome-border);
+  background: #fff;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.panel-tab-body .panel-row {
+  margin-top: 10px;
+}

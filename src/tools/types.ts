@@ -174,7 +174,9 @@ export type ToolId =
   | 'pan'
   | 'zoom'
   | 'zoomWindow'
-  | 'place';
+  | 'place'
+  /** 3D Text: asks for the text (in the app), then places it like a Library item. */
+  | 'text3d';
 
 export interface Tool {
   readonly id: ToolId;

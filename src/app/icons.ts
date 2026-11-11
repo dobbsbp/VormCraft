@@ -29,6 +29,8 @@ export const ICONS = {
   settings: svg('<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/><circle cx="12" cy="12" r="6.5"/>'),
   // Chevrons for tucking the tool palette away and bringing it back.
   collapseLeft: svg('<path d="M14 6l-6 6 6 6"/><path d="M19 6l-6 6 6 6" opacity="0.5"/>'),
+  collapseUp: svg('<path d="M6 14l6-6 6 6"/><path d="M6 19l6-6 6 6" opacity="0.5"/>'),
+  expandDown: svg('<path d="M6 10l6 6 6-6"/><path d="M6 5l6 6 6-6" opacity="0.5"/>'),
   expandRight: svg('<path d="M10 6l6 6-6 6"/><path d="M5 6l6 6-6 6" opacity="0.5"/>'),
   zoomExtents: svg('<rect x="7" y="7" width="10" height="10" rx="1"/><path d="M3 8V3h5M16 3h5v5M21 16v5h-5M8 21H3v-5"/>'),
   iso: cube(),
@@ -50,6 +52,7 @@ export const ICONS = {
   pushpull: svg('<path d="M3 16 9 19l12-5-6-3Z"/><path d="M12 14V4M8.5 7.5 12 4l3.5 3.5"/>'),
   followMe: svg('<path d="M3 21V13h5v3h3" fill="currentColor" fill-opacity="0.25"/><path d="M8 16h6a5 5 0 0 0 5-5V4" stroke-dasharray="2 1.5"/><path d="m16.5 6.5 2.5-2.5 2.5 2.5"/>'),
   paint: svg('<path d="m10 3 8 8-6.5 6.5a1.5 1.5 0 0 1-2 0L3.5 11.5a1.5 1.5 0 0 1 0-2Z"/><path d="M3.5 10.5h13.5"/><path d="M19.5 14.5s1.8 2.2 1.8 3.4a1.8 1.8 0 0 1-3.6 0c0-1.2 1.8-3.4 1.8-3.4Z" fill="currentColor"/>'),
+  text3d: svg('<path d="M4 5h11v3h-4v11H8V8H4z"/><path d="M15 5l3-2v3l-3 2M11 19l3-2V8"/>'),
   library: svg('<path d="M5 11V8a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v3"/><path d="M3 13a2 2 0 0 1 4 0v2h10v-2a2 2 0 0 1 4 0v5H3z"/><path d="M5 18v2M19 18v2"/>'),
   materials: svg('<path d="M12 3a9 9 0 1 0 0 18c1.4 0 2-1 2-2 0-1.6-1.6-1.8-1.6-3.2 0-1 .8-1.8 1.8-1.8H17a4 4 0 0 0 4-4c0-3.9-4-7-9-7Z"/><circle cx="7.5" cy="11" r="1.3" fill="currentColor"/><circle cx="10" cy="7" r="1.3" fill="currentColor"/><circle cx="15" cy="7.5" r="1.3" fill="currentColor"/>'),
   offset: svg('<rect x="3" y="3" width="18" height="18" rx="1"/><rect x="8" y="8" width="8" height="8" stroke-dasharray="2 1.5"/><path d="M3 3l5 5"/>'),

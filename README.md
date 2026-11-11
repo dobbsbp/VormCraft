@@ -48,7 +48,8 @@ Both versions have the same version number and open the same `.vorm` files.
 - **Move** and **Rotate**: press Ctrl to copy instead (a + shows on the cursor and the copy follows the mouse; copy mode ends with the copy), then type a count (`5x` or `/5`) to make arrays. **Push/Pull** with Ctrl makes a new starting face: an edge loop stays where the face was, so the new sides are separate faces (stacking floors, for example). **Scale** resizes selected geometry; negative factors mirror.
 - **Points**: click where two or more lines meet to select that corner, then Move, Rotate or Scale it; the faces around it stretch (or fold) to follow. The arrow keys lock the axis.
 - **Merge Shapes** (right-click): overlapping flat faces in one plane become one face; for solids and groups, choose **Unify** (one solid, with the faces inside removed) or **Keep shapes** (put together in one group, unchanged). Flat faces selected along with solids (such as the circle left inside a Follow Me ring) are left as they are, and if a merge isn't possible it says why.
-- **Eraser**, **Tape Measure** (measure, place guides, rescale the model) and **Text** labels.
+- **Eraser**, **Tape Measure** (measure, place guides, rescale the model) and **Text** labels (Delete, the Eraser, a box or right-click erases them).
+- **3D Text**: type words, pick one of your computer's fonts, the letter height and depth, and place them as solid letters, standing up or lying flat.
 - **Reverse Faces**, **Flip Along** red/green/blue, and **Soften/Unsoften Edges** (from the right-click menu).
 - Curves keep their true radius, so circles and arcs export smoothly at any resolution.
 
@@ -87,7 +88,7 @@ Right-click anything to select it and get a menu for it:
 
 ### Materials
 - **Paint Bucket**: plain colours, see-through colours such as glass, or tiled textures at real-world size.
-- Built-in library of colours and textures (brick, wood planks, tiles, concrete, grass), or use your own image.
+- A floating Materials window with tabs for the materials in the model, colours (neutrals, warm, cool, see-through) and textures (wood, stone and brick, ground, metal and fabric), or use your own image.
 - Paint follows the geometry: split, pushed and moved faces keep their paint. Painting a group colours all of its unpainted faces.
 
 ### Inference snapping
@@ -119,6 +120,10 @@ Right-click anything to select it and get a menu for it:
 - **Export** (one toolbar button): **STL** (binary) with a watertight check and adjustable curve resolution, for 3D printing, or **OBJ** for other 3D programs.
 - Unlimited undo and redo.
 - **Search** (Shift+S) finds any tool or command by name.
+
+### Arranging the workspace
+- Drag tools in the palette to put them in your own order; right-click the palette to move it to the right side or reset the order.
+- Hide the top bar for more room (the arrows at its right end); a small tab brings it back. The design's name shows next to the logo.
 
 ### Navigation
 

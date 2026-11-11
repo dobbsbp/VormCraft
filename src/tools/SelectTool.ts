@@ -1,3 +1,5 @@
+import type { Document } from '../doc/Document';
+import type { LabelId } from '../doc/Labels';
 import type { FaceId, HalfEdgeId, VertexId } from '../core/model/Model';
 import { isPoint } from '../core/ops/points';
 import type { GroupId } from '../doc/Groups';
@@ -6,7 +8,7 @@ import { smoothSurface, surfaceOutline } from '../core/model/surfaces';
 import { boxSelect, polygonSelectGroups, rectPolygon } from './boxSelect';
 import { contextGroups } from './groupModels';
 import { edgeId } from './Selection';
-import type { Preview, Tool, ToolContext, ToolEvent } from './types';
+import type { Preview, Projector, Tool, ToolContext, ToolEvent } from './types';
 
 /**
  * Select: click a face, edge or point (where two or more lines meet; Shift adds/removes), drag a box (left→right: fully inside;
@@ -68,8 +70,9 @@ export class SelectTool implements Tool {
       const crossing = this.box.to[0] < this.box.from[0];
       const hit = boxSelect(doc.model, this.ctx.projector(), this.box, crossing, doc.guides);
       const groups = polygonSelectGroups(contextGroups(doc), this.ctx.projector(), rectPolygon(this.box), crossing);
-      if (e.shift) selection.toggle(hit.faces, hit.edges, hit.guides, groups);
-      else selection.set(hit.faces, hit.edges, hit.guides, groups);
+      const labels = labelsInBox(doc, this.ctx.projector(), this.box);
+      if (e.shift) selection.toggle(hit.faces, hit.edges, hit.guides, groups, [], labels);
+      else selection.set(hit.faces, hit.edges, hit.guides, groups, [], labels);
     } else if (this.press) {
       // A click right after a double-click at the same spot is a triple-click.
       const guide = guideFirst(e);
@@ -204,3 +207,15 @@ export function pointUnder(ctx: ToolContext, e: ToolEvent): VertexId | null {
 
 const performanceNow = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 const near = (a: [number, number], b: [number, number]) => Math.hypot(a[0] - b[0], a[1] - b[1]) < 6;
+
+/** Labels whose text sits inside a screen box (they are not geometry, so window and crossing agree). */
+export function labelsInBox(doc: Document, projector: Projector, box: { from: [number, number]; to: [number, number] }): LabelId[] {
+  const [x0, x1] = [Math.min(box.from[0], box.to[0]), Math.max(box.from[0], box.to[0])];
+  const [y0, y1] = [Math.min(box.from[1], box.to[1]), Math.max(box.from[1], box.to[1])];
+  const out: LabelId[] = [];
+  for (const l of doc.labels.items.values()) {
+    const p = projector.toScreen(l.position);
+    if (p && p[0] >= x0 && p[0] <= x1 && p[1] >= y0 && p[1] <= y1) out.push(l.id);
+  }
+  return out;
+}

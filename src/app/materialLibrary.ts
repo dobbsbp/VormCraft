@@ -6,28 +6,39 @@ import type { MaterialFields } from '../doc/Materials';
  */
 export interface LibraryEntry {
   key: string;
+  /** The heading it is shown under (Neutrals, Warm…; Wood, Stone…). */
+  group: string;
   fields: () => MaterialFields;
 }
 
-const colour = (name: string, color: string, opacity = 1): LibraryEntry => ({ key: `colour:${name}`, fields: () => ({ name, color, opacity }) });
+const colour = (group: string, name: string, color: string, opacity = 1): LibraryEntry => ({ key: `colour:${name}`, group, fields: () => ({ name, color, opacity }) });
 
 const COLOURS: LibraryEntry[] = [
-  colour('White', '#f4f3ef'),
-  colour('Light Grey', '#c4c5c7'),
-  colour('Charcoal', '#3b3d41'),
-  colour('Black', '#151515'),
-  colour('Red', '#c0392b'),
-  colour('Orange', '#e07b25'),
-  colour('Yellow', '#efc23a'),
-  colour('Green', '#3f8f4a'),
-  colour('Teal', '#1f8a8a'),
-  colour('Blue', '#2d6cc0'),
-  colour('Navy', '#1f2f5a'),
-  colour('Purple', '#7d4fa0'),
-  colour('Pink', '#e591b2'),
-  colour('Sand', '#d8c39a'),
-  colour('Brown', '#7b4a2a'),
-  colour('Glass', '#9fd0e6', 0.35),
+  colour('Neutrals', 'White', '#f4f3ef'),
+  colour('Neutrals', 'Cream', '#ece3cf'),
+  colour('Neutrals', 'Light Grey', '#c4c5c7'),
+  colour('Neutrals', 'Grey', '#86888c'),
+  colour('Neutrals', 'Charcoal', '#3b3d41'),
+  colour('Neutrals', 'Black', '#151515'),
+  colour('Neutrals', 'Sand', '#d8c39a'),
+  colour('Neutrals', 'Brown', '#7b4a2a'),
+  colour('Warm', 'Red', '#c0392b'),
+  colour('Warm', 'Maroon', '#7a2430'),
+  colour('Warm', 'Orange', '#e07b25'),
+  colour('Warm', 'Terracotta', '#b8653f'),
+  colour('Warm', 'Yellow', '#efc23a'),
+  colour('Warm', 'Pink', '#e591b2'),
+  colour('Cool', 'Olive', '#7a7d3a'),
+  colour('Cool', 'Green', '#3f8f4a'),
+  colour('Cool', 'Mint', '#9fd8b8'),
+  colour('Cool', 'Teal', '#1f8a8a'),
+  colour('Cool', 'Sky Blue', '#8cc4ea'),
+  colour('Cool', 'Blue', '#2d6cc0'),
+  colour('Cool', 'Navy', '#1f2f5a'),
+  colour('Cool', 'Purple', '#7d4fa0'),
+  colour('See-through', 'Glass', '#9fd0e6', 0.35),
+  colour('See-through', 'Frosted Glass', '#e4eef2', 0.6),
+  colour('See-through', 'Tinted Glass', '#4d5a62', 0.45),
 ];
 
 /** A small seeded random generator, so the textures are the same every time. */
@@ -162,20 +173,136 @@ function grass(): string {
   return c.toDataURL('image/jpeg', 0.85);
 }
 
-const texture = (name: string, color: string, draw: () => string, width: number, height: number): LibraryEntry => {
+/** Dark wood planks (walnut), like Wood Planks but narrower boards (1200 × 480 mm). */
+function darkWood(): string {
+  const [c, ctx] = canvas(480, 192);
+  const rnd = random(17);
+  for (let b = 0; b < 4; b++) {
+    const base: [number, number, number] = [104 + (rnd() - 0.5) * 18, 70 + (rnd() - 0.5) * 14, 48 + (rnd() - 0.5) * 10];
+    ctx.fillStyle = shade(base, 0);
+    ctx.fillRect(0, b * 48, 480, 48);
+    for (let g = 0; g < 16; g++) {
+      ctx.strokeStyle = shade(base, -14 - rnd() * 18);
+      ctx.lineWidth = 0.5 + rnd();
+      ctx.beginPath();
+      const y0 = b * 48 + rnd() * 48;
+      ctx.moveTo(0, y0);
+      for (let x = 0; x <= 480; x += 40) ctx.lineTo(x, y0 + Math.sin(x / 60 + g) * 2 * rnd());
+      ctx.stroke();
+    }
+    ctx.fillStyle = 'rgba(30,18,10,0.6)';
+    ctx.fillRect(0, b * 48, 480, 1.5);
+    ctx.fillRect(rnd() * 480, b * 48, 1.5, 48);
+  }
+  return c.toDataURL('image/jpeg', 0.88);
+}
+
+/** White marble with soft grey veins (600 mm square). */
+function marble(): string {
+  const [c, ctx] = canvas(256, 256);
+  const rnd = random(23);
+  ctx.fillStyle = '#eeece8';
+  ctx.fillRect(0, 0, 256, 256);
+  for (let v = 0; v < 7; v++) {
+    ctx.strokeStyle = `rgba(110,112,118,${0.15 + rnd() * 0.25})`;
+    ctx.lineWidth = 0.6 + rnd() * 1.6;
+    let x = rnd() * 256;
+    let y = 0;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    while (y < 256) {
+      x += (rnd() - 0.45) * 18;
+      y += 6 + rnd() * 10;
+      ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+  speckle(ctx, 256, 256, 800, 0.05, rnd);
+  return c.toDataURL('image/jpeg', 0.9);
+}
+
+/** Square stone paving slabs, 600 mm with 10 mm joints (four slabs per 1200 mm tile). */
+function paving(): string {
+  const [c, ctx] = canvas(240, 240);
+  const rnd = random(29);
+  ctx.fillStyle = '#7d7a73';
+  ctx.fillRect(0, 0, 240, 240);
+  for (let i = 0; i < 2; i++) {
+    for (let j = 0; j < 2; j++) {
+      ctx.fillStyle = shade([168, 163, 152], (rnd() - 0.5) * 22);
+      ctx.fillRect(i * 120 + 1, j * 120 + 1, 118, 118);
+    }
+  }
+  speckle(ctx, 240, 240, 3000, 0.16, rnd);
+  return c.toDataURL('image/jpeg', 0.88);
+}
+
+/** Loose gravel (500 mm square). */
+function gravel(): string {
+  const [c, ctx] = canvas(256, 256);
+  const rnd = random(31);
+  ctx.fillStyle = '#8c857a';
+  ctx.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 2600; i++) {
+    ctx.fillStyle = shade([150, 142, 130], (rnd() - 0.5) * 80);
+    ctx.beginPath();
+    ctx.ellipse(rnd() * 256, rnd() * 256, 1.5 + rnd() * 3, 1 + rnd() * 2.5, rnd() * Math.PI, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  return c.toDataURL('image/jpeg', 0.85);
+}
+
+/** Brushed metal: fine streaks along u (500 mm square). */
+function brushedMetal(): string {
+  const [c, ctx] = canvas(256, 256);
+  const rnd = random(37);
+  ctx.fillStyle = '#b4b8bc';
+  ctx.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 900; i++) {
+    const v = rnd() < 0.5 ? 0 : 255;
+    ctx.fillStyle = `rgba(${v},${v},${v},${0.05 + rnd() * 0.08})`;
+    ctx.fillRect(rnd() * 256 - 60, rnd() * 256, 40 + rnd() * 160, 1);
+  }
+  return c.toDataURL('image/jpeg', 0.9);
+}
+
+/** A plain-weave fabric (100 mm square). */
+function fabric(): string {
+  const [c, ctx] = canvas(128, 128);
+  const rnd = random(41);
+  ctx.fillStyle = '#8d8f95';
+  ctx.fillRect(0, 0, 128, 128);
+  for (let y = 0; y < 128; y += 4) {
+    for (let x = 0; x < 128; x += 4) {
+      const over = ((x + y) / 4) % 2 === 0;
+      ctx.fillStyle = shade([141, 143, 149], (over ? 10 : -10) + (rnd() - 0.5) * 8);
+      ctx.fillRect(x, y, over ? 4 : 3, over ? 3 : 4);
+    }
+  }
+  return c.toDataURL('image/jpeg', 0.9);
+}
+
+const texture = (group: string, name: string, color: string, draw: () => string, width: number, height: number): LibraryEntry => {
   let image: string | null = null;
   return {
     key: `texture:${name}`,
+    group,
     fields: () => ({ name, color, opacity: 1, texture: { image: (image ??= draw()), width, height } }),
   };
 };
 
 const TEXTURES: LibraryEntry[] = [
-  texture('Brick', '#96483a', brick, 440, 150),
-  texture('Wood Planks', '#b0805a', wood, 1200, 600),
-  texture('Tiles', '#e6e3dc', tiles, 300, 300),
-  texture('Concrete', '#a7a6a2', concrete, 1000, 1000),
-  texture('Grass', '#4f7d33', grass, 1000, 1000),
+  texture('Wood', 'Wood Planks', '#b0805a', wood, 1200, 600),
+  texture('Wood', 'Dark Wood', '#684632', darkWood, 1200, 480),
+  texture('Stone and brick', 'Brick', '#96483a', brick, 440, 150),
+  texture('Stone and brick', 'Concrete', '#a7a6a2', concrete, 1000, 1000),
+  texture('Stone and brick', 'Tiles', '#e6e3dc', tiles, 300, 300),
+  texture('Stone and brick', 'Marble', '#eeece8', marble, 600, 600),
+  texture('Stone and brick', 'Paving', '#a8a398', paving, 1200, 1200),
+  texture('Ground', 'Grass', '#4f7d33', grass, 1000, 1000),
+  texture('Ground', 'Gravel', '#8c857a', gravel, 500, 500),
+  texture('Metal and fabric', 'Brushed Metal', '#b4b8bc', brushedMetal, 500, 500),
+  texture('Metal and fabric', 'Fabric', '#8d8f95', fabric, 100, 100),
 ];
 
 export const LIBRARY = { colours: COLOURS, textures: TEXTURES };

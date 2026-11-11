@@ -153,7 +153,9 @@ export class ToolController {
         },
         () => this.setTool('select'),
       ),
-    };
+    } as Omit<Record<ToolId, Tool>, 'text3d'> as Record<ToolId, Tool>;
+    // 3D Text has no tool of its own: the app asks for the text, then places it.
+    this.tools.text3d = this.tools.place;
     this.tool = this.tools.select;
     this.selection.onChange(() => this.onUpdate());
   }
@@ -452,9 +454,19 @@ export class ToolController {
   /** A label was clicked in the viewport: edit it (Text tool) or select it (Select tool). */
   labelClicked(id: LabelId, shift: boolean): void {
     if (this.tool instanceof TextTool) {
+      // Selected too, so Delete erases it.
       this.tool.editLabel(id);
-      this.notice = 'Type the new text and press Enter';
-    } else if (this.tool.id === 'select') this.selection.toggleLabel(id, shift);
+      this.selection.toggleLabel(id, false);
+      this.notice = 'Type the new text and press Enter, or press Delete to erase the label';
+    } else if (this.tool.id === 'eraser') {
+      this.run(() => this.apply(() => this.doc.labels.delete(id), undefined, this.tool, 'Erase'));
+    } else this.selection.toggleLabel(id, shift);
+    this.onUpdate();
+  }
+
+  /** A label was right-clicked: it becomes the selection (unless already selected) for the menu. */
+  labelContextPick(id: LabelId): void {
+    if (!this.selection.labels.has(id)) this.selection.toggleLabel(id, false);
     this.onUpdate();
   }
 

@@ -12,7 +12,7 @@ import { lineColor } from './LineTool';
 /** Something to place, such as a library item: parts with a paint each. */
 export interface Placeable {
   name: string;
-  parts: readonly { name: string; model: Model; paint: MaterialFields }[];
+  parts: readonly { name: string; model: Model; paint?: MaterialFields }[];
   /** Hangs from the point it is placed at (a pendant light), instead of standing on it. */
   hangs?: boolean;
 }
@@ -38,7 +38,8 @@ export function placement(p: Placeable, at: Vec3, angle: number): Affine {
  */
 export function insertPlaceable(doc: Document, p: Placeable, a: Affine): GroupId {
   const paintIds = new Map<string, string>();
-  const paint = (m: MaterialFields): string => {
+  const paint = (m: MaterialFields | undefined): string | undefined => {
+    if (!m) return undefined;
     const key = `${m.name}|${m.color}|${m.opacity}`;
     let id = paintIds.get(key);
     if (id === undefined) {
@@ -168,7 +169,7 @@ export class PlaceTool implements Tool {
     const a = placement(this.item, this.at, this.angle);
     return {
       lines: [
-        { points: this.segments.map((p) => applyAffine(a, p)), color: 'select', width: 1.5 },
+        { points: this.segments.map((p) => applyAffine(a, p)), color: 'preview', width: 1 },
         { points: [this.at, add(this.at, [0, 0, this.item.hangs ? -60 : 60])], color: lineColor(this.snap), width: 1.5 },
       ],
     };

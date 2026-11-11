@@ -55,7 +55,7 @@ export class Selection {
     this.changed();
   }
 
-  set(faces: Iterable<FaceId>, edges: Iterable<HalfEdgeId>, guides: Iterable<GuideId> = [], groups: Iterable<GroupId> = [], points: Iterable<VertexId> = []): void {
+  set(faces: Iterable<FaceId>, edges: Iterable<HalfEdgeId>, guides: Iterable<GuideId> = [], groups: Iterable<GroupId> = [], points: Iterable<VertexId> = [], labels: Iterable<LabelId> = []): void {
     this.faces.clear();
     this.edges.clear();
     this.points.clear();
@@ -67,6 +67,7 @@ export class Selection {
     for (const g of guides) this.guides.add(g);
     for (const g of groups) this.groups.add(g);
     for (const v of points) this.points.add(v);
+    for (const l of labels) this.labels.add(l);
     this.changed();
   }
 
@@ -80,7 +81,7 @@ export class Selection {
   }
 
   /** Shift-click: add what is not selected, remove what is. */
-  toggle(faces: Iterable<FaceId>, edges: Iterable<HalfEdgeId>, guides: Iterable<GuideId> = [], groups: Iterable<GroupId> = [], points: Iterable<VertexId> = []): void {
+  toggle(faces: Iterable<FaceId>, edges: Iterable<HalfEdgeId>, guides: Iterable<GuideId> = [], groups: Iterable<GroupId> = [], points: Iterable<VertexId> = [], labels: Iterable<LabelId> = []): void {
     const flip = <T>(set: Set<T>, items: Iterable<T>) => {
       for (const x of items) {
         if (set.has(x)) set.delete(x);
@@ -92,6 +93,7 @@ export class Selection {
     flip(this.guides, guides);
     flip(this.groups, groups);
     flip(this.points, points);
+    flip(this.labels, labels);
     this.changed();
   }
 

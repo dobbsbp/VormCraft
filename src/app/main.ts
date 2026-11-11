@@ -15,7 +15,10 @@ import { MaterialsPanel } from './materialsPanel';
 import { ScenePlayer } from './scenePlayer';
 import { ScenesPanel } from './scenesPanel';
 import { LibraryPanel } from './libraryPanel';
+import { showText3DDialog, text3dPlaceable } from './text3dDialog';
 import { ContextMenu } from './contextMenuView';
+import { moveTool, orderTools } from './toolOrder';
+import type { MenuEntry } from '../tools/contextMenu';
 import { EntityInfoPanel } from './entityInfoPanel';
 import { contextMenuItems } from '../tools/contextMenu';
 import { createBackupStore } from './backups';
@@ -54,6 +57,7 @@ const TOOLS: { id: ToolId; icon: string; label: string }[] = [
   { id: 'scale', icon: ICONS.scale, label: 'Scale' },
   { id: 'tape', icon: ICONS.tape, label: 'Tape Measure' },
   { id: 'text', icon: ICONS.text, label: 'Text' },
+  { id: 'text3d', icon: ICONS.text3d, label: '3D Text' },
   { id: 'orbit', icon: ICONS.orbit, label: 'Orbit' },
   { id: 'pan', icon: ICONS.pan, label: 'Pan' },
   { id: 'zoom', icon: ICONS.zoom, label: 'Zoom' },
@@ -156,6 +160,11 @@ async function start(): Promise<void> {
     if (title === shownTitle) return;
     shownTitle = title;
     document.title = title;
+    const docName = document.querySelector<HTMLElement>('.toolbar .doc-name');
+    if (docName) {
+      docName.textContent = `${files.name}${controller.dirty ? ' •' : ''}`;
+      docName.title = controller.dirty ? `${files.name} (changes not saved)` : files.name;
+    }
     if (isTauri()) {
       const { getCurrentWindow } = await import('@tauri-apps/api/window');
       await getCurrentWindow().setTitle(title);
@@ -231,6 +240,11 @@ async function start(): Promise<void> {
     typing = null;
     controller.labelClicked(id, shift);
   };
+  viewer.onLabelContextMenu = (id, [x, y]) => {
+    typing = null;
+    controller.labelContextPick(id);
+    menu.open(contextMenuItems(controller, { entityInfo: showEntityInfo, mergeShapes }), x, y);
+  };
   viewer.onPointer = (kind, sample) => {
     if (kind === 'move') controller.pointerMove(sample);
     else if (kind === 'down') controller.pointerDown(sample);
@@ -241,14 +255,26 @@ async function start(): Promise<void> {
   // One side panel at a time.
   const panels = { materials, scenes, info, history, library };
   const togglePanel = (which: keyof typeof panels, open = !panels[which].isOpen) => {
-    for (const [k, p] of Object.entries(panels)) if (k !== which && open) p.toggle(false);
+    // The Materials window floats, so it stays open beside the side panels.
+    if (which !== 'materials') for (const [k, p] of Object.entries(panels)) if (k !== which && k !== 'materials' && open) p.toggle(false);
     panels[which].toggle(open);
     update();
   };
   const setTool = (id: ToolId) => {
     typing = null;
+    if (id === 'text3d') return void place3dText();
     if (id === 'paint' && !materials.isOpen) togglePanel('materials', true);
     controller.setTool(id);
+  };
+  /** 3D Text: ask for the text, then it follows the cursor like a Library item until placed. */
+  const place3dText = async () => {
+    const choice = await showText3DDialog();
+    if (!choice) return;
+    try {
+      controller.place(text3dPlaceable(choice));
+    } catch (err) {
+      controller.notify(err instanceof Error ? err.message : String(err));
+    }
   };
   const toggleMaterials = () => togglePanel('materials');
   const toggleScenes = () => togglePanel('scenes');
@@ -347,6 +373,9 @@ Keep shapes: leave every solid as it is and put them together in one group.${
     },
     toggleLibrary,
     toggleTools: () => toggleTools(),
+    toggleTopBar: () => toggleTopBar(),
+    togglePaletteSide: () => togglePaletteSide(),
+    resetToolOrder: () => resetToolOrder(),
     enterViewer: () => viewerMode.enter(),
     player,
   };
@@ -372,7 +401,12 @@ Keep shapes: leave every solid as it is and put them together in one group.${
       update();
     },
   });
-  const toggleTools = buildPalette(toolButtons, setTool);
+  const topBar = topBarToggle();
+  const palette = buildPalette(toolButtons, setTool, menu, () => [{ label: topBar.hidden() ? 'Show Top Bar' : 'Hide Top Bar', run: topBar.toggle }]);
+  const toggleTools = palette.toggle;
+  const toggleTopBar = () => topBar.toggle();
+  const togglePaletteSide = () => palette.setSide(palette.side() === 'left' ? 'right' : 'left');
+  const resetToolOrder = () => palette.resetOrder();
   const search = new SearchBox(document.getElementById('viewport')!, () => commandList(viewer, controller, files, setTool, toggleMaterials, view, showEntityInfo, keep));
   ({ undoButton, redoButton, materialsButton, viewButtons, driveButton } = buildToolbar(viewer, controller, files, toggleMaterials, view, keep));
   const syncDrive = async () => {
@@ -564,6 +598,12 @@ interface ViewActions {
   /** The Library panel: ready-made objects to place. */
   toggleLibrary(): void;
   toggleTools(): void;
+  /** Hide the top bar (it shrinks to a thin strip with a tab), or show it again. */
+  toggleTopBar(): void;
+  /** Put the tool palette on the other side of the view. */
+  togglePaletteSide(): void;
+  /** Put the tools back in their usual order (they can be dragged to new places). */
+  resetToolOrder(): void;
   /** Viewer mode: tools put away, touch navigation (see ViewerMode). */
   enterViewer(): void;
   player: ScenePlayer;
@@ -671,6 +711,9 @@ function commandList(viewer: Viewer, controller: ToolController, files: FileComm
     { id: 'view:projection', name: 'Parallel / Perspective Projection', keywords: ['camera', 'orthographic', 'ortho', 'perspective', 'parallel'], run: view.toggleProjection },
     { id: 'view:background', name: 'Background Colour…', keywords: ['style', 'color', 'sky'], run: view.chooseBackground },
     { id: 'view:viewer', name: 'Viewer Mode', keywords: ['touch', 'phone', 'tablet', 'mobile', 'look', 'present', 'eye'], run: view.enterViewer },
+    { id: 'view:topbar', name: 'Show / Hide Top Bar', keywords: ['toolbar', 'menu', 'header', 'hide', 'room', 'full screen', 'top'], run: view.toggleTopBar },
+    { id: 'view:tools-side', name: 'Move Tools to the Other Side', keywords: ['palette', 'left', 'right', 'dock', 'layout', 'position'], run: view.togglePaletteSide },
+    { id: 'view:tools-reset', name: 'Reset Tool Order', keywords: ['palette', 'order', 'layout', 'arrange', 'default'], run: view.resetToolOrder },
     { id: 'view:tools', name: 'Show / Hide Tools', keywords: ['palette', 'toolbar', 'icons', 'collapse', 'tab', 'hide', 'room'], run: view.toggleTools },
     { id: 'library:panel', name: 'Library', keywords: ['objects', 'furniture', 'components', 'models', 'catalogue', 'catalog', 'place', 'insert', 'kitchen', 'bathroom', 'sofa', 'bed', 'table', 'chair'], run: view.toggleLibrary },
     { id: 'scenes:panel', name: 'Scenes', keywords: ['scene', 'view', 'pages', 'tabs'], run: view.toggleScenes },
@@ -710,12 +753,46 @@ function setToolCursor(id: ToolId, copy: boolean): void {
 }
 
 const PALETTE_KEY = 'vormcraft.palette.hidden';
+const PALETTE_ORDER_KEY = 'vormcraft.palette.order';
+const PALETTE_SIDE_KEY = 'vormcraft.palette.side';
+const TOOLBAR_KEY = 'vormcraft.toolbar.hidden';
+
+/** Layout choices are kept on this device; without storage they last for the session. */
+function stored(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function store(key: string, value: string | null): void {
+  try {
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
+  } catch {
+    // Not remembered.
+  }
+}
+
+interface PaletteControls {
+  /** Tuck the tools away into a narrow tab, or bring them back. */
+  toggle(): void;
+  side(): 'left' | 'right';
+  setSide(side: 'left' | 'right'): void;
+  /** Whether the tools are in a different order from the usual one. */
+  reordered(): boolean;
+  resetOrder(): void;
+}
 
 /**
  * The tool palette, with a bar at the top that tucks it away into a narrow tab (for more room to
- * model); clicking the tab brings the tools back. Remembered between sessions. Returns the toggle.
+ * model); clicking the tab brings the tools back. Tools can be dragged to new places, the palette
+ * can sit on the left or the right of the view, and right-clicking it offers those (and `more`).
+ * All of it is remembered on the device.
  */
-function buildPalette(buttons: Map<ToolId, HTMLButtonElement>, setTool: (id: ToolId) => void): () => void {
+function buildPalette(buttons: Map<ToolId, HTMLButtonElement>, setTool: (id: ToolId) => void, menu: ContextMenu, more: () => MenuEntry[]): PaletteControls {
+  const app = document.querySelector<HTMLElement>('.app')!;
   const palette = document.getElementById('palette')!;
   const toggle = document.createElement('button');
   toggle.type = 'button';
@@ -727,11 +804,7 @@ function buildPalette(buttons: Map<ToolId, HTMLButtonElement>, setTool: (id: Too
     toggle.setAttribute('aria-label', title);
     toggle.setAttribute('aria-expanded', String(!hidden));
     toggle.innerHTML = hidden ? ICONS.expandRight : ICONS.collapseLeft;
-    try {
-      localStorage.setItem(PALETTE_KEY, hidden ? '1' : '0');
-    } catch {
-      // Not remembered.
-    }
+    store(PALETTE_KEY, hidden ? '1' : '0');
   };
   const flip = () => show(!palette.classList.contains('collapsed'));
   toggle.addEventListener('click', () => {
@@ -739,19 +812,136 @@ function buildPalette(buttons: Map<ToolId, HTMLButtonElement>, setTool: (id: Too
     toggle.blur(); // keep keyboard input going to the viewport / Measurements box
   });
   palette.append(toggle);
-  for (const t of TOOLS) {
-    const b = iconButton(t.icon, withShortcut(t.label, t.id), () => setTool(t.id));
-    buttons.set(t.id, b);
-    palette.append(b);
-  }
-  let hidden = false;
+
+  const ids = TOOLS.map((t) => t.id);
+  let saved: unknown = null;
   try {
-    hidden = localStorage.getItem(PALETTE_KEY) === '1';
+    saved = JSON.parse(stored(PALETTE_ORDER_KEY) ?? 'null');
   } catch {
-    // Shown.
+    // A damaged order: the usual one.
   }
-  show(hidden);
-  return flip;
+  let order = orderTools(saved, ids);
+  const toolOf = new Map<HTMLElement, ToolId>();
+  for (const t of TOOLS) {
+    const b = iconButton(t.icon, `${withShortcut(t.label, t.id)} · drag to move`, () => setTool(t.id));
+    buttons.set(t.id, b);
+    toolOf.set(b, t.id);
+  }
+  const layout = () => palette.append(...order.map((id) => buttons.get(id)!));
+  const setOrder = (next: ToolId[]) => {
+    order = next;
+    store(PALETTE_ORDER_KEY, order.join() === ids.join() ? null : JSON.stringify(order));
+    layout();
+  };
+  layout();
+
+  // Dragging a tool (further than a click wobble) moves it before or after the tool it is dropped on.
+  let drag: { id: ToolId; x: number; y: number; active: boolean; target: { id: ToolId; after: boolean } | null } | null = null;
+  let swallowClick = false;
+  const clearMarks = () => {
+    for (const b of buttons.values()) b.classList.remove('dragging', 'drop-before', 'drop-after');
+    palette.classList.remove('reordering');
+  };
+  palette.addEventListener('pointerdown', (e) => {
+    const b = e.button === 0 && e.target instanceof Element ? e.target.closest<HTMLElement>('.icon-button') : null;
+    const id = b ? toolOf.get(b) : undefined;
+    drag = id ? { id, x: e.clientX, y: e.clientY, active: false, target: null } : null;
+  });
+  window.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    if (!drag.active) {
+      if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 6) return;
+      drag.active = true;
+      buttons.get(drag.id)!.classList.add('dragging');
+      palette.classList.add('reordering');
+    }
+    for (const b of buttons.values()) b.classList.remove('drop-before', 'drop-after');
+    const over = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('.icon-button');
+    const id = over ? toolOf.get(over) : undefined;
+    if (!over || !id || id === drag.id) {
+      drag.target = null;
+      return;
+    }
+    const r = over.getBoundingClientRect();
+    const after = e.clientX > r.left + r.width / 2;
+    over.classList.add(after ? 'drop-after' : 'drop-before');
+    drag.target = { id, after };
+  });
+  const finish = (apply: boolean) => {
+    if (!drag) return;
+    const d = drag;
+    drag = null;
+    if (!d.active) return;
+    clearMarks();
+    if (apply && d.target) setOrder(moveTool(order, d.id, d.target.id, d.target.after));
+    // The release after a drag is not a click on the tool.
+    swallowClick = true;
+    setTimeout(() => (swallowClick = false), 0);
+  };
+  window.addEventListener('pointerup', () => finish(true));
+  window.addEventListener('pointercancel', () => finish(false));
+  window.addEventListener(
+    'keydown',
+    (e) => {
+      if (e.key === 'Escape' && drag?.active) {
+        e.stopPropagation();
+        finish(false);
+      }
+    },
+    true,
+  );
+  palette.addEventListener(
+    'click',
+    (e) => {
+      if (!swallowClick) return;
+      e.stopPropagation();
+      e.preventDefault();
+    },
+    true,
+  );
+
+  const setSide = (side: 'left' | 'right') => {
+    app.classList.toggle('palette-right', side === 'right');
+    store(PALETTE_SIDE_KEY, side === 'right' ? 'right' : null);
+  };
+  const controls: PaletteControls = {
+    toggle: flip,
+    side: () => (app.classList.contains('palette-right') ? 'right' : 'left'),
+    setSide,
+    reordered: () => order.join() !== ids.join(),
+    resetOrder: () => setOrder(ids),
+  };
+  palette.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    menu.open(
+      [
+        controls.side() === 'left' ? { label: 'Move Tools to the Right', run: () => setSide('right') } : { label: 'Move Tools to the Left', run: () => setSide('left') },
+        { label: 'Reset Tool Order', run: controls.resetOrder, disabled: !controls.reordered() },
+        { label: palette.classList.contains('collapsed') ? 'Show Tools' : 'Hide Tools', run: flip },
+        ...more(),
+      ],
+      e.clientX,
+      e.clientY,
+    );
+  });
+
+  show(stored(PALETTE_KEY) === '1');
+  setSide(stored(PALETTE_SIDE_KEY) === 'right' ? 'right' : 'left');
+  return controls;
+}
+
+/**
+ * Hiding the top bar: the toolbar shrinks to a thin strip with a tab to bring it back
+ * (remembered on the device).
+ */
+function topBarToggle(): { toggle(): void; hidden(): boolean } {
+  const app = document.querySelector<HTMLElement>('.app')!;
+  const set = (hidden: boolean) => {
+    app.classList.toggle('toolbar-hidden', hidden);
+    store(TOOLBAR_KEY, hidden ? '1' : null);
+  };
+  set(stored(TOOLBAR_KEY) === '1');
+  return { toggle: () => set(!app.classList.contains('toolbar-hidden')), hidden: () => app.classList.contains('toolbar-hidden') };
 }
 
 function buildToolbar(viewer: Viewer, controller: ToolController, files: FileCommands, toggleMaterials: () => void, view: ViewActions, keep: KeepActions) {
@@ -761,10 +951,12 @@ function buildToolbar(viewer: Viewer, controller: ToolController, files: FileCom
   const logo = document.createElement('img');
   logo.src = './icons/icon-192.png';
   logo.alt = '';
-  brand.append(logo, 'VormCraft');
+  logo.title = 'VormCraft';
+  const docName = Object.assign(document.createElement('span'), { className: 'doc-name' });
+  brand.append(logo, docName);
   bar.append(brand);
   // Viewer mode: easy to spot and tap on a phone or tablet.
-  const viewerButton = textButton(ICONS.eye, 'Viewer', 'Viewer mode: look around the model with touch (one finger pans, two fingers zoom and orbit); the tools are put away', view.enterViewer);
+  const viewerButton = iconButton(ICONS.eye, 'Viewer mode: look around the model with touch (one finger pans, two fingers zoom and orbit); the tools are put away', view.enterViewer);
   viewerButton.classList.add('viewer-enter');
   bar.append(viewerButton);
   const sep = () => bar.append(Object.assign(document.createElement('span'), { className: 'sep' }));
@@ -826,6 +1018,12 @@ function buildToolbar(viewer: Viewer, controller: ToolController, files: FileCom
   bar.append(iconButton(ICONS.settings, 'Settings (autosave, backups, graphics card, history, updates)', keep.settings));
   const help = iconButton(ICONS.help, 'Help: shortcuts, updates, report a problem, about', () => keep.help(help));
   bar.append(help);
+  // Hiding the top bar leaves a thin strip whose tab brings it back.
+  const hide = iconButton(ICONS.collapseUp, 'Hide the top bar (more room to model)', view.toggleTopBar);
+  hide.classList.add('toolbar-hide');
+  const showBar = iconButton(ICONS.expandDown, 'Show the top bar', view.toggleTopBar);
+  showBar.classList.add('toolbar-show');
+  bar.append(hide, showBar);
   const viewButtons: ViewButtons = { style, projection, scenes, history, library: libraryButton };
   return { undoButton, redoButton, materialsButton, viewButtons, driveButton };
 }

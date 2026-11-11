@@ -4,6 +4,16 @@ What changed in each version of VormCraft. The section for a version is also sho
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
+## 0.5.10
+
+- 3D Text (in the tools): type some words, pick a font, letter height and how far to push them out, and place them as solid letters, standing up or lying flat. They can be painted, pushed, cut and 3D printed like any shape.
+- Text labels are easy to erase now: press Delete after placing or clicking one with the Text tool, click it with the Eraser, drag a box round it, or right-click it and choose Erase.
+- The Materials window floats over the view (drag it by its title) and can stay open with the other panels. Colours and textures have tabs of their own, sorted into groups, with more of each: Cream, Grey, Maroon, Terracotta, Olive, Mint, Sky Blue, frosted and tinted glass, Dark Wood, Marble, Paving, Gravel, Brushed Metal and Fabric.
+- The outline of a Library item while you place it is now thin and black instead of blue.
+- Arrange the tools your way: drag a tool in the palette to a new place, and right-click the palette to move it to the right side of the view or put the tools back in order. Your layout is remembered.
+- The top bar can be hidden for more room (the arrows at its right end); the small tab left at the top brings it back.
+- The design's name now shows next to the logo (with • while it has unsaved changes), and Viewer mode is the blue eye button beside it.
+
 ## 0.5.9
 
 - Library (toolbar): 49 household objects at real sizes to place in your model: furniture, kitchen units and appliances, bathroom fittings, electronics, lighting and decor. Search by name or other words (couch, fridge, telly; typos are fine), narrow by room or kind, pick a size (a bed in Single to King, a TV from 43" to 75"), click it, then click in the model. Arrow keys turn it before you place it. Each object comes in as a group, with a group for each paint so parts are easy to recolour.

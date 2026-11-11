@@ -90,6 +90,8 @@ export class Viewer implements SceneView {
   onContextMenu: (sample: PointerSample, client: [number, number]) => void = () => {};
   /** A text label was clicked (Shift held or not). */
   onLabelClick: (id: LabelId, shift: boolean) => void = () => {};
+  /** A text label was right-clicked (open the menu for it). */
+  onLabelContextMenu: (id: LabelId, client: [number, number]) => void = () => {};
   /** When set (Orbit/Pan/Zoom tools), the left button navigates instead of going to the tools. */
   leftDragNavigation: DragMode | null = null;
   /**
@@ -776,8 +778,10 @@ export class Viewer implements SceneView {
         el.addEventListener('pointerdown', (e) => {
           e.stopPropagation();
           e.preventDefault();
-          this.onLabelClick(id, e.shiftKey);
+          if (e.button === 0) this.onLabelClick(id, e.shiftKey);
+          else if (e.button === 2) this.onLabelContextMenu(id, [e.clientX, e.clientY]);
         });
+        el.addEventListener('contextmenu', (e) => e.preventDefault());
         this.labelLayer.append(el);
         this.labelEls.set(label.id, el);
       }
