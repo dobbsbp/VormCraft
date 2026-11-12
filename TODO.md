@@ -17,6 +17,9 @@ CHANGELOG.md when it ships.
 - **3D Text silently swaps fonts.** If the chosen font is not installed, the browser uses its
   default sans-serif without saying so.
 
+- **Inside-out solids already in files** (from older versions, imports or Reverse Faces) are only
+  reported (Entity Info), not fixed automatically. Push/Pull and Merge Shapes do not join them.
+
 ## Rough edges (UX)
 - Dimensions keep their own ends: moving the geometry on its own leaves them behind (move them
   together, or redraw). Zoom Extents does not count dimensions and labels.
@@ -42,7 +45,8 @@ CHANGELOG.md when it ships.
 - **Components** (linked copies). Library items and SketchUp imports are full copies today, so
   files grow quickly.
 - Locking groups.
-- **Views:** dimensions, section planes, tags/layers, shadows (scenes should save these too).
+- **Views:** section planes, tags/layers, sun and shadows (scenes should save these too).
+- **Settings sync:** automatic (today Save and Load are by hand); two devices saving at the same moment could overwrite one another.
 - A field-of-view control.
 - **Export:**
   - STEP (true curves, through OpenCascade).

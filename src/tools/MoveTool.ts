@@ -92,6 +92,8 @@ export class MoveTool implements Tool {
       return;
     }
     const vector = this.parseVector(text);
+    // A copy at no distance would sit exactly on the original (faces back to back, lines doubled).
+    if (length(vector) <= TOL) throw new Error('Type a distance other than 0');
     if (this.from) this.commit(this.targets!, vector, this.copy, 1, false);
     else if (this.last) this.commit(this.last.targets, vector, this.last.copy, this.last.count, this.last.divide, this.last.base);
     else throw new Error('Click the point to move from first');

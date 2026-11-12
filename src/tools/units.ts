@@ -116,6 +116,16 @@ export function formatLengths(values: readonly number[], separator: string, unit
   return `${values.map((v) => round(v / UNIT_MM[units.unit], units.precision)).join(separator)} ${units.unit}`;
 }
 
+/**
+ * A volume in the design's units cubed (cubic feet for feet and inches; millimetres switch to cubic
+ * metres from 1 m³), with thousands separators, as volumes get long.
+ */
+export function formatVolume(mm3: number, units: DisplayUnits = active): string {
+  const unit = units.unit === 'ftin' ? 'ft' : units.unit === 'mm' && mm3 >= 1e9 ? 'm' : units.unit;
+  const v = round(mm3 / UNIT_MM[unit] ** 3, 2);
+  return `${v.toLocaleString('en-GB', { maximumFractionDigits: 2 })} ${unit}³`;
+}
+
 /** An area in the design's units squared (feet and inches show square feet); millimetres switch to square metres once that reads better. */
 export function formatArea(mm2: number, units: DisplayUnits = active): string {
   const unit = units.unit === 'ftin' ? 'ft' : units.unit === 'mm' && mm2 >= 1e6 ? 'm' : units.unit;

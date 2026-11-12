@@ -10,7 +10,7 @@ TypeScript, Three.js, Manifold, Tauri and Vitest.
 `README.md` is the public feature list; keep it current when adding features.
 Unfinished work and known bugs live in `TODO.md`.
 
-## Current state (0.5.11, November 2026)
+## Current state (0.5.12, November 2026)
 - Released for Windows (NSIS installer, auto-update) and the web (installable PWA, works offline).
   Both are built by GitHub Actions from a version tag.
 - **Modelling tools:** Line, Rectangle (and Rotated), Circle, Polygon, Arcs/Pie, Push/Pull with
@@ -25,13 +25,17 @@ Unfinished work and known bugs live in `TODO.md`.
   - Viewer mode for touch screens;
   - the Library (49 household objects);
   - a movable, customisable tool palette (tools can be left out, under ⋯) and a hideable top bar;
-  - a Views button that cycles the standard views.
+  - a Views button that cycles the standard views;
+  - sky and ground behind the model (per device; scenes can keep their own).
+- **Checks:** Entity Info shows volumes and whether shapes are proper solids; tests refuse changes
+  that break solids.
 - **Files:**
   - save/open `.vorm` (format 7, with design history and undo saved inside);
   - autosave and recovery;
-  - Google Drive save, open and autosave (Google-verified; `drive.file` scope only);
+  - Google Drive save, open and autosave, and each device's settings saved/loaded by hand
+    (`VormCraft settings.json`; Google-verified; `drive.file` scope only);
   - import SKP/OBJ/STL; export STL/OBJ.
-- About 585 Vitest tests; `npm test`, `npm run typecheck` and the build must stay clean, with no
+- About 605 Vitest tests; `npm test`, `npm run typecheck` and the build must stay clean, with no
   warnings.
 
 ## Rules
@@ -41,6 +45,9 @@ Unfinished work and known bugs live in `TODO.md`.
   plain Node/Vitest.
   - `src/tools` has no DOM or Three.js either.
 - Every geometry operation needs Vitest tests before it is done.
+  - No change may break a solid by accident (open it, turn it inside out, or leave two pressed face
+    to face): the test harness refuses such changes through `ToolController.onSolidsWorse`.
+    Erase and the Eraser may open solids on purpose.
   - Run `npm test` and `npm run typecheck` before finishing any task.
   - Do not break existing tools.
 - Use our own icons, textures and models (SVG and canvas artwork in code).

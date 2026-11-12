@@ -5,9 +5,8 @@ import { TOL } from '../math/tolerance';
 import { dot } from '../math/vec3';
 import type { FaceId, HalfEdgeId, Model, VertexId } from '../model/Model';
 import { assembleFaces, traceLoops } from '../model/region';
-import { mergeCoplanarFaces, removeCollinearVertices } from './cleanup';
+import { mergeCoplanarFaces, removeCollinearVertices, retagCurves, type CurveCandidate } from './cleanup';
 import { extractGeometry } from './group';
-import { retagCurves, type CurveCandidate } from './pushPull';
 
 /** Thrown when the selected shapes cannot be merged (the message says why). */
 export class MergeError extends Error {}

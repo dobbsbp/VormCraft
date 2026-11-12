@@ -5,6 +5,7 @@ import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeome
 import type { Vec3 } from '../core/math/vec3';
 import type { FaceId, HalfEdgeId, MaterialId, Model, VertexId } from '../core/model/Model';
 import { modelBounds } from '../core/ops/group';
+import { DEFAULT_BACKDROP, type Backdrop } from '../doc/Backdrop';
 import type { Document } from '../doc/Document';
 import type { GroupId } from '../doc/Groups';
 import type { Guide, GuideId, Guides } from '../doc/Guides';
@@ -16,6 +17,7 @@ import type { PointerSample } from '../tools/ToolController';
 import type { Preview, PreviewColor, PreviewLines, Projector, Ray, Snap } from '../tools/types';
 import { formatLength } from '../tools/units';
 import { surfaceOutline } from '../core/model/surfaces';
+import { BackdropLayer } from './backdrop';
 import { buildDisplayData, edgeSegment, faceTriangles, type DisplayData } from './displayData';
 import { dragModeFor, Navigator, ViewHistory, type CameraState, type DragMode, type StandardView } from './navigation';
 import { pickHits } from './picking';
@@ -71,6 +73,9 @@ export class Viewer implements SceneView {
   readonly nav = new Navigator(this.camera);
   private faceStyle: FaceStyle = DEFAULT_STYLE.faces;
   private background = DEFAULT_STYLE.background;
+  /** Sky and ground behind the model (or, when off, the plain background colour). */
+  private backdrop: Backdrop = DEFAULT_BACKDROP;
+  private readonly backdropLayer = new BackdropLayer();
 
   /** Left-button pointer input for the tools, already picked. */
   onPointer: (kind: PointerKind, sample: PointerSample) => void = () => {};
@@ -182,6 +187,8 @@ export class Viewer implements SceneView {
     this.renderer.domElement.classList.add('viewport-canvas');
     container.appendChild(this.renderer.domElement);
     this.scene.background = new THREE.Color(this.background);
+    this.backdropLayer.set(this.backdrop);
+    this.scene.add(this.backdropLayer.object);
 
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8f99, 1.4));
     this.camera.add(this.headlight);
@@ -513,16 +520,20 @@ export class Viewer implements SceneView {
   }
 
   displayStyle(): DisplayStyle {
-    return { faces: this.faceStyle, backEdges: this.backEdges.visible, guides: this.guides.visible, background: this.background };
+    return { faces: this.faceStyle, backEdges: this.backEdges.visible, guides: this.guides.visible, background: this.background, backdrop: { ...this.backdrop } };
   }
 
-  /** Change how the model is drawn (faces, back edges, background). Guides are the document's. */
+  /** Change how the model is drawn (faces, back edges, background, sky and ground). Guides are the document's. */
   setDisplayStyle(s: Partial<DisplayStyle>): void {
     if (s.faces !== undefined) this.faceStyle = s.faces;
     if (s.backEdges !== undefined) this.backEdges.visible = s.backEdges;
     if (s.background !== undefined) {
       this.background = s.background;
       (this.scene.background as THREE.Color).set(s.background);
+    }
+    if (s.backdrop !== undefined) {
+      this.backdrop = { ...s.backdrop };
+      this.backdropLayer.set(this.backdrop);
     }
     this.refresh();
   }
@@ -586,6 +597,7 @@ export class Viewer implements SceneView {
       const sphere = this.sceneSphere().union(new THREE.Sphere(new THREE.Vector3(), 1000));
       this.nav.fitClipping(sphere);
       if (this.nav.projection === 'parallel') this.nav.syncParallel(this.ortho, sphere);
+      this.backdropLayer.update(this.view());
       this.renderer.render(this.scene, this.view());
       this.drawScreenOverlay();
     });
@@ -593,6 +605,7 @@ export class Viewer implements SceneView {
 
   dispose(): void {
     this.resizeObserver.disconnect();
+    this.backdropLayer.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
     this.svg.remove();

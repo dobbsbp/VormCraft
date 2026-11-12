@@ -11,6 +11,7 @@ import {
   makePlane,
   Model,
   pushPull,
+  solidReport,
   volume,
   type FaceId,
   type HalfEdgeId,
@@ -229,6 +230,8 @@ describe('Follow Me tool', () => {
     tool.pointerDown(ev(h.doc, [90, 0, 10], { face: p }));
     expect(m.faces.has(p)).toBe(false);
     expect(m.faces.has(circle)).toBe(true); // the path face stays
+    // The ring faces outward, though the profile faced against the path.
+    expect(solidReport(m)).toMatchObject({ solids: 1, insideOut: 0 });
     expect(h.controller.history.undoLabel).toBe('Follow Me');
     h.controller.undo();
     expect(m.faces.has(p)).toBe(true);

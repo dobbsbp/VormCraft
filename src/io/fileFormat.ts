@@ -8,6 +8,7 @@ import { Guides } from '../doc/Guides';
 import { Labels } from '../doc/Labels';
 import { Materials, type Material } from '../doc/Materials';
 import { ALL_PARTS, DEFAULT_STYLE, Scenes, type Scene } from '../doc/Scenes';
+import { validBackdrop } from '../doc/Backdrop';
 import { DEFAULT_UNITS, validUnits, type DisplayUnits } from '../doc/Units';
 import type { Version } from '../doc/Versions';
 import { hashText } from './hash';
@@ -336,7 +337,7 @@ export function parseDocument(text: string): Document {
             parts: { ...ALL_PARTS, ...s.parts },
             camera: { position: vec(c.position, 'scene camera'), target: vec(c.target, 'scene target'), fov: c.fov, projection: c.projection, height: c.height },
             hidden: (s.hidden ?? []).filter((id) => groups.has(id)),
-            style: { ...DEFAULT_STYLE, ...s.style },
+            style: { ...DEFAULT_STYLE, ...s.style, backdrop: validBackdrop(s.style?.backdrop) },
           },
           s.id,
         );

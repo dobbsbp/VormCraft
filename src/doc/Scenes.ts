@@ -1,4 +1,5 @@
 import type { Vec3 } from '../core/math/vec3';
+import type { Backdrop } from './Backdrop';
 import type { GroupId, Groups } from './Groups';
 import type { Guides } from './Guides';
 
@@ -25,8 +26,10 @@ export interface DisplayStyle {
   /** Edges hidden behind faces drawn dashed. */
   backEdges: boolean;
   guides: boolean;
-  /** Background colour, '#rrggbb'. */
+  /** Background colour, '#rrggbb' (shown when the sky and ground are off). */
   background: string;
+  /** Sky and ground. Missing in scenes saved before they existed: those leave them as they are. */
+  backdrop?: Backdrop;
 }
 
 /** The parts of the view a scene saves and restores (each can be switched off). */

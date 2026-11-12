@@ -435,3 +435,54 @@ describe('push/pull on an open surface (bump / dent)', () => {
   });
 });
 
+describe('a shape drawn against a solid and pushed out beside it', () => {
+  /** A 9 mm panel standing in the YZ plane (x = 0..9) with a sloping top, like a sign. */
+  function panel(): Model {
+    const m = new Model();
+    const back: [number, number, number][] = [
+      [0, -400, 0],
+      [0, 0, 0],
+      [0, 0, 32],
+      [0, -70, 50],
+      [0, -400, 30],
+    ];
+    const f = drawPolygon(m, makePlane(back[0], [-1, 0, 0]), back).inner!;
+    pushPull(m, f, m.face(f).normal[0] > 0 ? 9 : -9);
+    return m;
+  }
+
+  it('joins the solid when it lies against it face to face (no faces back to back inside)', () => {
+    const m = panel();
+    const before = volume(m);
+    // Drawn on the panel's front plane above its sloping top, sharing that edge, and pushed back as deep.
+    const flourish: [number, number, number][] = [
+      [9, 0, 32],
+      [9, 0, 80],
+      [9, -70, 80],
+      [9, -70, 50],
+    ];
+    const f = drawPolygon(m, makePlane(flourish[0], [1, 0, 0]), flourish).inner!;
+    const area = faceArea(m, f);
+    pushPull(m, f, m.face(f).normal[0] > 0 ? -9 : 9);
+    const w = checkWatertight(m);
+    expect(w.watertight).toBe(true);
+    expect(w.shells).toBe(1);
+    expect(volume(m)).toBeCloseTo(before + area * 9, 3);
+    // One front and one back face, the sloping wall between them gone.
+    expect([...m.faces.values()].filter((g) => Math.abs(g.normal[0]) > 0.999)).toHaveLength(2);
+    expect(m.faces.size).toBe(8);
+  });
+
+  it('a shape touching a solid only along an edge stays a solid of its own', () => {
+    const m = new Model();
+    const a = drawRectangle(m, GROUND_PLANE, [0, 0, 0], 100, 100).inner!;
+    pushPull(m, a, m.face(a).normal[2] > 0 ? 50 : -50);
+    // A square on the ground beside the box, pushed down: it shares only the box's bottom edge.
+    const b = drawRectangle(m, GROUND_PLANE, [100, 0, 0], 100, 100).inner!;
+    pushPull(m, b, m.face(b).normal[2] > 0 ? -50 : 50);
+    const w = checkWatertight(m);
+    expect(w.watertight).toBe(true);
+    expect(w.shells).toBe(2);
+    expect(volume(m)).toBeCloseTo(2 * 100 * 100 * 50, 3);
+  });
+});

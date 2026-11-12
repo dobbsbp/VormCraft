@@ -4,6 +4,17 @@ What changed in each version of VormCraft. The section for a version is also sho
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
+## 0.5.12
+
+- Sky and ground: the view now shows a sky above the horizon and ground below it. Choose a clear sky or soft clouds, and plain, grass, paving or sand ground, with your own colours, or go back to a plain colour (Style menu, Sky and ground). Your choice is kept on this device, and a scene can keep its own.
+- Save your settings to Google Drive (Drive menu): each device is saved under its own name, so your laptop and tablet can keep different settings. Load them back later, or load one device's settings onto another to set it up the same way.
+- Entity Info shows the volume of solids and groups. Select up to five and each is listed with the total; select more and you get how many and the total.
+- Entity Info says whether a shape is a proper solid. If it is not closed, inside out, or pressed against another solid, it says so in red and how to fix it, and Select open edges shows where it is open.
+- A shape drawn against a solid and pushed out beside it now joins the solid, instead of leaving two solids pressed together with faces inside.
+- Reverse Faces no longer turns a whole solid inside out by mistake. A solid that is already inside out can still be turned the right way.
+- Follow Me no longer makes inside-out solids when the profile faces the other way.
+- Typing 0 as a Move distance is refused, so a copy can no longer land exactly on top of the original.
+
 ## 0.5.11
 
 - Hide lines: select lines, or faces to hide the lines between them, and press Ctrl+H (or right-click and choose Hide). The faces stay as they are; only the black line goes. Groups can be hidden the same way.

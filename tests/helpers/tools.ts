@@ -9,6 +9,10 @@ export const topDown: Projector = { toScreen: (p) => [p[0], -p[1]] };
 export function harness() {
   const doc = new Document();
   const controller = new ToolController(doc, () => topDown);
+  // Every change in a tool test is also checked: no tool may break a solid by accident.
+  controller.onSolidsWorse = (label, problem) => {
+    throw new Error(`${label} ${problem}`);
+  };
   return { doc, model: doc.model, controller, ctx: controller.ctx };
 }
 

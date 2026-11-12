@@ -476,6 +476,46 @@ body {
   background: rgba(30, 32, 36, 0.28);
 }
 
+/* Sky and ground: the view stays clear (not dimmed) and visible beside it, to see each choice. */
+.modal.backdrop-dialog::backdrop {
+  background: transparent;
+}
+
+.modal.backdrop-dialog {
+  margin: 72px 24px auto auto;
+}
+
+.backdrop-dialog .presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.backdrop-dialog fieldset {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 0;
+  border: 0;
+}
+
+.backdrop-dialog fieldset:disabled {
+  opacity: 0.5;
+}
+
+.backdrop-dialog input[type='color'] {
+  width: 32px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--chrome-border);
+}
+
+.backdrop-dialog .row[hidden],
+.backdrop-dialog input[hidden] {
+  display: none;
+}
+
 .modal form {
   display: flex;
   flex-direction: column;
@@ -1045,6 +1085,11 @@ body {
   font-size: 12px;
 }
 
+/* A shape that is not a proper solid (Entity Info's Solid row). */
+.info-row.problem .info-value {
+  color: var(--danger);
+}
+
 /* Text that keeps its line breaks (dialog messages, About). */
 .modal p.pre {
   white-space: pre-line;
@@ -1446,6 +1491,18 @@ kbd {
 .modal.drive-open .drive-files .meta {
   color: var(--text-muted);
   white-space: nowrap;
+}
+
+/* Load settings: each saved device has its own Load and Delete buttons. */
+.modal.drive-open .drive-files .actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.modal.drive-open .drive-files li:has(.actions) {
+  align-items: center;
+  cursor: default;
 }
 
 .modal .field {
@@ -1913,5 +1970,11 @@ body.viewer-mode .scene-tab {
 @media (max-width: 520px) {
   .customise-tools .tool-list {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .modal.backdrop-dialog {
+    margin: auto auto 16px;
   }
 }

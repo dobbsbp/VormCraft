@@ -100,6 +100,22 @@ describe('menu commands', () => {
     m.validate();
   });
 
+  it('Reverse Faces will not turn a whole solid inside out, but turns an inside-out one the right way', () => {
+    const h = harness();
+    solid(h.model, 0, 0);
+    const all = [...h.model.faces.keys()];
+    h.controller.selection.set(all, []);
+    h.controller.reverseSelectedFaces();
+    expect(h.controller.error).toMatch(/inside out/);
+    expect(volume(h.model)).toBeCloseTo(1e6, 3);
+    reverseFaces(h.model, all);
+    expect(volume(h.model)).toBeCloseTo(-1e6, 3);
+    h.controller.selection.set(all, []);
+    h.controller.reverseSelectedFaces();
+    expect(h.controller.error).toBeNull();
+    expect(volume(h.model)).toBeCloseTo(1e6, 3);
+  });
+
   it('Reverse Faces on a loose face, as an undo step', () => {
     const h = harness();
     const f = drawRectangle(h.model, GROUND_PLANE, [0, 0, 0], 100, 100).inner!;

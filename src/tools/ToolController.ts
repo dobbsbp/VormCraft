@@ -1,4 +1,6 @@
 import { Model, type FaceId, type HalfEdgeId, type MaterialId } from '../core/model/Model';
+import { volume } from '../core/check/measure';
+import { solidReport, solidsMadeWorse } from '../core/check/solid';
 import { erase } from '../core/ops/erase';
 import { inheritMaterials, unpaintMaterial } from '../core/ops/materials';
 import type { Document, DocumentSnapshot } from '../doc/Document';
@@ -65,6 +67,9 @@ export interface PointerSample {
   alt?: boolean;
   down: boolean;
 }
+
+/** Undo labels of changes that erase on purpose (and so may open a solid). */
+const ERASING = new Set(['Erase', 'Eraser']);
 
 /**
  * Runs the active tool: turns pointer samples into tool events (with inference), routes typed
@@ -191,6 +196,11 @@ export class ToolController {
       const was = this.doc.editing === null ? (base ?? before).model : (base ?? before).groups.get(this.doc.editing)?.model;
       if (was && inherit) inheritMaterials(was, this.doc.model);
       this.doc.model.validate();
+      if (this.onSolidsWorse && was) {
+        const worse = solidsMadeWorse(solidReport(was), solidReport(this.doc.model));
+        // Erasing faces opens a solid on purpose.
+        if (worse && !(ERASING.has(label) && !/inside out|pressed/.test(worse))) this.onSolidsWorse(label, worse);
+      }
     } catch (err) {
       this.doc.restore(before);
       throw err;
@@ -205,6 +215,13 @@ export class ToolController {
     this.afterDocumentChange();
     return base ?? before;
   }
+
+  /**
+   * Development builds and tests: told when a change made solids worse (opened one, turned one
+   * inside out, left two pressed face to face), which a tool should never do by accident. Throwing
+   * from it refuses the change. Off (null) in released builds: the check costs time on big models.
+   */
+  onSolidsWorse: ((label: string, problem: string) => void) | null = null;
 
   /** Counts document changes (panels redraw when it moves). */
   revision = 0;
@@ -834,6 +851,23 @@ export class ToolController {
     this.onUpdate();
   }
 
+  /**
+   * Select the open edges (a face on one side only) of the selected shapes, or of the selected
+   * group's contents (opening the group), so a shape that should be solid shows where it is not.
+   */
+  selectOpenEdges(): void {
+    let faces = [...this.selection.faces];
+    if (!faces.length && this.selection.groups.size === 1) {
+      const [id] = this.selection.groups;
+      this.enterGroup(id);
+      faces = [...this.doc.model.faces.keys()];
+    }
+    const { openEdges } = solidReport(this.doc.model, faces);
+    this.selection.set([], openEdges);
+    this.notice = openEdges.length ? `${openEdges.length} open edge${openEdges.length === 1 ? '' : 's'} selected: each has a face on one side only` : 'No open edges';
+    this.onUpdate();
+  }
+
   /** Close the open group: editing goes back to the group around it (or the top level), with the closed group selected. */
   exitGroup(): void {
     const closing = this.doc.editing;
@@ -1141,7 +1175,23 @@ export class ToolController {
       this.onUpdate();
       return;
     }
-    this.editDocument('Reverse faces', () => reverseFaces(this.doc.model, faces));
+    // A whole solid facing outward would end up inside out, which later tools cannot work with
+    // (an inside-out solid cannot be joined, cut or pushed properly). One already inside out may be
+    // turned the right way.
+    const model = this.doc.model;
+    const selected = new Set(faces);
+    const seen = new Set<FaceId>();
+    for (const f of faces) {
+      if (seen.has(f) || !model.faces.has(f)) continue;
+      const part = model.connectedFaces(f, false);
+      for (const g of part) seen.add(g);
+      if (model.isClosed(part) && [...part].every((g) => selected.has(g)) && volume(model, part) > 0) {
+        this.error = 'That solid already faces outward: reversing all of it would turn it inside out';
+        this.onUpdate();
+        return;
+      }
+    }
+    this.editDocument('Reverse faces', () => reverseFaces(model, faces));
   }
 
   /** Vertices of the selected geometry (exactly the selection). */

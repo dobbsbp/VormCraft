@@ -7,7 +7,10 @@ import { isTauri } from '../files';
 import type { Settings } from '../settings';
 import { DriveAutosaveScheduler } from './driveAutosave';
 import { showDriveOpenDialog } from './driveDialog';
-import { DriveClash, DriveSession, type KeyValueStore } from './driveSession';
+import { DriveClash, DriveSession, readSettingsFile, writeSettingsFile, type KeyValueStore } from './driveSession';
+import { showLoadSettingsDialog } from './settingsDialog';
+import { applyPreferences, collectPreferences, deviceIdentity, guessDeviceName, renameDevice, type DeviceIdentity } from '../preferences';
+import { APP_VERSION } from '../updater';
 import { DesktopGoogleAuth, tauriSignIn } from './desktopAuth';
 import { SignInNeeded, WebGoogleAuth, type GoogleAuth } from './googleAuth';
 import { DRIVE_IN_TESTING, DRIVE_TESTING_NOTE, driveShown } from './preview';
@@ -255,6 +258,68 @@ export class DriveCommands {
     }
   }
 
+  /** This device's id and name (made up the first time). */
+  private device(store: KeyValueStore): DeviceIdentity {
+    return deviceIdentity(store, () => guessDeviceName(navigator.userAgent, isTauri()), () => crypto.randomUUID());
+  }
+
+  /**
+   * Save this device's settings to the settings file in VormCraft's folder, under a name for the
+   * device (asked each time, starting with the last one). Other devices' settings are kept.
+   */
+  async saveSettings(): Promise<void> {
+    const store = storage();
+    if (!store || !(await this.ready())) return;
+    const name = (await promptDialog('Save settings to Google Drive', 'Name for this device', this.device(store).name, 'Save'))?.trim();
+    if (!name) return;
+    const device = renameDevice(store, this.device(store), name);
+    await this.files.guard(async () => {
+      const progress = progressDialog('Google Drive', 'Saving this device’s settings…');
+      try {
+        const { file, settings } = await readSettingsFile(this.session);
+        settings.devices[device.id] = { name, saved: Date.now(), app: APP_VERSION, settings: collectPreferences(store) };
+        await writeSettingsFile(this.session, file, settings);
+      } finally {
+        progress.close();
+      }
+      this.controller.notify(`Settings saved to Google Drive as “${name}”`);
+    });
+  }
+
+  /**
+   * Load settings saved in Google Drive onto this device (this device's own, or another's), or
+   * delete a device's saved settings. Loaded settings take full effect after a restart.
+   */
+  async loadSettings(): Promise<void> {
+    const store = storage();
+    if (!store || !(await this.ready())) return;
+    const device = this.device(store);
+    await this.files.guard(async () => {
+      const progress = progressDialog('Google Drive', 'Looking for saved settings…');
+      let found;
+      try {
+        found = await readSettingsFile(this.session);
+      } finally {
+        progress.close();
+      }
+      const choice = await showLoadSettingsDialog(found.settings.devices, device.id);
+      if (!choice) return;
+      if ('delete' in choice) {
+        const d = found.settings.devices[choice.delete];
+        if (!(await confirmDialog('Delete saved settings', `Delete the settings saved for “${d.name}” from Google Drive? That device keeps its own settings.`, 'Delete'))) return;
+        delete found.settings.devices[choice.delete];
+        await writeSettingsFile(this.session, found.file, found.settings);
+        this.controller.notify(`Saved settings for “${d.name}” deleted from Google Drive`);
+        return;
+      }
+      const d = found.settings.devices[choice.load];
+      applyPreferences(store, d.settings);
+      this.controller.notify(`Settings from “${d.name}” loaded`);
+      const restart = await confirmDialog('Settings loaded', `The settings from “${d.name}” are on this device now. Restart VormCraft to use them all?`, 'Restart now', 'Later');
+      if (restart && (await this.files.confirmDiscard())) location.reload();
+    });
+  }
+
   /** The Google Drive button's menu. */
   menu(): MenuEntry[] {
     if (!this.session.connected) {
@@ -263,6 +328,9 @@ export class DriveCommands {
         'separator',
         { label: 'Save to Google Drive…', run: () => void this.saveAs() },
         { label: 'Open from Google Drive…', run: () => void this.open() },
+        'separator',
+        { label: 'Save This Device’s Settings to Google Drive…', run: () => void this.saveSettings() },
+        { label: 'Load Settings from Google Drive…', run: () => void this.loadSettings() },
       ];
     }
     const inDrive = this.files.drive !== undefined;
@@ -275,6 +343,9 @@ export class DriveCommands {
       'separator',
       { label: `${this.autosaveOn ? '✓ ' : ''}Autosave a Copy to Google Drive`, run: () => void this.toggleAutosave() },
       ...(folder ? [{ label: 'Show the VormCraft Folder in Google Drive', run: () => void openLink(folder) } as MenuEntry] : []),
+      'separator',
+      { label: 'Save This Device’s Settings to Google Drive…', run: () => void this.saveSettings() },
+      { label: 'Load Settings from Google Drive…', run: () => void this.loadSettings() },
       'separator',
       { label: `Disconnect ${this.session.email}`, run: () => void this.disconnect() },
     ];

@@ -1,4 +1,5 @@
 import { DriveApi, DriveError, type DriveFile, type TokenSource } from './driveApi';
+import { emptySettingsFile, parseSettingsFile, SETTINGS_FILE_NAME, type SettingsFile } from '../preferences';
 
 /** The folder VormCraft makes at the top of My Drive, and the one for autosaved copies inside it. */
 export const FOLDER_NAME = 'VormCraft';
@@ -75,6 +76,11 @@ export class DriveSession {
 
   get email(): string {
     return this.stored?.email ?? '';
+  }
+
+  /** VormCraft's folder (connect first). */
+  get folderId(): string {
+    return this.need().folderId;
   }
 
   get folderUrl(): string | null {
@@ -162,6 +168,27 @@ export class DriveSession {
     this.save();
     return file;
   }
+}
+
+/** Settings saved per device (see `preferences.ts`): one file in VormCraft's folder. */
+export async function readSettingsFile(session: DriveSession): Promise<{ file: DriveFile | null; settings: SettingsFile }> {
+  const file = (await session.api.list(session.folderId)).find((f) => f.name === SETTINGS_FILE_NAME) ?? null;
+  return { file, settings: file ? parseSettingsFile(await session.api.download(file.id)) : emptySettingsFile() };
+}
+
+/** Write the settings file (made in VormCraft's folder if there is none yet). */
+export async function writeSettingsFile(session: DriveSession, file: DriveFile | null, settings: SettingsFile): Promise<void> {
+  const text = JSON.stringify(settings, null, 1);
+  if (file) {
+    try {
+      await session.api.update(file.id, text);
+      return;
+    } catch (err) {
+      // Deleted meanwhile: make it again.
+      if (!(err instanceof DriveError && err.status === 404)) throw err;
+    }
+  }
+  await session.api.create(SETTINGS_FILE_NAME, session.folderId, text);
 }
 
 /** "Shelf.vorm" → "Shelf (2).vorm" while the name is taken. */

@@ -111,6 +111,29 @@ describe('Move tool', () => {
     expect(H.controller.notice).toBeNull();
   });
 
+  it('a copy at no distance is refused (it would sit on the original)', () => {
+    const H = boxH();
+    use(H.controller, 'move');
+    H.controller.toggleCopy();
+    click(H, [0, 0, 0], { kind: 'endpoint', face: findFaceAt(H.model, [5, 10, 0], [0, 0, -1])! });
+    move(H, [5, 0, 0], { face: null });
+    H.controller.typed('0');
+    expect(H.controller.error).toMatch(/other than 0/);
+    H.controller.typed('0,0,0');
+    expect(H.controller.error).toMatch(/other than 0/);
+    expect(shells(H)).toBe(1);
+    // After a copy, typing 0 to change it is refused too: the copy stays where it was.
+    expect(H.controller.tool.copying!()).toBe(true);
+    click(H, [0, 0, 0], { kind: 'endpoint', face: findFaceAt(H.model, [5, 10, 0], [0, 0, -1])! });
+    move(H, [5, 0, 0], { face: null });
+    H.controller.typed('50');
+    expect(shells(H)).toBe(2);
+    H.controller.typed('0');
+    expect(H.controller.error).toMatch(/other than 0/);
+    expect(shells(H)).toBe(2);
+    expect(checkWatertight(H.model).watertight).toBe(true);
+  });
+
   it('arrays need a copy first', () => {
     const H = boxH();
     use(H.controller, 'move');

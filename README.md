@@ -70,7 +70,7 @@ Both versions have the same version number and open the same `.vorm` files.
 
 ### Right-click menu
 Right-click anything to select it and get a menu for it:
-- **Entity Info**: a panel with a group's name (editable), contents, size and paint; faces' area and paint; edges' length and smoothing.
+- **Entity Info**: a panel with a group's name (editable), contents, size and paint; faces' area and paint; edges' length and smoothing; the **volume** of solids and groups (listed one by one for up to five, with the total); and whether a shape is a proper **Solid** (or not closed, inside out, or pressed against another), with a button to select its open edges.
 - **Erase**, **Hide** (lines or groups, Ctrl+H), **Unhide All** (Ctrl+Shift+H)
 - **Edit Group**, **Close Group**, **Explode**, **Make Group**, **Merge Shapes…**
 - **Select ▸** bounding edges, connected faces, all connected, all with the same material, all, none
@@ -87,6 +87,7 @@ Right-click anything to select it and get a menu for it:
 - **Play** runs the scenes as a looping slideshow, with adjustable transition and pause times.
 - Choose per scene what it restores (camera, hidden groups, style), overwrite a scene with **Update**, and rename, reorder or delete scenes in the Scenes panel.
 - Display styles: **Textured**, **Shaded**, **Wireframe** and **X-ray** (one toolbar button with a menu), plus back edges and a background colour. The standard views (Iso, Top, Front, Right, Back, Left) are one button: each click goes to the next view, and right-click lists them all.
+- **Sky and ground** behind the model (Style menu): a clear or softly clouded sky, over plain, grass, paving or sand ground, or a plain colour. Presets: Day, Soft clouds, Evening, Plain. Kept on each device; scenes can keep their own.
 - **Perspective** or **parallel** projection.
 
 ### Materials
@@ -108,6 +109,7 @@ Right-click anything to select it and get a menu for it:
 
 ### Google Drive (optional)
 - Save and open designs in your own Google Drive (the cloud button), from the web version and the Windows app, and optionally keep an autosaved copy there.
+- Save each device's settings (sky and ground, tools, units, autosave and so on) to Drive under a name, and load them back, or onto a new computer. Each device keeps its own.
 - VormCraft asks only for access to the files it creates or that you open with it, never the rest of your Drive. Saving checks first whether the file was changed elsewhere (Replace or Keep both).
 - Works with any Google account: VormCraft is verified by Google.
 
@@ -230,7 +232,8 @@ Units are millimetres, and Z is up (red = X, green = Y, blue = Z). The full desi
 
 Features are added as real use calls for them. Ideas on the list:
 
-- Dimensions, section planes, tags/layers, shadows (scenes will save these too)
+- Section planes, tags/layers, sun and shadows (scenes will save these too)
+- Settings that keep in step across devices by themselves (today you save and load them by hand)
 - Components (reusable, linked copies) and locking groups
 - More Library categories (building parts, office, outdoor) and saving your own items to the Library
 - A field-of-view control

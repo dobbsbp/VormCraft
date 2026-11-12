@@ -1,7 +1,7 @@
 import { planesCoincide, toPlane2D } from '../math/plane';
 import { TOL } from '../math/tolerance';
-import { cross, distance, dot, length, sub } from '../math/vec3';
-import type { FaceId, HalfEdgeId, Model, VertexId } from '../model/Model';
+import { cross, distance, dot, length, sub, type Vec3 } from '../math/vec3';
+import type { CurveId, FaceId, HalfEdgeId, Model, VertexId } from '../model/Model';
 import { assembleFaces, traceLoops } from '../model/region';
 
 export function facesCoplanar(model: Model, f: FaceId, g: FaceId): boolean {
@@ -112,4 +112,34 @@ export function removeCollinearVertices(model: Model, candidates: Iterable<Verte
 export function onCircle(p: readonly [number, number, number], c: { center: readonly [number, number, number]; normal: readonly [number, number, number]; radius: number }): boolean {
   const d = sub(p, c.center);
   return Math.abs(dot(d, c.normal)) <= TOL && Math.abs(distance(p, c.center) - c.radius) <= TOL * 10;
+}
+
+export type CurveCandidate = { id: CurveId; center: Vec3; normal: Vec3; radius: number; segments: number; kind: 'circle'; scratch?: true };
+
+/**
+ * After a boolean, put true-curve tags back on edges that are segments of a known circle
+ * (both ends on the circle and the chord length of one segment). Circles that came from the
+ * scratch prism are added to the model the first time an edge matches them.
+ */
+export function retagCurves(model: Model, faces: Set<FaceId>, candidates: CurveCandidate[]): void {
+  const adopted = new Map<CurveCandidate, CurveId>();
+  for (const f of faces) {
+    for (const h of model.faceHalfEdges(f)) {
+      const he = model.he(h);
+      if (he.curve !== null || h > he.twin) continue;
+      const a = model.pos(he.origin);
+      const b = model.pos(model.dest(h));
+      const len = Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+      const c = candidates.find(
+        (c) => onCircle(a, c) && onCircle(b, c) && Math.abs(len - 2 * c.radius * Math.sin(Math.PI / c.segments)) <= TOL * 10,
+      );
+      if (!c) continue;
+      let id = c.scratch ? adopted.get(c) : c.id;
+      if (id === undefined) {
+        id = model.addCurve({ kind: 'circle', center: c.center, normal: c.normal, radius: c.radius, segments: c.segments });
+        adopted.set(c, id);
+      }
+      model.setEdgeCurve(he.origin, model.dest(h), id);
+    }
+  }
 }

@@ -34,6 +34,8 @@ import { DriveCommands } from './drive/driveCommands';
 import { toolCursor } from './toolCursors';
 import { ViewerMode } from './viewerMode';
 import { defaultUnits, rememberDefaultUnits, showUnitsDialog } from './unitsDialog';
+import { deviceBackdrop, rememberBackdrop, showBackdropDialog } from './backdropDialog';
+import { DEFAULT_BACKDROP } from '../doc/Backdrop';
 import { UNIT_CHOICES } from '../doc/Units';
 
 const NAV_HINT = 'Orbit: middle-drag · Pan: right-drag · Re-centre: double middle-click · Zoom: wheel · Lock axis: arrow keys';
@@ -74,6 +76,7 @@ async function start(): Promise<void> {
   const doc = new Document();
   doc.units = defaultUnits();
   const viewer = new Viewer(document.getElementById('viewport')!, doc);
+  viewer.setDisplayStyle(deviceBackdrop());
   const controller = new ToolController(doc, () => viewer.projector());
   // Settings, autosave, recovery and updates (Lifecycle), and the file commands that use them.
   let lifecycle!: Lifecycle;
@@ -114,6 +117,8 @@ async function start(): Promise<void> {
   );
   const menu = new ContextMenu();
   menu.onDone = () => update();
+  // Development builds point out any change that breaks a solid (tests refuse such changes).
+  if (import.meta.env.DEV) controller.onSolidsWorse = (label, problem) => console.warn(`[VormCraft] ${label} ${problem}`);
   if (import.meta.env.DEV) Object.assign(window, { __app: { doc, viewer, controller, files, materials, scenes, player, history, lifecycle } });
 
   const hint = document.getElementById('status-hint')!;
@@ -420,10 +425,11 @@ Keep shapes: leave every solid as it is and put them together in one group.${
       viewer.setProjection(viewer.projection === 'parallel' ? 'perspective' : 'parallel');
       controller.notify(viewer.projection === 'parallel' ? 'Parallel projection' : 'Perspective');
     },
-    chooseBackground: () => {
-      const input = Object.assign(document.createElement('input'), { type: 'color', value: viewer.displayStyle().background });
-      input.addEventListener('input', () => viewer.setDisplayStyle({ background: input.value }));
-      input.click();
+    chooseBackground: async () => {
+      const style = viewer.displayStyle();
+      const choice = await showBackdropDialog({ backdrop: style.backdrop ?? DEFAULT_BACKDROP, background: style.background }, (c) => viewer.setDisplayStyle(c));
+      // This device's look from now on (a scene with its own sky and ground still shows its own).
+      if (choice) rememberBackdrop(choice);
     },
     toggleScenes,
     viewsMenu: (anchor) => {
@@ -438,7 +444,7 @@ Keep shapes: leave every solid as it is and put them together in one group.${
       const r = anchor.getBoundingClientRect();
       const current = viewer.displayStyle().faces;
       menu.open(
-        FACE_STYLES.map(([f, label]) => ({ label: `${f === current ? '✓ ' : ' '}${label}`, run: () => view.setFaces(f) })),
+        [...FACE_STYLES.map(([f, label]) => ({ label: `${f === current ? '✓ ' : ' '}${label}`, run: () => view.setFaces(f) })), 'separator', { label: ' Sky and ground…', run: () => void view.chooseBackground() }],
         r.left - 2,
         r.bottom,
       );
@@ -680,7 +686,8 @@ interface ViewActions {
   currentView(): (typeof STANDARD_VIEWS)[number];
   setFaces(faces: FaceStyle): void;
   toggleProjection(): void;
-  chooseBackground(): void;
+  /** Sky and ground (or a plain background colour): a window with presets, kept on this device. */
+  chooseBackground(): Promise<void>;
   toggleScenes(): void;
   /** All the standard views (right-click on the Views button) and the face styles, as menus under their toolbar buttons. */
   viewsMenu(anchor: HTMLElement): void;
@@ -778,6 +785,8 @@ function commandList(viewer: Viewer, controller: ToolController, files: FileComm
           { id: 'drive:save', name: 'Save to Google Drive…', keywords: ['file', 'cloud', 'drive', 'google', 'upload'], run: () => void keep.drive!.saveAs() },
           { id: 'drive:open', name: 'Open from Google Drive…', keywords: ['file', 'cloud', 'drive', 'google', 'load'], run: () => void keep.drive!.open() },
           { id: 'drive:autosave', name: 'Autosave a Copy to Google Drive (on/off)', keywords: ['cloud', 'drive', 'google', 'backup'], run: () => void keep.drive!.toggleAutosave() },
+          { id: 'drive:settings-save', name: 'Save This Device’s Settings to Google Drive…', keywords: ['settings', 'preferences', 'sync', 'cloud', 'drive', 'google', 'device'], run: () => void keep.drive!.saveSettings() },
+          { id: 'drive:settings-load', name: 'Load Settings from Google Drive…', keywords: ['settings', 'preferences', 'sync', 'cloud', 'drive', 'google', 'device', 'restore'], run: () => void keep.drive!.loadSettings() },
         ]
       : []),
     { id: 'file:copy', name: 'Save a Copy Without History…', keywords: ['file', 'share', 'send', 'export'], run: keep.saveCopy },
@@ -808,7 +817,7 @@ function commandList(viewer: Viewer, controller: ToolController, files: FileComm
     { id: 'view:materials', name: 'Materials', keywords: ['paint', 'colour', 'color', 'texture'], run: toggleMaterials },
     ...FACE_STYLES.map(([f, label]) => ({ id: `style:${f}`, name: `Style: ${label}`, keywords: ['style', 'display', 'faces', 'view'], run: () => view.setFaces(f) })),
     { id: 'view:projection', name: 'Parallel / Perspective Projection', keywords: ['camera', 'orthographic', 'ortho', 'perspective', 'parallel'], run: view.toggleProjection },
-    { id: 'view:background', name: 'Background Colour…', keywords: ['style', 'color', 'sky'], run: view.chooseBackground },
+    { id: 'view:background', name: 'Sky and Ground…', keywords: ['style', 'background', 'colour', 'color', 'sky', 'ground', 'grass', 'clouds', 'horizon'], run: () => void view.chooseBackground() },
     { id: 'view:viewer', name: 'Viewer Mode', keywords: ['touch', 'phone', 'tablet', 'mobile', 'look', 'present', 'eye'], run: view.enterViewer },
     { id: 'view:topbar', name: 'Show / Hide Top Bar', keywords: ['toolbar', 'menu', 'header', 'hide', 'room', 'full screen', 'top'], run: view.toggleTopBar },
     { id: 'view:tools-side', name: 'Move Tools to the Other Side', keywords: ['palette', 'left', 'right', 'dock', 'layout', 'position'], run: view.togglePaletteSide },

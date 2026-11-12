@@ -1,13 +1,15 @@
 import { booleanInPlace, booleanKernelReady, manifoldVolume } from '../boolean/manifold';
+import { facesPressed } from '../check/solid';
 import { offsetPlane, planesCoincide, toPlane2D } from '../math/plane';
 import { interiorPoint, intersectSegments, pointInRegion, type Vec2 } from '../math/polygon2d';
 import { ANGLE_TOL, TOL } from '../math/tolerance';
 import { add, dot, length, scale, sub, type Vec3 } from '../math/vec3';
 import { Model, type CurveId, type FaceId, type HalfEdgeId, type VertexId } from '../model/Model';
 import { findFaceAt } from '../model/query';
-import { facesCoplanar, mergeCoplanarFaces, mergeFaces, onCircle, removeCollinearVertices } from './cleanup';
+import { facesCoplanar, mergeCoplanarFaces, mergeFaces, onCircle, removeCollinearVertices, retagCurves, type CurveCandidate } from './cleanup';
 import { drawEdges } from './edges';
 import { imprintSegments, type ImprintSegment } from './imprint';
+import { unifySolids } from './mergeShapes';
 import { BendError, transformVertices, translation } from './transform';
 
 export type PushPullMode = 'none' | 'extrude' | 'flush-through' | 'boolean';
@@ -38,7 +40,7 @@ const OVERSHOOT = 0.01;
 export function pushPull(model: Model, faceId: FaceId, distance: number, opts: { newStart?: boolean } = {}): PushPullResult {
   if (Math.abs(distance) <= TOL) return { mode: 'none', face: faceId, faces: [] };
   const shell = model.connectedFaces(faceId);
-  if (!model.isClosed(shell)) return extrudeOpenFace(model, faceId, distance, opts);
+  if (!model.isClosed(shell)) return joinPressedSolids(model, extrudeOpenFace(model, faceId, distance, opts));
   if (distance < 0) {
     const flush = tryFlushPushThrough(model, faceId, distance, shell);
     if (flush) return flush;
@@ -50,6 +52,30 @@ export function pushPull(model: Model, faceId: FaceId, distance: number, opts: {
   const result = booleanPushPull(model, faceId, distance, shell, false);
   redrawOutline(model, outline);
   return result;
+}
+
+/**
+ * A free-standing face pushed out alongside a solid it touches (a shape drawn against a solid's
+ * edge, pushed out as deep as the solid) would leave two solids pressed face to face, with faces
+ * back to back inside them. They are joined into one solid instead, as Merge Shapes would join them.
+ * Solids touching only along an edge or at a point stay apart (see "touching parts").
+ */
+function joinPressedSolids(model: Model, result: PushPullResult): PushPullResult {
+  if (result.mode !== 'extrude' || result.face === undefined || !model.faces.has(result.face)) return result;
+  const prism = model.connectedFaces(result.face, false);
+  if (!model.isClosed(prism)) return result;
+  const pressed = new Set<FaceId>();
+  for (const f of model.faces.keys()) {
+    if (!prism.has(f) && !pressed.has(f) && [...prism].some((p) => facesPressed(model, p, f))) {
+      const part = model.connectedFaces(f, false);
+      if (model.isClosed(part)) for (const g of part) pressed.add(g);
+    }
+  }
+  if (!pressed.size) return result;
+  const parts: Set<FaceId>[] = [];
+  for (const f of pressed) if (!parts.some((p) => p.has(f))) parts.push(model.connectedFaces(f, false));
+  const faces = unifySolids(model, [prism, ...parts]);
+  return { mode: 'extrude', face: model.faces.has(result.face) ? result.face : undefined, faces };
 }
 
 type OutlineSegment = { a: Vec3; b: Vec3; curve: CurveId | null };
@@ -412,32 +438,4 @@ function renameFace(model: Model, from: FaceId, to: FaceId): void {
   model.addFace(rings[0], rings.slice(1), { normal, id: to, material });
 }
 
-export type CurveCandidate = { id: CurveId; center: Vec3; normal: Vec3; radius: number; segments: number; kind: 'circle'; scratch?: true };
-
-/**
- * After a boolean, put true-curve tags back on edges that are segments of a known circle
- * (both ends on the circle and the chord length of one segment). Circles that came from the
- * scratch prism are added to the model the first time an edge matches them.
- */
-export function retagCurves(model: Model, faces: Set<FaceId>, candidates: CurveCandidate[]): void {
-  const adopted = new Map<CurveCandidate, CurveId>();
-  for (const f of faces) {
-    for (const h of model.faceHalfEdges(f)) {
-      const he = model.he(h);
-      if (he.curve !== null || h > he.twin) continue;
-      const a = model.pos(he.origin);
-      const b = model.pos(model.dest(h));
-      const len = Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
-      const c = candidates.find(
-        (c) => onCircle(a, c) && onCircle(b, c) && Math.abs(len - 2 * c.radius * Math.sin(Math.PI / c.segments)) <= TOL * 10,
-      );
-      if (!c) continue;
-      let id = c.scratch ? adopted.get(c) : c.id;
-      if (id === undefined) {
-        id = model.addCurve({ kind: 'circle', center: c.center, normal: c.normal, radius: c.radius, segments: c.segments });
-        adopted.set(c, id);
-      }
-      model.setEdgeCurve(he.origin, model.dest(h), id);
-    }
-  }
-}
+export { retagCurves, type CurveCandidate };

@@ -9,6 +9,7 @@ import {
   initBooleanKernel,
   makePlane,
   mergeFlatFaces,
+  mergeGeometry,
   Model,
   pushPull,
   shapesOf,
@@ -142,7 +143,11 @@ describe('unifying solids', () => {
   it('boxes side by side, touching face to face, become one box', () => {
     const m = new Model();
     box(m, 0, 0, 0, 50, 100, 30);
-    box(m, 50, 0, 0, 50, 100, 30);
+    // Built apart and brought in (Push/Pull beside the first box would already join them).
+    const other = new Model();
+    box(other, 50, 0, 0, 50, 100, 30);
+    mergeGeometry(m, other);
+    expect(shapesOf(m, m.faces.keys()).solids).toHaveLength(2);
     unifySolids(m, shapesOf(m, m.faces.keys()).solids);
     expectSolid(m);
     expect(volume(m)).toBeCloseTo(100 * 100 * 30);

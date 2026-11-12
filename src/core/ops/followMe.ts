@@ -1,10 +1,12 @@
 import { booleanInPlace, manifoldVolume } from '../boolean/manifold';
+import { volume } from '../check/measure';
 import { makePlane, type Plane } from '../math/plane';
 import { TOL } from '../math/tolerance';
 import { add, cross, distance, dot, length, normalize, scale, sub, type Vec3 } from '../math/vec3';
 import { Model, type CircleCurve, type CurveId, type FaceId, type HalfEdgeId, type VertexId } from '../model/Model';
 import { mergeCoplanarFaces, onCircle, removeCollinearVertices } from './cleanup';
 import { edgeChain } from './offsetEdges';
+import { reverseFaces } from './orient';
 import { retagCurves, type CurveCandidate } from './pushPull';
 
 /** How far a cutting sweep reaches past its ends, to avoid exactly coplanar booleans. */
@@ -274,7 +276,9 @@ export function followMe(model: Model, profile: FaceId, pathEdges: Iterable<Half
     const touched = new Set<VertexId>();
     mergeCoplanarFaces(model, faces, touched);
     removeCollinearVertices(model, touched);
-    return { mode: 'attached', faces: faces.filter((f) => model.faces.has(f)) };
+    const made = faces.filter((f) => model.faces.has(f));
+    faceOutward(model, made);
+    return { mode: 'attached', faces: made };
   }
 
   // A free-standing face: turn it to face along the path, then build the solid around it.
@@ -289,7 +293,22 @@ export function followMe(model: Model, profile: FaceId, pathEdges: Iterable<Half
     ? buildSweep(model, sweep, on, { base: false, profileCurves: curves })
     : buildSweep(model, sweep, on, { startIds: oriented, base: true, profileCurves: curves, baseId: profile });
   if (chain.closed) model.purgeFree(edges);
+  faceOutward(model, faces);
   return { mode: 'solid', faces };
+}
+
+/**
+ * Whichever way round the path runs and whichever way the profile faces, a swept shape that closes
+ * up must face outward: tools cannot join, cut or push an inside-out solid properly.
+ */
+function faceOutward(model: Model, faces: readonly FaceId[]): void {
+  const seen = new Set<FaceId>();
+  for (const f of faces) {
+    if (seen.has(f) || !model.faces.has(f)) continue;
+    const part = model.connectedFaces(f, false);
+    for (const g of part) seen.add(g);
+    if (model.isClosed(part) && volume(model, part) < 0) reverseFaces(model, part);
+  }
 }
 
 /** A profile on a closed solid: build the swept solid apart, then cut it out of the solid (or add it). */

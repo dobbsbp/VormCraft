@@ -1,8 +1,9 @@
 import { faceArea } from '../core/check/measure';
+import { describeSolid, solidReport, volumeLines, type SolidReport } from '../core/check/solid';
 import { distance } from '../core/math/vec3';
 import { modelBounds } from '../core/ops/group';
 import type { ToolController } from '../tools/ToolController';
-import { formatArea, formatLength, formatLengths } from '../tools/units';
+import { formatArea, formatLength, formatLengths, formatVolume } from '../tools/units';
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLElementTagNameMap[K]> = {}, ...children: (Node | string)[]): HTMLElementTagNameMap[K] {
   const e = Object.assign(document.createElement(tag), props);
@@ -14,7 +15,8 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 /**
  * Entity Info: facts about the selection (a group's name, contents, size and paint; faces' area
- * and paint; edges' length and smoothing; a point's position), and renaming a group.
+ * and paint; volumes of solids and groups; whether shapes are proper solids; edges' length and
+ * smoothing; a point's position), and renaming a group.
  */
 export class EntityInfoPanel {
   private shown = '';
@@ -52,6 +54,27 @@ export class EntityInfoPanel {
     return el('div', { className: 'panel-field info-row' }, el('span', {}, label), typeof value === 'string' ? el('span', { className: 'info-value' }, value) : value);
   }
 
+  /** The volume of a group's solids, with those of the groups inside it. */
+  private groupVolume(id: number): number {
+    return this.controller.doc.groups.subtree(id).reduce((a, g) => a + solidReport(g.model).volumes.reduce((x, v) => x + v, 0), 0);
+  }
+
+  private volumeRows(things: { name: string; volume: number }[]): HTMLElement[] {
+    return volumeLines(things, (v) => formatVolume(v)).map(([label, value]) => this.row(label, value));
+  }
+
+  /** Whether the shapes are proper solids, and a button to show where one is open. */
+  private solidRows(r: SolidReport): HTMLElement[] {
+    const text = describeSolid(r);
+    if (!text) return [];
+    const row = this.row('Solid', text);
+    row.classList.toggle('problem', r.open + r.insideOut + r.pressed > 0);
+    if (!r.openEdges.length) return [row];
+    const show = el('button', { type: 'button', className: 'panel-button' }, 'Select open edges');
+    show.addEventListener('click', () => this.controller.selectOpenEdges());
+    return [row, el('div', { className: 'panel-row' }, show)];
+  }
+
   private materialName(id: string | undefined): string {
     return id === undefined ? 'Default' : (this.controller.doc.materials.get(id)?.name ?? 'Default');
   }
@@ -83,7 +106,9 @@ export class EntityInfoPanel {
         el('label', { className: 'panel-field' }, el('span', {}, 'Name'), name),
         this.row('Contents', [plural(faces, 'face'), plural(edges, 'edge'), sub.length > 1 ? plural(sub.length - 1, 'group') + ' inside' : ''].filter(Boolean).join(', ')),
         this.row('Size', b ? formatLengths(b.max.map((x, i) => x - b.min[i]), ' × ') : 'empty'),
+        ...this.volumeRows([{ name: g.name, volume: this.groupVolume(id) }]),
         this.row('Paint', this.materialName(g.material)),
+        ...this.solidRows(solidReport(g.model)),
         el('div', { className: 'panel-row' }, edit),
       );
       return out;
@@ -105,11 +130,20 @@ export class EntityInfoPanel {
     const parts = [plural(sel.groups.size, 'group'), plural(faces.length, 'face'), plural(edges.length, 'edge'), plural(points.length, 'point'), plural(sel.guides.size, 'guide'), plural(sel.labels.size, 'label')].filter((p) => !p.startsWith('0 '));
     out.push(el('p', { className: 'panel-note' }, parts.join(', ')));
     if (points.length === 1) out.push(this.row('Position', formatLengths(model.pos(points[0]), ', ')));
-    if (faces.length) {
+    const report = faces.length ? solidReport(model, faces) : null;
+    // Each selected group, and each solid the selected faces belong to, with its volume.
+    out.push(
+      ...this.volumeRows([
+        ...[...sel.groups].map((id) => ({ name: doc.groups.get(id)?.name ?? 'Group', volume: this.groupVolume(id) })),
+        ...(report?.volumes.map((volume, i) => ({ name: `Solid ${i + 1}`, volume })) ?? []),
+      ]),
+    );
+    if (report) {
       const paints = new Set(faces.map((f) => model.face(f).material));
       out.push(
         this.row(faces.length === 1 ? 'Area' : 'Total area', formatArea(faces.reduce((a, f) => a + faceArea(model, f), 0))),
         this.row('Paint', paints.size === 1 ? this.materialName([...paints][0]) : 'Mixed'),
+        ...this.solidRows(report),
       );
     }
     if (edges.length) {
