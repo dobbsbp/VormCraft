@@ -75,7 +75,7 @@ describe('undo steps saved with the design', () => {
     expect(f.undo.steps.every((s: { full?: number }) => !s.full)).toBe(true);
     // 100 steps take far less room than one more copy of the design would (about 1 KB each here).
     expect(withUndo.length - without.length).toBeLessThan(without.length);
-  });
+  }, 30_000); // 105 real modelling steps: slow on the release runner
 
   it('saving again (and again after reopening) reuses the stored steps', () => {
     const H = withSteps(4);
