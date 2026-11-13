@@ -1,10 +1,13 @@
 import { booleanInPlace, manifoldVolume } from '../boolean/manifold';
 import { volume } from '../check/measure';
+import { facesPressed } from '../check/solid';
 import { makePlane, type Plane } from '../math/plane';
 import { TOL } from '../math/tolerance';
 import { add, cross, distance, dot, length, normalize, scale, sub, type Vec3 } from '../math/vec3';
 import { Model, type CircleCurve, type CurveId, type FaceId, type HalfEdgeId, type VertexId } from '../model/Model';
 import { mergeCoplanarFaces, onCircle, removeCollinearVertices } from './cleanup';
+import { extractGeometry } from './group';
+import { unifySolids } from './mergeShapes';
 import { edgeChain } from './offsetEdges';
 import { reverseFaces } from './orient';
 import { retagCurves, type CurveCandidate } from './pushPull';
@@ -76,7 +79,11 @@ function computeSweep(model: Model, rings: Vec3[][], n: Vec3, path: VertexId[], 
     const c = model.he(model.halfEdgeBetween(path[i], path[j])!).curve;
     segCurves.push(c === null ? null : (model.curves.get(c) ?? null));
   }
-  if (Math.abs(dot(n, dirs[0])) < 1e-6) throw new Error('The profile lies along the path: draw it across the start of the path');
+  // Across the path, not along it: a profile turned more than about 75° from facing along the path
+  // would sweep into a paper-thin shape.
+  if (Math.abs(dot(n, dirs[0])) < 0.25) {
+    throw new Error('The profile lies along the path instead of across it. Draw it standing across the start of the path, facing along it (press → or ← while drawing to stand it upright), then try again.');
+  }
   const miter = (j: number): Plane => {
     const m = add(dirs[(j - 1 + segs) % segs], dirs[j]);
     if (length(m) < 1e-9) throw new Error('The path doubles back on itself');
@@ -97,10 +104,30 @@ function computeSweep(model: Model, rings: Vec3[][], n: Vec3, path: VertexId[], 
     const end = makePlane(transport(rings[0][0]), rotate(n));
     stages.push(carry(stages[stages.length - 1], dirs[segs - 1], end));
   }
+  // Every point of the profile must go forward along each step of the path (or stay put, on the
+  // axis of a lathe). One going backwards means the profile reaches past the middle of a bend, so
+  // the sweep would fold over itself (typically the path and profile picked the wrong way round).
+  const steps = closed ? [...stages.keys()].map((j) => [j, (j + 1) % stages.length]) : [...stages.keys()].slice(1).map((j) => [j - 1, j]);
+  for (const [a, b] of steps) {
+    const d = dirs[a % segs];
+    if (stages[a].some((r, i) => r.some((p, k) => dot(sub(stages[b][i][k], p), d) < -TOL))) {
+      throw new Error(
+        'The profile is bigger than the bend of the path, so the sweep would fold over itself. Did you pick them the wrong way round? Select the path first (e.g. the big circle), then click the profile (e.g. a small circle standing upright on its edge).',
+      );
+    }
+  }
+  // Seams inside an arc of the path are smooth, and so are seams where a straight part runs on
+  // into an arc (or one arc into another) without a corner: the turn there is no more than one
+  // segment of the arc. Real corners stay sharp (mitres).
   const smoothStage = pts.map((_, j) => {
     if (!closed && (j === 0 || j === pts.length - 1)) return false;
     const a = segCurves[(j - 1 + segs) % segs];
-    return a !== null && a === segCurves[j];
+    const b = segCurves[j];
+    if (a !== null && a === b) return true;
+    if (a === null && b === null) return false;
+    const step = Math.max(...[a, b].filter((c): c is CircleCurve => c !== null).map((c) => (2 * Math.PI) / c.segments));
+    const turn = Math.acos(Math.min(1, Math.max(-1, dot(dirs[(j - 1 + segs) % segs], dirs[j]))));
+    return turn <= step * 0.75 + 1e-9;
   });
   return { closed, stages, dirs, segCurves, smoothStage, transport, rotate };
 }
@@ -239,8 +266,10 @@ function ringCurves(model: Model, rings: VertexId[][]): (CircleSpec | null)[][] 
 export function followMe(model: Model, profile: FaceId, pathEdges: Iterable<HalfEdgeId>): FollowMeResult {
   const own = new Set(model.faceHalfEdges(profile).flatMap((h) => [h, model.he(h).twin]));
   const path = [...pathEdges];
-  if (path.some((e) => own.has(e))) throw new Error("The path can't include the profile's own edges");
   const chain = edgeChain(model, path);
+  // A closed path may run along one of the profile's edges (a fillet at the corner of a box's top);
+  // otherwise the path must not use the profile's edges.
+  if (path.some((e) => own.has(e)) && (!chain.closed || path.every((e) => own.has(e)))) throw new Error("The path can't include the profile's own edges");
   const rings = model.faceVertexLoops(profile);
   const n = model.face(profile).normal;
   const ringPos = rings.map((r) => r.map((v) => model.pos(v)));
@@ -252,7 +281,15 @@ export function followMe(model: Model, profile: FaceId, pathEdges: Iterable<Half
   if (!chain.closed) {
     if (near(verts[verts.length - 1]) < near(verts[0]) - TOL) verts.reverse();
   } else {
-    const start = verts.reduce((best, v, i) => (near(v) < near(verts[best]) - TOL ? i : best), 0);
+    // Nearest the profile; of corners equally near (a profile touching the path at two corners),
+    // the one where the path runs most squarely across the profile.
+    const across = (i: number) => {
+      const p = model.pos(verts[i]);
+      const dir = (j: number) => Math.abs(dot(n, normalize(sub(model.pos(verts[(j + verts.length) % verts.length]), p))));
+      return Math.max(dir(i + 1), dir(i - 1));
+    };
+    const nearest = Math.min(...verts.map(near));
+    const start = verts.reduce((best, v, i) => (near(v) <= nearest + TOL && (best < 0 || across(i) > across(best) + 1e-9) ? i : best), -1);
     verts = [...verts.slice(start), ...verts.slice(0, start)];
     const fwd = Math.abs(dot(n, normalize(sub(model.pos(verts[1]), model.pos(verts[0])))));
     const back = Math.abs(dot(n, normalize(sub(model.pos(verts[verts.length - 1]), model.pos(verts[0])))));
@@ -264,11 +301,11 @@ export function followMe(model: Model, profile: FaceId, pathEdges: Iterable<Half
   const shell = model.connectedFaces(profile);
   if (shell.size > 1 && model.isClosed(shell)) return sweepIntoSolid(model, shell, rings, ringPos, n, facing, verts, chain.closed);
 
-  if (shell.size > 1) {
-    // Part of an open surface: the walls take over the profile's edges (no base), as in push/pull.
+  if (model.adjacentFaces(profile).size > 0) {
+    // Part of an open surface (sharing edges with it; touching it at a point does not count): the walls take over the profile's edges (no base), as in push/pull.
     const sweep = computeSweep(model, ringPos, facing ? n : scale(n, -1), verts, chain.closed);
     if (chain.closed && sweep.stages[0].some((r, i) => r.some((p, k) => distance(p, ringPos[i][k]) > TOL))) {
-      throw new Error('Draw the profile across a corner of the closed path to sweep it out of a surface');
+      throw new Error('To sweep a profile out of a surface along a closed path, draw the profile across a corner of the path');
     }
     const curves = ringCurves(model, rings);
     model.removeFace(profile);
@@ -293,8 +330,14 @@ export function followMe(model: Model, profile: FaceId, pathEdges: Iterable<Half
     ? buildSweep(model, sweep, on, { base: false, profileCurves: curves })
     : buildSweep(model, sweep, on, { startIds: oriented, base: true, profileCurves: curves, baseId: profile });
   if (chain.closed) model.purgeFree(edges);
-  faceOutward(model, faces);
-  return { mode: 'solid', faces };
+  // Flat parts swept from one profile edge (a dome's or a cylinder's base, round the axis) become
+  // one face each, not a fan of wedges.
+  const touched = new Set<VertexId>();
+  const merged = [...mergeCoplanarFaces(model, faces, touched)];
+  removeCollinearVertices(model, touched);
+  const made = [...new Set([...faces, ...merged])].filter((f) => model.faces.has(f));
+  faceOutward(model, made);
+  return settleIntoSolids(model, made) ?? { mode: 'solid', faces: made };
 }
 
 /**
@@ -309,6 +352,88 @@ function faceOutward(model: Model, faces: readonly FaceId[]): void {
     for (const g of part) seen.add(g);
     if (model.isClosed(part) && volume(model, part) < 0) reverseFaces(model, part);
   }
+}
+
+/** The pairs of faces a soft seam joins, in a swept solid about to be cut into another. */
+function softSeams(m: Model): [FaceId, FaceId][] {
+  const out: [FaceId, FaceId][] = [];
+  for (const e of m.edges()) {
+    const f = m.faceOf(e);
+    const g = m.faceOf(m.he(e).twin);
+    if (m.he(e).soft && f !== null && g !== null) out.push([f, g]);
+  }
+  return out;
+}
+
+/**
+ * Booleans rebuild faces and lose which seams were soft: soften again the seams between faces
+ * that came from faces joined by a soft seam (a fillet's or a groove's curved surface stays smooth).
+ */
+function carrySoftSeams(model: Model, pairs: [FaceId, FaceId][], ids: Map<FaceId, FaceId>): void {
+  for (const [f, g] of pairs) {
+    const a = ids.get(f);
+    const b = ids.get(g);
+    if (a === undefined || b === undefined || !model.faces.has(a) || !model.faces.has(b)) continue;
+    for (const h of model.faceHalfEdges(a)) if (model.faceOf(model.he(h).twin) === b) model.setEdgeSoft(model.he(h).origin, model.dest(h), true);
+  }
+}
+
+/** Corners of the box around some faces. */
+function facesBox(model: Model, faces: Iterable<FaceId>): { min: number[]; max: number[] } {
+  const min = [Infinity, Infinity, Infinity];
+  const max = [-Infinity, -Infinity, -Infinity];
+  for (const f of faces) {
+    for (const v of model.faceVertexLoops(f)[0]) {
+      const p = model.pos(v);
+      for (let i = 0; i < 3; i++) {
+        min[i] = Math.min(min[i], p[i]);
+        max[i] = Math.max(max[i], p[i]);
+      }
+    }
+  }
+  return { min, max };
+}
+
+/**
+ * A free-standing profile swept into a solid that overlaps another closed solid, or lies against
+ * it face to face: drawn mostly inside that solid, the sweep is cut out of it (a groove round a
+ * cylinder); otherwise it is joined on (a band, a rim). No shapes are left overlapping or pressed
+ * together. Returns null when the sweep touches nothing.
+ */
+function settleIntoSolids(model: Model, made: FaceId[]): FollowMeResult | null {
+  const sweep = new Set(made.filter((f) => model.faces.has(f)));
+  if (!sweep.size || !model.isClosed(sweep)) return null;
+  const size = Math.abs(volume(model, sweep));
+  const box = facesBox(model, sweep);
+  const others: { part: Set<FaceId>; inside: number }[] = [];
+  const seen = new Set<FaceId>(sweep);
+  for (const f of model.faces.keys()) {
+    if (seen.has(f)) continue;
+    const part = model.connectedFaces(f, false);
+    for (const g of part) seen.add(g);
+    if (!model.isClosed(part)) continue;
+    const b = facesBox(model, part);
+    if ([0, 1, 2].some((i) => b.min[i] > box.max[i] + TOL || b.max[i] < box.min[i] - TOL)) continue;
+    const inside = manifoldVolume('intersect', { model, faces: part }, { model, faces: sweep });
+    if (inside > 1e-6 * size || [...sweep].some((p) => [...part].some((g) => facesPressed(model, p, g)))) others.push({ part, inside });
+  }
+  if (!others.length) return null;
+  const host = others.find((o) => o.inside >= 0.5 * size);
+  if (!host) return { mode: 'boolean', faces: unifySolids(model, [sweep, ...others.map((o) => o.part)]) };
+  const candidates: CurveCandidate[] = [...host.part].flatMap((f) => model.faceHalfEdges(f).map((h) => model.he(h).curve)).filter((c): c is CurveId => c !== null).map((c) => model.curves.get(c)!);
+  const tool = extractGeometry(model, sweep, []);
+  for (const c of tool.curves.values()) candidates.push({ ...c, scratch: true });
+  const soft = softSeams(tool);
+  const result = booleanInPlace(model, host.part, { model: tool, faces: [...tool.faces.keys()] }, 'subtract');
+  carrySoftSeams(model, soft, result.toolFaceIds);
+  const toolFaces = [...result.toolFaceIds.values()].filter((f) => model.faces.has(f));
+  const touched = new Set<VertexId>(result.newVertices);
+  mergeCoplanarFaces(model, toolFaces, touched);
+  removeCollinearVertices(model, touched);
+  const live = new Set<FaceId>();
+  for (const f of result.faces) if (model.faces.has(f) && !live.has(f)) for (const g of model.connectedFaces(f)) live.add(g);
+  retagCurves(model, live, candidates);
+  return { mode: 'boolean', faces: [...live] };
 }
 
 /** A profile on a closed solid: build the swept solid apart, then cut it out of the solid (or add it). */
@@ -335,7 +460,9 @@ function sweepIntoSolid(model: Model, shell: Set<FaceId>, rings: VertexId[][], r
     ...[...shell].flatMap((f) => model.faceHalfEdges(f).map((h) => model.he(h).curve)).filter((c): c is CurveId => c !== null),
   ].map((c) => model.curves.get(c)!);
   for (const c of scratch.curves.values()) candidates.push({ ...c, scratch: true });
+  const soft = softSeams(scratch);
   const result = booleanInPlace(model, shell, tool, inside > 1e-6 * size ? 'subtract' : 'union');
+  carrySoftSeams(model, soft, result.toolFaceIds);
   const toolFaces = [...result.toolFaceIds.values()].filter((f) => model.faces.has(f));
   const touched = new Set<VertexId>(result.newVertices);
   mergeCoplanarFaces(model, toolFaces, touched);

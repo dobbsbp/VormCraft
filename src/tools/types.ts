@@ -124,6 +124,8 @@ export interface Preview {
   box?: { from: [number, number]; to: [number, number]; crossing: boolean };
   /** Screen-space lasso path (Lasso Select). */
   lasso?: { points: [number, number][]; crossing: boolean };
+  /** Short texts at points in the model (the angle beside Rotate's protractor). */
+  labels?: { at: Vec3; text: string }[];
 }
 
 export interface ToolContext {
@@ -213,6 +215,8 @@ export interface Tool {
   toggleCopy?(): boolean;
   /** Copy mode is on (the cursor shows a +). */
   copying?(): boolean;
+  /** Something worth saying about the step just taken, shown in the status bar after a click. */
+  notice?(): string | null;
   /** Arrow key: a tool-specific axis lock (Rotate picks its rotation axis). Returns a status message, or null to fall back to the normal inference lock. */
-  lockAxis?(lock: AxisLock): string | null;
+  lockAxis?(lock: AxisLock, edgeDir?: Vec3 | null): string | null;
 }

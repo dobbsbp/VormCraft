@@ -4,6 +4,7 @@ import {
   checkWatertight,
   drawArc,
   drawCircle,
+  drawEdges,
   drawRectangle,
   faceArea,
   findFaceAt,
@@ -64,6 +65,33 @@ describe('typed input parsing', () => {
 });
 
 describe('Select tool', () => {
+  it('a triple-click on a line selects everything joined to it: the chain of lines and the shape they touch', () => {
+    const H = harness();
+    const m = H.model;
+    pushPull(m, drawRectangle(m, GROUND_PLANE, [200, 0, 0], 100, 100).inner!, 50);
+    // Loose lines drawn one after another, the last one ending on the box's corner.
+    const chain = drawEdges(m, [[0, 0, 0], [100, 0, 0], [100, 50, 0], [200, 0, 0]]).edges;
+    const apart = drawEdges(m, [[0, 500, 0], [100, 500, 0]]).edges;
+    use(H.controller, 'select');
+    const at = ev(H.doc, [50, 0, 0], { face: null, edge: chain[0] });
+    const t = H.controller.tool;
+    t.pointerDown(at);
+    t.pointerUp!(at, false);
+    t.doubleClick!(at);
+    t.pointerDown(at);
+    t.pointerUp!(at, false);
+    const sel = H.controller.selection;
+    expect(sel.faces.size).toBe(6);
+    for (const e of chain) expect(sel.edges.has(Math.min(e, m.he(e).twin))).toBe(true);
+    expect(sel.edges.has(Math.min(apart[0], m.he(apart[0]).twin))).toBe(false);
+    expect(sel.edges.size).toBe(3 + 12);
+    // Right-click → Select → All Connected gives the same from one line.
+    sel.set([], [Math.min(chain[1], m.he(chain[1]).twin)]);
+    H.controller.selectAllConnected();
+    expect(sel.faces.size).toBe(6);
+    expect(sel.edges.size).toBe(15);
+  });
+
   it('click selects a face, shift-click adds and removes, empty click clears', () => {
     const { doc, controller } = boxHarness();
     const sel = controller.selection;
@@ -270,10 +298,11 @@ describe('Circle tool', () => {
     expect(t.vcbLabel()).toBe('Radius');
     controller.typed('30');
     expect([...model.curves.values()].map((c) => [c.radius, c.segments])).toEqual([[30, 8]]);
-    // A bad count is refused (and, as in every tool, the step is abandoned).
+    // A decimal, or a length with a unit, is the radius straight away.
     t.pointerDown(ev(doc, [200, 0, 0]));
     controller.typed('2.5');
-    expect(controller.error).toMatch(/number of sides/);
+    expect([...model.curves.values()].map((c) => [c.radius, c.segments])).toContainEqual([2.5, 8]);
+    // A count out of range is refused (and, as in every tool, the step is abandoned).
     t.pointerDown(ev(doc, [200, 0, 0]));
     controller.typed('2');
     expect(controller.error).toMatch(/between 3 and 999/);
@@ -286,7 +315,14 @@ describe('Circle tool', () => {
     // Clicking still sets the radius straight away, while it asks for the sides.
     t.pointerDown(ev(doc, [0, 300, 0]));
     t.pointerDown(ev(doc, [0, 320, 0]));
-    expect(model.curves.size).toBe(3);
+    expect(model.curves.size).toBe(4);
+    // A polygon asks for its sides too.
+    const p = use(controller, 'polygon');
+    p.pointerDown(ev(doc, [500, 0, 0]));
+    expect(p.vcbLabel()).toBe('Sides');
+    controller.typed('5');
+    controller.typed('40');
+    expect([...model.edges()].filter((e) => model.pos(model.he(e).origin)[0] > 400)).toHaveLength(5);
   });
 
   it('a circle on a face splits it into a face with a hole and a disc', () => {

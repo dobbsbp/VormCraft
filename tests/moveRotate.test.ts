@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { checkWatertight, distance, drawRectangle, findFaceAt, GROUND_PLANE, initBooleanKernel, pushPull, volume, type Vec3 } from '../src/core';
+import { checkWatertight, distance, drawEdges, drawRectangle, findFaceAt, GROUND_PLANE, initBooleanKernel, pushPull, volume, type Vec3 } from '../src/core';
 import { parseArray } from '../src/tools/targets';
 import { ev, harness, use } from './helpers/tools';
 
@@ -179,6 +179,42 @@ describe('Rotate tool', () => {
     expect(hasVertex(H, [0, 10, 0])).toBe(true);
     expect(hasVertex(H, [-20, 0, 0])).toBe(true);
     expect(volume(H.model)).toBeCloseTo(6000);
+  });
+
+  it('↓ rotates about the last line pointed at, at any angle; the protractor shows ticks and the angle', () => {
+    const H = boxH();
+    // A line sloping up at 45° in the green-blue plane, away from the box.
+    const [line] = drawEdges(H.model, [[100, 0, 0], [100, 20, 20]]).edges;
+    H.controller.pointerMove({ screen: [0, 0], ray: { origin: [100, 10, 1000], dir: [0, 0, -1] }, faceHit: null, edge: line, shift: false, ctrl: false, down: false });
+    H.controller.selection.set([...H.model.faces.keys()].filter((f) => H.model.isClosed(H.model.connectedFaces(f, false))), []);
+    use(H.controller, 'rotate');
+    H.controller.toggleLock('parallel');
+    expect(H.controller.notice).toMatch(/about the line you pointed at/);
+    click(H, [0, 0, 0], { kind: 'endpoint', face: null });
+    click(H, [10, 0, 0], { kind: 'endpoint', face: null });
+    move(H, [-10, 0, 0], { face: null });
+    expect(H.controller.tool.vcbValue()).toBe('180°');
+    const p = H.controller.tool.preview();
+    // Ring, ticks every 15°, the 0° and current lines, the angle's arc and its value.
+    expect(p.lines!.find((l) => l.points.length === 24 * 2)).toBeDefined();
+    expect(p.labels).toEqual([{ at: expect.anything(), text: '180°' }]);
+    click(H, [-10, 0, 0], { face: null });
+    // Half a turn about (0, 1, 1): (x, y, z) → (-x, z, y).
+    expect(hasVertex(H, [-10, 0, 0])).toBe(true);
+    expect(hasVertex(H, [0, 0, 20])).toBe(true);
+    expect(hasVertex(H, [0, 30, 0])).toBe(true);
+    expect(volume(H.model, [...H.model.faces.keys()].filter((f) => H.model.isClosed(H.model.connectedFaces(f, false))))).toBeCloseTo(6000);
+  });
+
+  it('the protractor before the 0° is set: ring, ticks and a line to the cursor, no angle yet', () => {
+    const H = boxH();
+    use(H.controller, 'rotate');
+    H.controller.toggleLock('z');
+    click(H, [0, 0, 0], { kind: 'endpoint', face: findFaceAt(H.model, [5, 10, 0], [0, 0, -1])! });
+    move(H, [10, 0, 0], { face: null });
+    const p = H.controller.tool.preview();
+    expect(p.lines).toHaveLength(3);
+    expect(p.labels).toBeUndefined();
   });
 
   it('the angle snaps to 15° steps near them', () => {

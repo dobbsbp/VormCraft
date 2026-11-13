@@ -346,7 +346,7 @@ export class ToolController {
 
   /** Arrow keys: lock (or unlock, pressing the same key again) the next point to a direction. */
   toggleLock(lock: AxisLock): void {
-    const own = this.tool.lockAxis?.(lock);
+    const own = this.tool.lockAxis?.(lock, this.lastEdgeDir);
     if (own) {
       this.notice = own;
       this.onUpdate();
@@ -440,7 +440,10 @@ export class ToolController {
     this.pressAt = s.screen;
     const e = this.event(s);
     this.lock = null; // a lock holds for one step: the click that uses it
-    this.run(() => this.tool.pointerDown(e));
+    this.run(() => {
+      this.tool.pointerDown(e);
+      this.notice = this.tool.notice?.() ?? this.notice;
+    });
   }
 
   pointerUp(s: PointerSample): void {
@@ -1265,12 +1268,22 @@ export class ToolController {
     this.selection.set(faces, []);
   }
 
-  /** Everything connected to the selection: faces and edges (like a triple-click). */
+  /** Everything connected to the selection through shared corners: faces and lines, loose lines too (like a triple-click). */
   selectAllConnected(): void {
-    this.selectConnectedFaces();
     const model = this.doc.model;
-    const faces = [...this.selection.faces];
-    this.selection.set(faces, new Set(faces.flatMap((f) => model.faceHalfEdges(f).map((h) => edgeId(model, h)))));
+    const starts = [
+      ...[...this.selection.faces].filter((f) => model.faces.has(f)).map((f) => model.faceVertexLoops(f)[0][0]),
+      ...[...this.selection.edges].filter((e) => model.halfEdges.has(e)).map((e) => model.he(e).origin),
+    ];
+    const faces = new Set<FaceId>();
+    const edges = new Set<HalfEdgeId>();
+    for (const v of starts) {
+      if ([...model.outgoing(v)].some((h) => edges.has(Math.min(h, model.he(h).twin)))) continue;
+      const got = model.connectedGeometry(v);
+      for (const f of got.faces) faces.add(f);
+      for (const e of got.edges) if (!model.he(e).hidden) edges.add(e);
+    }
+    this.selection.set(faces, edges);
   }
 
   /** Every face with the same paint as a selected face. */

@@ -791,6 +791,10 @@ export class Viewer implements SceneView {
       if (s) parts.push(`<rect x="${s[0] - 5}" y="${s[1] - 5}" width="10" height="10" class="point${selectedPoints.has(v) ? ' selected' : ''}"/>`);
     }
     parts.push(...this.drawLabels(proj));
+    for (const l of this.overlay.preview.labels ?? []) {
+      const s = proj.toScreen(l.at);
+      if (s) parts.push(`<text x="${s[0]}" y="${s[1]}" text-anchor="middle" dominant-baseline="middle" class="snap-label preview-label">${escapeXml(l.text)}</text>`);
+    }
     const lasso = this.overlay.preview.lasso;
     if (lasso) {
       const pts = lasso.points.map((p) => p.join(',')).join(' ');
@@ -1274,4 +1278,9 @@ function buildAxes(): THREE.Group {
 
 function faceMaterial(color: THREE.ColorRepresentation, side: THREE.Side): THREE.MeshLambertMaterial {
   return new THREE.MeshLambertMaterial({ color, side, flatShading: true, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+}
+
+/** Text made safe to put in SVG markup. */
+function escapeXml(text: string): string {
+  return text.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 }

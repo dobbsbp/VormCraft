@@ -132,14 +132,19 @@ export class SelectTool implements Tool {
     this.lastDouble = { time: performanceNow(), screen: e.screen };
   }
 
-  /** Everything edge-connected to the clicked face or edge. */
+  /**
+   * Triple-click: everything joined to the clicked line or face through shared corners, faces and
+   * lines alike (a chain of loose lines, the shape they touch, parts touching it). Hidden lines
+   * stay unselected.
+   */
   private selectConnected(e: ToolEvent): void {
     const model = this.ctx.doc.model;
-    const start = e.face ?? (e.edge !== null ? model.faceOf(e.edge) ?? model.faceOf(model.he(e.edge).twin) : null);
+    const start = e.edge !== null && model.halfEdges.has(e.edge) ? model.he(e.edge).origin : e.face !== null && model.faces.has(e.face) ? model.faceVertexLoops(e.face)[0][0] : null;
     if (start === null) return;
-    const faces = [...model.connectedFaces(start)];
-    const edges = new Set(faces.flatMap((f) => model.faceHalfEdges(f).map((h) => edgeId(model, h))));
-    this.ctx.selection.set(faces, edges);
+    const { faces, edges } = model.connectedGeometry(start);
+    const shown = [...edges].filter((h) => !model.he(h).hidden);
+    if (e.shift) this.ctx.selection.add(faces, shown);
+    else this.ctx.selection.set(faces, shown);
     this.lastDouble = null;
   }
 

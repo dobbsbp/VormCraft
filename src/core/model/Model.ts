@@ -465,6 +465,39 @@ export class Model {
   }
 
   /**
+   * Everything joined to a vertex through shared corners: the faces and edges (loose lines too,
+   * as edge ids) of the whole object, including parts touching it (vertices at the same spot).
+   */
+  connectedGeometry(start: VertexId): { faces: Set<FaceId>; edges: Set<HalfEdgeId> } {
+    const copies = this.coincidentVertices();
+    const faces = new Set<FaceId>();
+    const edges = new Set<HalfEdgeId>();
+    const seen = new Set<VertexId>([start]);
+    const stack = [start];
+    const visit = (v: VertexId) => {
+      for (const w of copies.get(v) ?? [v]) {
+        if (!seen.has(w)) {
+          seen.add(w);
+          stack.push(w);
+        }
+      }
+    };
+    visit(start);
+    while (stack.length) {
+      const v = stack.pop()!;
+      for (const h of this.outgoing(v)) {
+        edges.add(Math.min(h, this.he(h).twin));
+        visit(this.dest(h));
+        for (const side of [h, this.he(h).twin]) {
+          const f = this.faceOf(side);
+          if (f !== null) faces.add(f);
+        }
+      }
+    }
+    return { faces, edges };
+  }
+
+  /**
    * Vertices at the same spot as another vertex, each with the whole group (itself included).
    * Separate vertices only share a spot where parts touch along an edge or at a point.
    */

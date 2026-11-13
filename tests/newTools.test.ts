@@ -103,7 +103,8 @@ describe('arc tools', () => {
     use(H.controller, 'arc2');
     click(H, [0, 0, 0]);
     move(H, [5, 0, 0]);
-    H.controller.typed('30');
+    // A length with a unit goes straight to the chord (a plain number would be the sides).
+    H.controller.typed('30mm');
     move(H, [15, -4, 0]);
     H.controller.typed('5');
     expect(H.model.findVertex([30, 0, 0])).toBeDefined();
@@ -122,6 +123,26 @@ describe('arc tools', () => {
     expect([...H.model.edges()]).toHaveLength(18);
   });
 
+  it('every arc asks for the sides after the first click: a whole number + Enter, or Enter to keep them', () => {
+    for (const [mode, rest] of [
+      ['arc2', (H: ReturnType<typeof harness>) => (click(H, [40, 0, 0]), H.controller.typed('10'))],
+      ['arc3', (H: ReturnType<typeof harness>) => (click(H, [20, 20, 0]), click(H, [40, 0, 0]))],
+      ['arc', (H: ReturnType<typeof harness>) => (click(H, [40, 0, 0]), move(H, [0, 40, 0]), H.controller.typed('90'))],
+      ['pie', (H: ReturnType<typeof harness>) => (click(H, [40, 0, 0]), move(H, [0, 40, 0]), H.controller.typed('90'))],
+    ] as const) {
+      const H = harness();
+      use(H.controller, mode);
+      click(H, [0, 0, 0]);
+      expect([H.controller.tool.vcbLabel(), H.controller.tool.vcbValue()]).toEqual(['Sides', '12']);
+      expect(H.controller.tool.hint()).toMatch(/number of sides/);
+      H.controller.typed('6');
+      expect(H.controller.error).toBeNull();
+      rest(H);
+      const curved = [...H.model.edges()].filter((e) => H.model.he(e).curve !== null);
+      expect(curved).toHaveLength(6);
+    }
+  });
+
   it('3-point arc passes through the middle click', () => {
     const H = harness();
     use(H.controller, 'arc3');
@@ -137,9 +158,9 @@ describe('arc tools', () => {
     const H = harness();
     use(H.controller, 'arc');
     click(H, [0, 0, 0]);
+    H.controller.enter(); // keep the sides shown
     move(H, [1, 0, 0]);
     H.controller.typed('50');
-    H.controller.enter(); // keep the segments shown
     move(H, [30, 30, 0]);
     H.controller.typed('90');
     expect(H.model.findVertex([50, 0, 0])).toBeDefined();
@@ -148,14 +169,15 @@ describe('arc tools', () => {
     expect(H.model.findVertex([-50, 0, 0])).toBeDefined();
   });
 
-  it('centre arc: centre, radius, then the number of segments, then the angle', () => {
+  it('centre arc: centre, the number of sides, then the radius, then the angle', () => {
     const H = harness();
     use(H.controller, 'arc');
     click(H, [0, 0, 0]);
-    click(H, [50, 0, 0]);
-    expect(H.controller.tool.vcbLabel()).toBe('Segments');
+    expect(H.controller.tool.vcbLabel()).toBe('Sides');
     expect(H.controller.tool.vcbValue()).toBe('12');
     H.controller.typed('40');
+    expect(H.controller.tool.vcbLabel()).toBe('Radius');
+    click(H, [50, 0, 0]);
     expect(H.controller.tool.vcbLabel()).toBe('Angle');
     move(H, [30, 30, 0]);
     H.controller.typed('360');
@@ -163,13 +185,13 @@ describe('arc tools', () => {
     expect(H.model.findVertex([-50, 0, 0])).toBeDefined();
   });
 
-  it('centre arc: a typed radius also asks for the segments; a click skips the question', () => {
+  it('centre arc: a radius with a unit goes straight on past the sides; a click skips the question too', () => {
     const H = harness();
     use(H.controller, 'arc');
     click(H, [0, 0, 0]);
     move(H, [1, 0, 0]);
-    H.controller.typed('50');
-    expect(H.controller.tool.vcbLabel()).toBe('Segments');
+    H.controller.typed('5cm');
+    expect(H.controller.tool.vcbLabel()).toBe('Angle');
     click(H, [0, 50, 0]);
     expect([...H.model.edges()]).toHaveLength(12);
     expect(H.model.findVertex([0, 50, 0])).toBeDefined();

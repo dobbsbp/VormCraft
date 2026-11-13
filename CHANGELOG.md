@@ -4,6 +4,20 @@ What changed in each version of VormCraft. The section for a version is also sho
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
+## 0.5.13
+
+- Circles and polygons can stand upright: press → or ← while drawing (↑ lays them flat again), as with rectangles and arcs. This is how you draw a profile for Follow Me.
+- Point at a line, then press ↓: a circle or polygon stands square across that line, whatever angle it runs at, and Rotate turns things about that line.
+- Rotate now looks like a protractor: tick marks every 15 degrees and the angle you have turned written beside it.
+- Typing the number of sides works for every arc now, as it does for circles: after the first click, type it and press Enter (or press Enter to keep the number shown). Before, a 2-point arc or a centred arc took the number as a length. Polygons ask for their sides the same way. Type a length with a unit (like 10cm) to give the radius straight away.
+- Triple-click a line to select everything joined to it: all the lines drawn one after another and any shape they touch. Triple-clicking a face does the same.
+- Follow Me along lines drawn one after another: select just one of them and it follows them all (hold Shift when clicking the profile to follow only that one). Paths can go up slopes, too.
+- Follow Me makes rings, spheres, domes, bowls, pipes and elbows, picture frames, rounded edges and grooves cleanly: one smooth, closed solid each time.
+- Follow Me explains mistakes instead of making a strange shape: picking the path and profile the wrong way round (which made a squashed football), or a profile lying flat along the path.
+- A round pipe bending from a straight part into a curve is smooth all along, without a line at the bend.
+- A profile drawn into a solid and swept round it cuts a groove; one drawn against it joins on.
+- The circle you sweep a sphere, dome or cylinder round no longer stays behind inside or under it.
+
 ## 0.5.12
 
 - Sky and ground: the view now shows a sky above the horizon and ground below it. Choose a clear sky or soft clouds, and plain, grass, paving or sand ground, with your own colours, or go back to a plain colour (Style menu, Sky and ground). Your choice is kept on this device, and a scene can keep its own.

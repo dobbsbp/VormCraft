@@ -66,26 +66,26 @@ export class ArcTool implements Tool {
 
   hint(): string {
     const n = this.points.length;
-    const segs = ` Type e.g. ${this.segments}s to change the segments.`;
+    if (this.askingSegments) return `Type the number of sides and press Enter (Enter keeps ${this.segments}), or click the next point.`;
+    const segs = ` Type e.g. ${this.segments}s to change the sides.`;
     if (this.mode === 'arc2') {
       return ['Click the start of the arc.', 'Click the end, or type the chord length.', 'Move to set the bulge and click, or type it.'][n] + segs;
     }
     if (this.mode === 'arc3') return ['Click the start of the arc.', 'Click a point the arc passes through.', 'Click the end of the arc.'][n] + segs;
-    if (this.askingSegments) return `Type the number of segments and press Enter (Enter keeps ${this.segments}), or click the end of the arc.`;
     return ['Click the centre.', 'Click the start of the arc, or type the radius.', 'Click the end, or type the angle in degrees.'][n] + segs;
   }
 
   vcbLabel(): string {
     const n = this.points.length;
-    if (this.mode === 'arc2') return n === 2 || (n === 0 && this.last) ? 'Bulge' : n === 1 ? 'Length' : 'Segments';
-    if (this.askingSegments) return 'Segments';
-    if (this.centred) return n === 2 || (n === 0 && this.last) ? 'Angle' : n === 1 ? 'Radius' : 'Segments';
-    return 'Segments';
+    if (this.askingSegments) return 'Sides';
+    if (this.mode === 'arc2') return n === 2 || (n === 0 && this.last) ? 'Bulge' : n === 1 ? 'Length' : 'Sides';
+    if (this.centred) return n === 2 || (n === 0 && this.last) ? 'Angle' : n === 1 ? 'Radius' : 'Sides';
+    return 'Sides';
   }
 
   vcbValue(): string {
     const n = this.points.length;
-    if (this.askingSegments) return String(this.segments);
+    if (this.askingSegments || this.mode === 'arc3') return String(this.segments);
     if (n === 1 && this.cursor) return formatLength(distance(this.points[0], this.cursor));
     if (n === 2 && this.mode === 'arc2') return formatLength(Math.abs(this.bulgeAt()));
     if (n === 2 && this.centred) return `${Math.round((this.sweep * 180) / Math.PI * 10) / 10}°`;
@@ -178,6 +178,8 @@ export class ArcTool implements Tool {
       this.plane = this.axisLock ? drawingPlane(at.point, this.axisLock) : at.plane;
       this.points = [at.point];
       this.cursor = at.point;
+      // The Measurements box asks for the sides first, as for a circle (a click skips it).
+      this.askingSegments = true;
       return;
     }
     let p = this.pointFor(e);
@@ -191,7 +193,7 @@ export class ArcTool implements Tool {
       this.points.push(p);
       this.sweep = 0;
       if (this.centred) this.cursor = p;
-      this.askingSegments = this.centred;
+      this.askingSegments = false;
       return;
     }
     const arc = this.arcFor(p);
@@ -223,15 +225,20 @@ export class ArcTool implements Tool {
   }
 
   typed(text: string): void {
-    const segs = parseSegments(text) ?? (this.askingSegments && /^\d+$/.test(text.trim()) ? Number(text) : undefined);
-    if (this.askingSegments && segs === undefined) throw new Error('Type the number of segments (a whole number, e.g. 12), then the angle');
+    const t = text.trim();
+    // A whole number while the sides are asked for (and always for a 3-point arc, which takes no
+    // other typing) is the sides; "16s" is, at any time.
+    const segs = parseSegments(t) ?? ((this.askingSegments || this.mode === 'arc3') && /^\d+$/.test(t) ? Number(t) : undefined);
     if (segs !== undefined) {
-      if (segs < 1 || segs > 999) throw new Error('Segments must be between 1 and 999');
+      if (segs < 1 || segs > 999) throw new Error('Sides must be between 1 and 999');
       this.segments = segs;
       this.askingSegments = false;
       if (this.points.length === 0 && this.last) this.redo(this.last.value);
       return;
     }
+    // Anything else (a length with a unit, a decimal) goes on to the next step: the radius, the
+    // chord length or the angle.
+    this.askingSegments = false;
     const n = this.points.length;
     if (this.mode === 'arc3') throw new Error('Click the three points; type e.g. 16s to change the segments');
     if (n === 1) {
@@ -242,7 +249,6 @@ export class ArcTool implements Tool {
       const dir = toward && distance(toward, this.points[0]) > TOL ? normalize(sub(toward, this.points[0])) : this.plane!.u;
       this.points.push(add(this.points[0], scale(dir, len)));
       this.sweep = 0;
-      this.askingSegments = this.centred;
       return;
     }
     const value = this.parseValue(text);
@@ -288,7 +294,7 @@ export class ArcTool implements Tool {
     this.commit(arc, value, last.base);
   }
 
-  /** Enter with nothing typed: keep the shown number of segments and go on to the angle. */
+  /** Enter with nothing typed: keep the shown number of sides and go on. */
   enter(): void {
     this.askingSegments = false;
   }

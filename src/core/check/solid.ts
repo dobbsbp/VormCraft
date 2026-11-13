@@ -1,8 +1,9 @@
-import { planesCoincide, toPlane2D } from '../math/plane';
+import { fromPlane2D, planesCoincide, toPlane2D } from '../math/plane';
 import { interiorPoint, pointInRegion } from '../math/polygon2d';
-import { ANGLE_TOL } from '../math/tolerance';
-import { dot } from '../math/vec3';
+import { ANGLE_TOL, TOL } from '../math/tolerance';
+import { cross, dot, normalize, sub, type Vec3 } from '../math/vec3';
 import type { FaceId, HalfEdgeId, Model } from '../model/Model';
+import { triangulateFace } from '../triangulate';
 import { volume } from './measure';
 
 /** What a set of faces makes, as solids: the problems a person would need to fix to have solids. */
@@ -34,6 +35,50 @@ export function facesPressed(model: Model, a: FaceId, b: FaceId): boolean {
   const region = (f: FaceId) => model.faceVertexLoops(f).map((r) => r.map((v) => toPlane2D(plane, model.pos(v))));
   const [ra, rb] = [region(a), region(b)];
   return pointInRegion(interiorPoint(ra[0], ra.slice(1)), rb[0], rb.slice(1)) === 'inside' || pointInRegion(interiorPoint(rb[0], rb.slice(1)), ra[0], ra.slice(1)) === 'inside';
+}
+
+/**
+ * Whether a point is inside a closed solid (`faces`), by counting where a ray from it crosses the
+ * solid's triangles (an odd count: inside). A slanted ray avoids running along edges.
+ */
+export function pointInSolid(model: Model, faces: Iterable<FaceId>, p: Vec3): boolean {
+  const d = normalize([0.5773, 0.5779, 0.5767]);
+  let crossings = 0;
+  for (const f of faces) {
+    for (const [a, b, c] of triangulateFace(model, f)) {
+      const [p0, p1, p2] = [model.pos(a), model.pos(b), model.pos(c)];
+      const e1 = sub(p1, p0);
+      const e2 = sub(p2, p0);
+      const q = cross(d, e2);
+      const det = dot(e1, q);
+      if (Math.abs(det) < 1e-12) continue;
+      const s = sub(p, p0);
+      const u = dot(s, q) / det;
+      if (u < 0 || u > 1) continue;
+      const r = cross(s, e1);
+      const v = dot(d, r) / det;
+      if (v < 0 || u + v > 1) continue;
+      if (dot(e2, r) / det > TOL) crossings++;
+    }
+  }
+  return crossings % 2 === 1;
+}
+
+/**
+ * Whether a flat face lies inside a closed solid or on its surface (a lathe's path face left in
+ * the middle of a sphere, or under a dome's base): then it is in the way and can go.
+ */
+export function faceWithinSolid(model: Model, face: FaceId, solid: ReadonlySet<FaceId>): boolean {
+  const plane = model.facePlane(face);
+  const loops = model.faceVertexLoops(face).map((r) => r.map((v) => toPlane2D(plane, model.pos(v))));
+  const p = fromPlane2D(plane, interiorPoint(loops[0], loops.slice(1)));
+  for (const g of solid) {
+    if (!planesCoincide(plane, model.facePlane(g))) continue;
+    const gPlane = model.facePlane(g);
+    const region = model.faceVertexLoops(g).map((r) => r.map((v) => toPlane2D(gPlane, model.pos(v))));
+    if (pointInRegion(toPlane2D(gPlane, p), region[0], region.slice(1)) !== 'outside') return true;
+  }
+  return pointInSolid(model, solid, p);
 }
 
 /** Check the shapes the given faces belong to (whole shapes, each once). */

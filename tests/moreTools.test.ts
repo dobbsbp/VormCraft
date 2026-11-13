@@ -94,9 +94,9 @@ describe('Pie tool', () => {
     const h = harness();
     use(h.controller, 'pie');
     click(h, [0, 0, 0]);
+    h.controller.enter(); // keep 12 sides
     move(h, [1, 0, 0]);
     h.controller.typed('50');
-    h.controller.enter(); // keep 12 segments
     move(h, [30, 30, 0]);
     h.controller.typed('90');
     const f = onlyFace(h.model);

@@ -26,6 +26,8 @@ export class RotateTool implements Tool {
   readonly dragIsClick = true;
   private copy = false;
   private axisLock: Vec3 | null = null;
+  /** ↓ set the axis along a line (rather than a red/green/blue axis). */
+  private lineLock = false;
   private targets: Targets | null = null;
   private center: Vec3 | null = null;
   private plane: Plane | null = null;
@@ -40,7 +42,7 @@ export class RotateTool implements Tool {
 
   hint(): string {
     const mode = this.copy ? 'Copy mode (Ctrl to switch off). ' : '';
-    if (!this.center) return `${mode}Click the centre of rotation (arrow keys pick the axis). Press Ctrl to copy.`;
+    if (!this.center) return `${mode}Click the centre of rotation (arrow keys pick the axis; ↓ rotates about the last line pointed at). Press Ctrl to copy.`;
     if (!this.ref) return `${mode}Click a point to measure the angle from.`;
     return `${mode}Move and click to rotate, or type the angle in degrees.`;
   }
@@ -69,10 +71,20 @@ export class RotateTool implements Tool {
     return this.copy;
   }
 
-  lockAxis(lock: AxisLock): string | null {
-    if (lock === 'parallel' || lock === 'perpendicular' || this.ref) return null;
+  lockAxis(lock: AxisLock, edgeDir?: Vec3 | null): string | null {
+    if (lock === 'perpendicular' || this.ref) return null;
+    if (lock === 'parallel') {
+      // ↓: about the last line pointed at, at whatever angle it runs.
+      const was = this.lineLock;
+      if (!was && !edgeDir) return 'Point at a line first, then press ↓ to rotate about it';
+      this.lineLock = !was;
+      this.axisLock = was ? null : edgeDir!;
+      if (this.center) this.plane = makePlane(this.center, this.axisLock ?? this.plane!.normal);
+      return was ? 'Rotation axis unlocked' : 'Rotating about the line you pointed at (press ↓ again to unlock)';
+    }
     const i = { x: 0, y: 1, z: 2 }[lock];
     const same = this.axisLock === AXES[i];
+    this.lineLock = false;
     this.axisLock = same ? null : AXES[i];
     if (this.center) this.plane = makePlane(this.center, this.axisLock ?? this.plane!.normal);
     return same ? 'Rotation axis unlocked' : `Rotating about the ${AXIS_NAMES[i]} axis`;
@@ -165,24 +177,45 @@ export class RotateTool implements Tool {
 
   preview(): Preview {
     if (!this.center || !this.plane || !this.cursor) return {};
-    const lines: PreviewLines[] = [];
-    // A protractor: a ring in the rotation plane, sized to the reference or cursor distance.
-    const r = Math.max(distance(this.ref ?? this.cursor, this.center), 10);
+    const { u, v, normal } = this.plane;
+    const c = this.center;
+    // A protractor in the rotation plane, sized to the reference (or cursor) distance: a ring with
+    // tick marks every 15° (longer at 45° and 90°), the 0° line, and the angle turned as an arc
+    // with its value beside it.
+    const r = Math.max(distance(this.ref ?? this.cursor, c), 10);
+    const at = (t: number, k: number) => add(c, add(scale(u, k * r * Math.cos(t)), scale(v, k * r * Math.sin(t))));
     const ring: Vec3[] = [];
-    for (let i = 0; i <= 48; i++) {
-      const t = (2 * Math.PI * i) / 48;
-      ring.push(add(this.center, add(scale(this.plane.u, r * Math.cos(t)), scale(this.plane.v, r * Math.sin(t)))));
+    for (let i = 0; i <= 72; i++) ring.push(at((2 * Math.PI * i) / 72, 1));
+    const ticks: Vec3[] = [];
+    for (let deg = 0; deg < 360; deg += 15) {
+      const inner = deg % 90 === 0 ? 0.78 : deg % 45 === 0 ? 0.85 : 0.92;
+      const t = (deg * Math.PI) / 180;
+      ticks.push(at(t, inner), at(t, 1));
     }
-    const color = (['axisX', 'axisY', 'axisZ'] as const)[AXES.findIndex((a) => Math.abs(a[0] * this.plane!.normal[0] + a[1] * this.plane!.normal[1] + a[2] * this.plane!.normal[2]) > 1 - 1e-9)] ?? 'preview';
-    lines.push({ points: ring.slice(1).flatMap((p, i) => [ring[i], p]), color, width: 1.5 });
-    if (this.ref) {
-      const a = this.angle;
-      const end = add(this.center, add(scale(this.plane.u, r * Math.cos(a)), scale(this.plane.v, r * Math.sin(a))));
-      lines.push({ points: [this.center, this.ref, this.center, end], color: 'preview', dashed: true, width: 1.5 });
-      if (this.targets && Math.abs(a) > 1e-9) lines.push({ points: previewEdges(this.ctx.doc, this.targets, rotation(this.center, this.plane.normal, a)).flat(), color: 'select', width: 1.5 });
+    const color = (['axisX', 'axisY', 'axisZ'] as const)[AXES.findIndex((a) => Math.abs(a[0] * normal[0] + a[1] * normal[1] + a[2] * normal[2]) > 1 - 1e-9)] ?? 'preview';
+    const lines: PreviewLines[] = [
+      { points: ring.slice(1).flatMap((p, i) => [ring[i], p]), color, width: 1.5 },
+      { points: ticks, color, width: 1.5 },
+    ];
+    if (!this.ref) {
+      // Choosing where 0° is: a line from the centre to the cursor.
+      lines.push({ points: [c, this.cursor], color: 'preview', dashed: true, width: 1.5 });
+      return { lines };
     }
-    return { lines };
+    const a = this.angle;
+    lines.push({ points: [c, at(0, 1.08), c, at(a, 1.08)], color: 'preview', width: 2 });
+    const labels: { at: Vec3; text: string }[] = [];
+    if (Math.abs(a) > 1e-9) {
+      const arc: Vec3[] = [];
+      const n = Math.max(2, Math.ceil(Math.abs(a) / (Math.PI / 36)));
+      for (let i = 0; i <= n; i++) arc.push(at((a * i) / n, 0.42));
+      lines.push({ points: arc.slice(1).flatMap((p, i) => [arc[i], p]), color: 'select', width: 3 });
+      labels.push({ at: at(a / 2, 0.6), text: `${Math.round(((a * 180) / Math.PI) * 10) / 10}°` });
+      if (this.targets) lines.push({ points: previewEdges(this.ctx.doc, this.targets, rotation(c, normal, a)).flat(), color: 'select', width: 1.5 });
+    }
+    return { lines, labels };
   }
+
 }
 
 const sub3 = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];

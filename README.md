@@ -44,7 +44,8 @@ Both versions have the same version number and open the same `.vorm` files.
   - Double-click a face to repeat the last distance.
   - Push a face level with the face next to it and they merge into one (hold Ctrl to keep the edge). Pushing a bump back down shortens its sides instead of leaving overlapping faces.
 - **Offset**: copy a face's outline inward or outward, or offset a chain of edges.
-- **Follow Me**: sweep a profile along a path, for mouldings, pipes, grooves, chamfers and lathed (turned) shapes.
+- **Follow Me**: sweep a profile along a path, for rings, spheres, domes, bowls, pipes and elbows, picture frames, rounded edges, grooves and other lathed (turned) shapes. Select the path first, then click the profile; stand a circle upright for it with the arrow keys while drawing (→ or ←). Mistakes, such as picking them the wrong way round, are explained instead of making a broken shape.
+- **Rotate** shows a protractor with the angle in degrees; the arrow keys pick its axis, and ↓ turns about any line you last pointed at, whatever its angle. **Circle** and **Polygon** stand upright with → and ←, and square across a sloping line with ↓.
 - **Move** and **Rotate**: press Ctrl to copy instead (a + shows on the cursor and the copy follows the mouse; copy mode ends with the copy), then type a count (`5x` or `/5`) to make arrays. **Push/Pull** with Ctrl makes a new starting face: an edge loop stays where the face was, so the new sides are separate faces (stacking floors, for example). **Scale** resizes selected geometry; negative factors mirror.
 - **Points**: click where two or more lines meet to select that corner, then Move, Rotate or Scale it; the faces around it stretch (or fold) to follow. The arrow keys lock the axis.
 - **Merge Shapes** (right-click): overlapping flat faces in one plane become one face; for solids and groups, choose **Unify** (one solid, with the faces inside removed) or **Keep shapes** (put together in one group, unchanged). Flat faces selected along with solids (such as the circle left inside a Follow Me ring) are left as they are, and if a merge isn't possible it says why.
@@ -73,7 +74,7 @@ Right-click anything to select it and get a menu for it:
 - **Entity Info**: a panel with a group's name (editable), contents, size and paint; faces' area and paint; edges' length and smoothing; the **volume** of solids and groups (listed one by one for up to five, with the total); and whether a shape is a proper **Solid** (or not closed, inside out, or pressed against another), with a button to select its open edges.
 - **Erase**, **Hide** (lines or groups, Ctrl+H), **Unhide All** (Ctrl+Shift+H)
 - **Edit Group**, **Close Group**, **Explode**, **Make Group**, **Merge Shapes…**
-- **Select ▸** bounding edges, connected faces, all connected, all with the same material, all, none
+- **Select ▸** bounding edges, connected faces, all connected, all with the same material, all, none. Triple-click a line or face to select everything joined to it, loose lines included.
 - **Reverse Faces**, **Flip Along ▸** red/green/blue, **Soften / Unsoften Edges**, **Zoom Selection**
 
 ### Viewer mode (phones, foldables and tablets)

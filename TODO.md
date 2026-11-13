@@ -4,11 +4,9 @@ Unfinished work and known bugs. Newest notes at the top of each section. Move an
 CHANGELOG.md when it ships.
 
 ## Known bugs
-- **Follow Me lathe leaves its path's face inside the solid.** Turning a profile around a drawn
-  circle keeps the circle's disc face, hidden inside the ring.
-  - A box selection then catches that face.
-  - Merge Shapes now skips flat faces and says so, but the stray face is still there. It should
-    be removed when the path was only used as a path.
+- **Follow Me's path face over a frame or plate:** the outline face of a picture frame (or a
+  plate under a bowl) stays where it is, partly under the new solid. It is outside the solid, so
+  it is kept, but where it lies under the frame the two faces overlap.
 - **Labels are missed by some selections.** Ctrl+A (Select All) and the Lasso do not select text
   labels; box selection, click, right-click and the Eraser do.
 - **Triangulation fallback is not guaranteed.** `triangulate2D` nudges points and retries earcut

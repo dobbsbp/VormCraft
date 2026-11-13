@@ -57,8 +57,11 @@ describe('Follow Me', () => {
     expect(r.mode).toBe('solid');
     const report = checkWatertight(m, [...m.faces.keys()]);
     expect(report.watertight).toBe(true);
-    // Base, cap and a wall per profile edge per leg (the path start splits the profile's bottom edge).
-    expect(m.faces.size).toBe(2 + 2 * m.faceVertexLoops(r.faces[0])[0].length);
+    // Base, cap, the two side walls of each leg, and the top and bottom: each lies in one plane
+    // round the corner, so it is one L-shaped face (not a wall per leg, nor split where the path
+    // starts).
+    expect(m.faces.size).toBe(2 + 2 * 2 + 2);
+    expect([...m.faces.values()].filter((f) => Math.abs(f.normal[2]) > 0.99)).toHaveLength(2);
     expect(volume(m)).toBeCloseTo(400 * 900, 3);
     // The end cap is the profile turned to face along the second leg.
     expect(m.findVertex([400, 510, 20])).toBeDefined();

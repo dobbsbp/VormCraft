@@ -10,7 +10,7 @@ TypeScript, Three.js, Manifold, Tauri and Vitest.
 `README.md` is the public feature list; keep it current when adding features.
 Unfinished work and known bugs live in `TODO.md`.
 
-## Current state (0.5.12, November 2026)
+## Current state (0.5.13, November 2026)
 - Released for Windows (NSIS installer, auto-update) and the web (installable PWA, works offline).
   Both are built by GitHub Actions from a version tag.
 - **Modelling tools:** Line, Rectangle (and Rotated), Circle, Polygon, Arcs/Pie, Push/Pull with
@@ -35,7 +35,7 @@ Unfinished work and known bugs live in `TODO.md`.
   - Google Drive save, open and autosave, and each device's settings saved/loaded by hand
     (`VormCraft settings.json`; Google-verified; `drive.file` scope only);
   - import SKP/OBJ/STL; export STL/OBJ.
-- About 605 Vitest tests; `npm test`, `npm run typecheck` and the build must stay clean, with no
+- About 630 Vitest tests; `npm test`, `npm run typecheck` and the build must stay clean, with no
   warnings.
 
 ## Rules
