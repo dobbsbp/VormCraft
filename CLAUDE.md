@@ -10,7 +10,7 @@ TypeScript, Three.js, Manifold, Tauri and Vitest.
 `README.md` is the public feature list; keep it current when adding features.
 Unfinished work and known bugs live in `TODO.md`.
 
-## Current state (0.5.14, November 2026)
+## Current state (0.5.15, November 2026)
 - Released for Windows (NSIS installer, auto-update) and the web (installable PWA, works offline).
   Both are built by GitHub Actions from a version tag.
 - **Modelling tools:** Line, Rectangle (and Rotated), Circle, Polygon, Arcs/Pie, Push/Pull with

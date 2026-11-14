@@ -40,7 +40,7 @@ Both versions have the same version number and open the same `.vorm` files.
 - **Arc** and **Pie**: click the centre, click the start or type the radius and press Enter, type the number of segments and press Enter (or just Enter for 12), then type the angle in degrees (360 makes a full circle) or click the end.
 
 ### Modeling
-- **Push/Pull**: extrude a face out to add material, or in to remove it.
+- **Push/Pull**: extrude a face out to add material, or in to remove it. Push a rectangle drawn on a wall in as far as the wall is thick (or further) to cut a window or doorway through it.
   - Push a shape flush to the far side and you get a clean through-hole.
   - Push through a solid whose far side isn't flush and it is cut with a real boolean operation. No manual "intersect faces" step is needed.
   - Double-click a face to repeat the last distance.

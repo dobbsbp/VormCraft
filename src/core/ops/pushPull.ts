@@ -28,7 +28,9 @@ const OVERSHOOT = 0.01;
 /**
  * Push or pull a face along its normal by `distance` (positive = outward).
  * - A face on its own becomes a solid (the original face stays as the base).
- * - A face that is part of an open surface moves out with side walls, bumping the surface.
+ * - A face that is part of an open surface moves out with side walls, bumping the surface. Pushed
+ *   into the surface far enough to reach a face on its other side (a window pushed through a wall
+ *   that is not a closed solid), it cuts a hole through there, as SketchUp does.
  * - On a closed solid, pulling out adds material and pushing in removes it. If a push lands exactly
  *   on an opposite face of the solid, both faces are removed and the side walls kept (a through-hole);
  *   otherwise Manifold computes the boolean, so cuts follow whatever the solid looks like.
@@ -134,11 +136,13 @@ export function extrudeOpenFace(model: Model, faceId: FaceId, distance: number, 
  * gets a bump (or a dent). Walls that line up with neighbouring faces merge into them, unless
  * `keepEdges` (a new starting face).
  */
-function extrudeAttachedFace(model: Model, faceId: FaceId, distance: number, keepEdges: boolean): PushPullResult {
+function extrudeAttachedFace(model: Model, faceId: FaceId, distance: number, keepEdges: boolean, throughWalls = true): PushPullResult {
   if (!keepEdges) {
     const retracted = retractBump(model, faceId, distance);
     if (retracted) return retracted;
   }
+  const through = throughWalls && distance < 0 ? backFace(model, faceId, -distance) : null;
+  if (through) return punchThrough(model, faceId, through, keepEdges);
   const n = model.face(faceId).normal;
   const rings = model.faceVertexLoops(faceId);
   const edgeCurves = ringEdgeCurves(model, rings);
@@ -157,6 +161,49 @@ function extrudeAttachedFace(model: Model, faceId: FaceId, distance: number, kee
   const face = mergeLevelOutline(model, cap, touched);
   removeCollinearVertices(model, touched);
   return { mode: 'extrude', face, faces: [...walls, cap].filter((f) => model.faces.has(f)) };
+}
+
+/**
+ * The face on the other side of an open surface that a face pushed `depth` into it reaches (a
+ * wall's inside, behind a window drawn on its outside): of the same surface, facing the other way,
+ * no further than `depth`, and holding the whole of the face's outline once it gets there. The
+ * nearest such face, with how far it is; null if there is none.
+ */
+function backFace(model: Model, faceId: FaceId, depth: number): { face: FaceId; distance: number } | null {
+  const f = model.face(faceId);
+  if (f.holes.length) return null;
+  const n = f.normal;
+  const ring = model.faceVertexLoops(faceId)[0].map((v) => model.pos(v));
+  const centre = scale(ring.reduce((a, p) => add(a, p), [0, 0, 0] as Vec3), 1 / ring.length);
+  let best: { face: FaceId; distance: number } | null = null;
+  for (const g of model.connectedFaces(faceId)) {
+    if (g === faceId || dot(model.face(g).normal, n) > -1 + ANGLE_TOL) continue;
+    const t = dot(sub(ring[0], model.facePlane(g).origin), n);
+    if (t <= TOL || t > depth + TOL || (best && t >= best.distance)) continue;
+    // Every corner (nudged in, so corners on the face's own edges count) and the middle land on it.
+    const landed = [...ring.map((p) => add(p, scale(sub(centre, p), 1e-3))), centre].map((p) => sub(p, scale(n, t)));
+    if (landed.every((p) => findFaceAt(model, p, model.face(g).normal) === g)) best = { face: g, distance: t };
+  }
+  return best;
+}
+
+/**
+ * Push a face of an open surface right through it: side walls down to the face behind, and a hole
+ * there in place of the face itself (a window through a wall).
+ */
+function punchThrough(model: Model, faceId: FaceId, back: { face: FaceId; distance: number }, keepEdges: boolean): PushPullResult {
+  const result = extrudeAttachedFace(model, faceId, -back.distance, keepEdges, false);
+  const cap = result.face;
+  if (cap === undefined || !model.faces.has(cap) || !model.faces.has(back.face) || model.face(cap).holes.length) return result;
+  // The cap's loop runs the right way for a hole in the face behind (it faces the other way), on
+  // the edges the side walls left for it.
+  const hole = model.faceVertexLoops(cap)[0];
+  const behind = model.face(back.face);
+  const [outer, ...holes] = model.faceVertexLoops(back.face);
+  model.removeFace(cap);
+  model.removeFace(back.face);
+  model.addFace(outer, [...holes, hole], { normal: behind.normal, id: back.face, material: behind.material });
+  return { mode: 'extrude', face: undefined, faces: result.faces.filter((f) => f !== cap && model.faces.has(f)) };
 }
 
 /**

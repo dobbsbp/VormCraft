@@ -4,6 +4,10 @@ What changed in each version of VormCraft. The section for a version is also sho
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
+## 0.5.15
+
+- Windows and doors through walls: a rectangle drawn on a wall and pushed in as far as the wall is thick, or further, now cuts a hole right through. Before, walls made by pulling up an offset rectangle (open underneath) got a box poking through them instead.
+
 ## 0.5.14
 
 - Move a shape by its centre: with the Move tool, bring the cursor near the middle of a face and a small orange × marks its exact centre. This works on faces at any angle, and for where it goes, so shapes line up centre to centre.

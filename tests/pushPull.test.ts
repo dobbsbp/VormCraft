@@ -5,6 +5,8 @@ import {
   drawPolygon,
   drawRectangle,
   faceArea,
+  findFaceAt,
+  offsetFace,
   GROUND_PLANE,
   initBooleanKernel,
   makePlane,
@@ -432,6 +434,59 @@ describe('push/pull on an open surface (bump / dent)', () => {
     expect(m.faces.size).toBe(1);
     expect(m.vertices.size).toBe(4);
     expect(faceArea(m, [...m.faces.keys()][0])).toBeCloseTo(100 * 100);
+  });
+});
+
+describe('windows through walls that are not a closed solid (walls pulled up from an offset ring)', () => {
+  /**
+   * The usual way to start a room: a 6 m x 4 m rectangle, offset 150 mm in, the ring pulled up 3 m.
+   * The walls share their bottom edges with the floor, so they are open underneath (as in SketchUp).
+   * A 1 m window is drawn on the outside of the front wall.
+   */
+  function room() {
+    const m = new Model();
+    const floor = drawRectangle(m, GROUND_PLANE, [0, -4000, 0], 6000, 4000).inner!;
+    offsetFace(m, floor, 150);
+    pushPull(m, findFaceAt(m, [75, -2000, 0])!, 3000);
+    const wall = findFaceAt(m, [3000, -4000, 500], [0, -1, 0])!;
+    const front = makePlane([0, -4000, 0], [0, -1, 0]);
+    const window = drawPolygon(m, front, [[2000, -4000, 1000], [3000, -4000, 1000], [3000, -4000, 2000], [2000, -4000, 2000]], { hostFace: wall }).inner!;
+    return { m, window };
+  }
+  const outside = (m: Model) => findFaceAt(m, [3000, -4000, 500], [0, -1, 0])!;
+  const inside = (m: Model) => findFaceAt(m, [3000, -3850, 500], [0, 1, 0])!;
+
+  it.each([150, 289])('pushed in %i mm (the wall is 150 mm thick) it cuts a hole right through', (depth) => {
+    const { m, window } = room();
+    expect(checkWatertight(m).watertight).toBe(false);
+    pushPull(m, window, -depth);
+    m.validate();
+    expect(m.face(outside(m)).holes).toHaveLength(1);
+    expect(m.face(inside(m)).holes).toHaveLength(1);
+    // Nothing fills the opening on either side, and nothing pokes into the room.
+    expect(findFaceAt(m, [2500, -4000, 1500])).toBeUndefined();
+    expect(findFaceAt(m, [2500, -3850, 1500])).toBeUndefined();
+    expect(Math.max(...[...m.vertices.values()].map((v) => v.pos[1]))).toBe(0);
+    expect(Math.min(...[...m.vertices.values()].filter((v) => v.pos[0] > 1999 && v.pos[0] < 3001 && v.pos[2] > 999).map((v) => v.pos[1]))).toBeGreaterThanOrEqual(-4000);
+    // The four sides of the opening join the two holes.
+    const sides = [...m.faces.values()].filter((f) => m.faceVertexLoops(f.id)[0].every((v) => m.pos(v)[1] >= -4000 - 1e-6 && m.pos(v)[1] <= -3850 + 1e-6) && Math.abs(f.normal[1]) < 1e-6);
+    expect(sides.filter((f) => m.faceVertexLoops(f.id)[0].every((v) => m.pos(v)[0] >= 2000 - 1e-6 && m.pos(v)[0] <= 3000 + 1e-6))).toHaveLength(4);
+  });
+
+  it('pushed in less than the wall is thick, it makes a recess instead', () => {
+    const { m, window } = room();
+    pushPull(m, window, -100);
+    m.validate();
+    expect(m.face(inside(m)).holes).toHaveLength(0);
+    expect(findFaceAt(m, [2500, -3900, 1500], [0, -1, 0])).toBe(window);
+  });
+
+  it('pulled out (away from the wall), it never reaches the wall across the room', () => {
+    const { m, window } = room();
+    pushPull(m, window, 5000);
+    m.validate();
+    expect(findFaceAt(m, [2500, -9000, 1500], [0, -1, 0])).toBe(window);
+    expect(m.face(findFaceAt(m, [3000, -150, 500], [0, -1, 0])!).holes).toHaveLength(0);
   });
 });
 
