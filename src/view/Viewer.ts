@@ -48,6 +48,7 @@ const PREVIEW_COLORS: Record<PreviewColor, number> = {
   parallel: THEME.parallel,
   guide: THEME.guide,
   select: THEME.select,
+  scaleBox: THEME.scaleBox,
 };
 
 /** Drawn geometry of one model other than the one being edited. */
@@ -791,6 +792,10 @@ export class Viewer implements SceneView {
       if (s) parts.push(`<rect x="${s[0] - 5}" y="${s[1] - 5}" width="10" height="10" class="point${selectedPoints.has(v) ? ' selected' : ''}"/>`);
     }
     parts.push(...this.drawLabels(proj));
+    for (const g of this.overlay.preview.grips ?? []) {
+      const s = proj.toScreen(g.at);
+      if (s) parts.push(`<rect x="${s[0] - 4.5}" y="${s[1] - 4.5}" width="9" height="9" class="grip${g.hot ? ' hot' : ''}"/>`);
+    }
     for (const l of this.overlay.preview.labels ?? []) {
       const s = proj.toScreen(l.at);
       if (s) parts.push(`<text x="${s[0]}" y="${s[1]}" text-anchor="middle" dominant-baseline="middle" class="snap-label preview-label">${escapeXml(l.text)}</text>`);
@@ -1225,6 +1230,8 @@ function marker(snap: Snap, [x, y]: [number, number]): string {
       return `<circle cx="${x}" cy="${y}" r="5.5" class="snap snap-endpoint"/>`;
     case 'midpoint':
       return `<circle cx="${x}" cy="${y}" r="5.5" class="snap snap-midpoint"/>`;
+    case 'centre':
+      return `<path d="M${x - 5} ${y - 5}L${x + 5} ${y + 5}M${x - 5} ${y + 5}L${x + 5} ${y - 5}" class="snap-centre"/>`;
     case 'onEdge':
       return `<rect x="${x - 4.5}" y="${y - 4.5}" width="9" height="9" class="snap snap-edge"/>`;
     case 'onFace':

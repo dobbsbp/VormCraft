@@ -26,6 +26,7 @@ export interface EventOptions {
   /** A group under the cursor (in front of `face`). */
   group?: number | null;
   shift?: boolean;
+  ctrl?: boolean;
   down?: boolean;
   /** Snap point if different from the cursor point. */
   snap?: Partial<Snap> | null;
@@ -51,7 +52,7 @@ export function ev(doc: Document, p: Vec3, o: EventOptions = {}): ToolEvent {
     ray,
     screen: topDown.toScreen(p)!,
     shift: o.shift ?? false,
-    ctrl: false,
+    ctrl: o.ctrl ?? false,
     down: o.down ?? false,
   };
 }

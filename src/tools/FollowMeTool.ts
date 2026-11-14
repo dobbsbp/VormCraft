@@ -1,13 +1,16 @@
-import type { FaceId, HalfEdgeId } from '../core/model/Model';
+import type { FaceId, HalfEdgeId, Model } from '../core/model/Model';
 import { faceWithinSolid } from '../core/check/solid';
-import { followMe } from '../core/ops/followMe';
+import { followMe, followMeSpiral, roundPathAxis, type SpiralOptions } from '../core/ops/followMe';
+import type { DocumentSnapshot } from '../doc/Document';
 import { edgeId } from './Selection';
-import type { Preview, Tool, ToolContext, ToolEvent } from './types';
+import type { Preview, Tool, ToolContext, ToolEvent, ToolTips } from './types';
+import { formatLength, parseLength } from './units';
 
 /**
  * Follow Me: select the path first (edges, or a face to follow its outline, e.g. a circle for a
  * lathe), then click the profile face: it is swept along the path with mitred corners. A profile
- * on a solid cuts into it (a groove or chamfer along the path).
+ * on a solid cuts into it (a groove or chamfer along the path). Right after sweeping a profile
+ * round a circle, typing "turns, rise" (and how much wider each turn) makes it a spiral instead.
  */
 export class FollowMeTool implements Tool {
   readonly id = 'followMe';
@@ -17,18 +20,31 @@ export class FollowMeTool implements Tool {
   constructor(private readonly ctx: ToolContext) {}
 
   hint(): string {
+    if (this.spiral) return 'For a spiral, type the turns and the rise per turn (e.g. 5, 40mm), and how much wider each turn if you like (5, 40mm, 10mm). Or click another profile.';
     return this.hasPath()
       ? 'Click the profile face to sweep it along the selected path.'
       : 'Select the path first (edges, or a face to follow its edge, e.g. a big circle), then click the profile (e.g. a small circle standing upright on its edge: press → or ← while drawing it).';
   }
 
+  tips(): ToolTips {
+    return SPIRAL_TIPS;
+  }
+
   vcbLabel(): string {
-    return '';
+    return this.spiral ? 'Spiral' : '';
   }
 
   vcbValue(): string {
-    return '';
+    const o = this.spiral?.made;
+    if (!o) return '';
+    return [`${o.turns}`, formatLength(o.rise), ...(o.grow ? [formatLength(o.grow)] : [])].join(', ');
   }
+
+  /**
+   * The last sweep round a circle, which typing can turn into a spiral: the document before it,
+   * the profile and path, and the spiral made from it, if any.
+   */
+  private spiral: { base: DocumentSnapshot; profile: FaceId; path: HalfEdgeId[]; pathFaces: FaceId[]; made: SpiralOptions | null } | null = null;
 
   inference() {
     return {};
@@ -91,23 +107,32 @@ export class FollowMeTool implements Tool {
     const whole = path.length === 1 && !this.ctx.selection.faces.size && !e.shift ? this.chainFrom(path[0]) : null;
     if (whole) path = whole;
     const pathFaces = [...this.ctx.selection.faces].filter((f) => f !== profile);
-    this.ctx.apply(() => {
-      const model = this.ctx.doc.model;
-      const result = followMe(model, profile, path);
-      // A path face left inside the new solid or on its surface (the disc in the middle of a sphere,
-      // under a dome or a cylinder) is in the way: it goes. One outside it (a ring's disc) stays.
-      const made = new Set<FaceId>();
-      for (const f of result.faces) if (model.faces.has(f) && !made.has(f)) for (const g of model.connectedFaces(f, false)) made.add(g);
-      if (!model.isClosed(made)) return;
-      for (const f of pathFaces) {
-        if (!model.faces.has(f) || made.has(f) || model.isClosed(model.connectedFaces(f, false)) || !faceWithinSolid(model, f, made)) continue;
-        const edges = model.faceHalfEdges(f);
-        model.removeFace(f);
-        model.purgeFree(edges);
-      }
-    });
+    // A free-standing profile round a circle can be made a spiral by typing afterwards.
+    const model = this.ctx.doc.model;
+    const round = model.adjacentFaces(profile).size === 0 && roundPathAxis(model, path) !== null;
+    const base = this.ctx.apply(() => this.sweep(pathFaces, (m) => followMe(m, profile, path).faces));
+    this.spiral = round ? { base, profile, path, pathFaces, made: null } : null;
     this.hover = null;
     this.said = whole ? `Followed the ${whole.length} lines joined to the one selected (hold Shift when clicking the profile to follow only the selected line)` : null;
+  }
+
+  /**
+   * Sweep, then remove a path face left inside the new solid or on its surface (the disc in the
+   * middle of a sphere, under a dome or a cylinder): it is in the way. One outside it (a ring's
+   * disc) stays.
+   */
+  private sweep(pathFaces: FaceId[], make: (model: Model) => FaceId[]): void {
+    const model = this.ctx.doc.model;
+    const faces = make(model);
+    const made = new Set<FaceId>();
+    for (const f of faces) if (model.faces.has(f) && !made.has(f)) for (const g of model.connectedFaces(f, false)) made.add(g);
+    if (!model.isClosed(made)) return;
+    for (const f of pathFaces) {
+      if (!model.faces.has(f) || made.has(f) || model.isClosed(model.connectedFaces(f, false)) || !faceWithinSolid(model, f, made)) continue;
+      const edges = model.faceHalfEdges(f);
+      model.removeFace(f);
+      model.purgeFree(edges);
+    }
   }
 
   /** What the last sweep did that is worth saying. */
@@ -119,15 +144,55 @@ export class FollowMeTool implements Tool {
     return said;
   }
 
-  typed(): void {
-    throw new Error('Follow Me takes no typed value: click the profile face');
+  /** "turns, rise" or "turns, rise, wider": the last sweep round a circle becomes a spiral. */
+  typed(text: string): void {
+    const s = this.spiral;
+    if (!s) throw new Error('To make a spiral, sweep a profile round a circle first (select the circle, click the profile), then type the turns and the rise per turn');
+    const parts = text.split(',').map((p) => p.trim());
+    const turns = Number(parts[0]);
+    const rise = parts[1] === undefined || parts[1] === '' ? undefined : parseLength(parts[1]);
+    const grow = parts[2] === undefined || parts[2] === '' ? 0 : parseLength(parts[2]);
+    if (parts.length > 3 || !Number.isFinite(turns) || rise === undefined || grow === undefined) {
+      throw new Error('Type the turns and the rise per turn, e.g. 5, 40mm (and how much wider each turn: 5, 40mm, 10mm)');
+    }
+    const opts: SpiralOptions = { turns, rise, grow };
+    this.ctx.apply(() => this.sweep(s.pathFaces, (m) => followMeSpiral(m, s.profile, s.path, opts).faces), s.base, 'Spiral');
+    s.made = opts;
   }
 
   cancel(): void {}
 
-  reset(): void {}
+  reset(): void {
+    this.spiral = null;
+  }
 
   preview(): Preview {
     return this.hover !== null && this.ctx.doc.model.faces.has(this.hover) ? { faces: [this.hover] } : {};
   }
 }
+
+/** How to make a spring or coil: it starts as a ring, which is not easy to guess. */
+const SPIRAL_TIPS: ToolTips = {
+  label: 'Spiral tips',
+  title: 'Making a spiral (a spring or coil)',
+  text: `A spiral starts as a ring. Then you type how it winds.
+
+1. Draw a flat circle with the Circle tool. The coil winds round it.
+2. Draw a small circle standing upright on its edge: with the Circle tool, press → or ← to stand it upright, click on the big circle's edge (look for "Endpoint"), and type its radius.
+3. Choose Select and click the big flat circle.
+4. Choose Follow Me and click the small circle. You get a ring.
+5. Straight away, type the turns and the rise per turn, then press Enter.
+
+What to type:
+• 5, 30cm: a spring of 5 turns, each 30 cm higher than the last.
+• 3, 0, 25cm: a flat coil, each turn 25 cm further out.
+• 6, 25cm, -12cm: a cone-shaped spring, each turn 12 cm narrower.
+• 0.5, 50cm: half a turn, like a curved ramp or handrail.
+
+Type again to change it. Undo goes back to before the ring.
+
+Good to know:
+• Each turn must climb at least as much as the small circle is tall, or the coils would run into each other. If not, it tells you the least it can be.
+• Any upright shape works: a square makes a square spring.
+• A smaller small circle, or a bigger flat one, gives a finer coil.`,
+};

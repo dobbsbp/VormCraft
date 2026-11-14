@@ -6,7 +6,9 @@
 
 VormCraft is a push/pull 3D modeling program for woodworking, architecture sketches, 3D printing and CAD/CAM handoff. There is no parametric timeline and no constraint solver. You draw on faces, push and pull them, and the model follows. It works much like SketchUp, but it is free and open source.
 
-![VormCraft with grouped, painted objects, scene tabs along the top and the Scenes panel open](docs/screenshot.jpg)
+![VormCraft with a spring and a sphere made with Follow Me, and a box with the Scale tool's yellow grip box, under the sky and over the ground](docs/screenshot.jpg)
+
+*A spring (Follow Me round a circle, then `5, 30cm` typed for 5 turns climbing 30 cm each), a sphere (an upright circle on the centre of a flat one), and the Scale tool's grips on a box.*
 
 > **Status:** early and under active development. The modeling core is solid and well tested, and new features are added as the program gets used.
 
@@ -44,9 +46,10 @@ Both versions have the same version number and open the same `.vorm` files.
   - Double-click a face to repeat the last distance.
   - Push a face level with the face next to it and they merge into one (hold Ctrl to keep the edge). Pushing a bump back down shortens its sides instead of leaving overlapping faces.
 - **Offset**: copy a face's outline inward or outward, or offset a chain of edges.
-- **Follow Me**: sweep a profile along a path, for rings, spheres, domes, bowls, pipes and elbows, picture frames, rounded edges, grooves and other lathed (turned) shapes. Select the path first, then click the profile; stand a circle upright for it with the arrow keys while drawing (→ or ←). Mistakes, such as picking them the wrong way round, are explained instead of making a broken shape.
+- **Follow Me**: sweep a profile along a path, for rings, spheres, domes, bowls, pipes and elbows, picture frames, rounded edges, grooves and other lathed (turned) shapes. Select the path first, then click the profile; stand a circle upright for it with the arrow keys while drawing (→ or ←). For a sphere, draw a flat circle, draw an upright circle on its centre, select the flat one and click the upright one. For a spring or coil, make a ring, then type the turns and the rise per turn (`5, 40mm`; add a third number to widen each turn); the **Spiral tips** button at the bottom of the window explains it step by step. Mistakes, such as picking them the wrong way round, are explained instead of making a broken shape.
 - **Rotate** shows a protractor with the angle in degrees; the arrow keys pick its axis, and ↓ turns about any line you last pointed at, whatever its angle. **Circle** and **Polygon** stand upright with → and ←, and square across a sloping line with ↓.
-- **Move** and **Rotate**: press Ctrl to copy instead (a + shows on the cursor and the copy follows the mouse; copy mode ends with the copy), then type a count (`5x` or `/5`) to make arrays. **Push/Pull** with Ctrl makes a new starting face: an edge loop stays where the face was, so the new sides are separate faces (stacking floors, for example). **Scale** resizes selected geometry; negative factors mirror.
+- **Move**, **Rotate** and **Scale** snap to the centre of a face (a small × near its middle, on flat, upright or sloping faces alike), so shapes move centre to centre and turn about their middle.
+- **Move** and **Rotate**: press Ctrl to copy instead (a + shows on the cursor and the copy follows the mouse; copy mode ends with the copy), then type a count (`5x` or `/5`) to make arrays. **Push/Pull** with Ctrl makes a new starting face: an edge loop stays where the face was, so the new sides are separate faces (stacking floors, for example). **Scale** shows a yellow box with grips round the selection: drag a corner to resize in proportion, the middle of a side to stretch one way (Shift: each way on its own; Ctrl: about the centre); negative factors mirror.
 - **Points**: click where two or more lines meet to select that corner, then Move, Rotate or Scale it; the faces around it stretch (or fold) to follow. The arrow keys lock the axis.
 - **Merge Shapes** (right-click): overlapping flat faces in one plane become one face; for solids and groups, choose **Unify** (one solid, with the faces inside removed) or **Keep shapes** (put together in one group, unchanged). Flat faces selected along with solids (such as the circle left inside a Follow Me ring) are left as they are, and if a merge isn't possible it says why.
 - **Eraser**, **Tape Measure** (measure, place guides, rescale the model) and **Text** labels (Delete, the Eraser, a box or right-click erases them; drag to move, double-click to edit).

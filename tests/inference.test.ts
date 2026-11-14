@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { drawRectangle, findFaceAt, GROUND_PLANE, initBooleanKernel, makePlane, Model, pushPull, type Vec3 } from '../src/core';
+import { drawCircle, drawPolygon, drawRectangle, faceCentre, findFaceAt, GROUND_PLANE, initBooleanKernel, makePlane, Model, pushPull, type Vec3 } from '../src/core';
 import { Guides } from '../src/doc/Guides';
 import { infer } from '../src/tools/inference';
 import type { InferenceHints } from '../src/tools/types';
@@ -200,5 +200,63 @@ describe('inference snapping', () => {
     const s = inferAt(m, cam(), [30, 60, 20], { hints: { plane } });
     expect(s?.kind).toBe('onPlane');
     expect(s!.point[2]).toBeCloseTo(50, 6);
+  });
+
+  it('Move: near the middle of a face, snaps to its centre', () => {
+    const m = box();
+    const top = findFaceAt(m, [50, 50, 20]);
+    const s = inferAt(m, cam(), [50, 50, 20], { hints: { centres: true }, nudge: [8, 6] });
+    expect(s?.kind).toBe('centre');
+    s!.point.forEach((x, i) => expect(x).toBeCloseTo([50, 50, 20][i], 6));
+    expect(s?.face).toBe(top);
+    // Further off it is just on the face; and other tools never get the centre.
+    expect(inferAt(m, cam(), [30, 60, 20], { hints: { centres: true } })?.kind).toBe('onFace');
+    expect(inferAt(m, cam(), [50, 50, 20], { nudge: [3, 3] })?.kind).toBe('onFace');
+  });
+
+  it('the centre of a tilted rectangle and of a circle standing upright lies on the face, in its middle', () => {
+    const m = new Model();
+    const tilted = makePlane([0, 0, 0], [0, -0.6, 0.8]);
+    const rect = drawRectangle(m, tilted, [0, 0, 0], 100, 40).inner!;
+    const corners = m.faceVertexLoops(rect)[0].map((v) => m.pos(v));
+    const middle = corners.reduce((a, p) => [a[0] + p[0] / 4, a[1] + p[1] / 4, a[2] + p[2] / 4] as Vec3, [0, 0, 0] as Vec3);
+    faceCentre(m, rect).forEach((x, i) => expect(x).toBeCloseTo(middle[i], 6));
+    const upright = drawCircle(m, makePlane([300, 0, 50], [0.6, 0.8, 0]), [300, 0, 50], 30).inner!;
+    faceCentre(m, upright).forEach((x, i) => expect(x).toBeCloseTo([300, 0, 50][i], 6));
+    const s = inferAt(m, camera([540, 320, 150], [300, 0, 50]), [300, 0, 50], { hints: { centres: true }, nudge: [5, -4] });
+    expect(s?.kind).toBe('centre');
+    s!.point.forEach((x, i) => expect(x).toBeCloseTo([300, 0, 50][i], 6));
+  });
+
+  it('the centre of an L-shape is the balance point of its area, and a hole is left out', () => {
+    const m = new Model();
+    const l = drawPolygon(m, GROUND_PLANE, [[0, 0, 0], [200, 0, 0], [200, 100, 0], [100, 100, 0], [100, 200, 0], [0, 200, 0]]).inner!;
+    // Three 100 x 100 squares centred at (50,50), (150,50) and (50,150).
+    faceCentre(m, l).forEach((x, i) => expect(x).toBeCloseTo([250 / 3, 250 / 3, 0][i], 6));
+    const ring = new Model();
+    const outer = drawRectangle(ring, GROUND_PLANE, [0, 0, 0], 100, 100).inner!;
+    drawRectangle(ring, GROUND_PLANE, [10, 10, 0], 20, 20, outer);
+    const c = faceCentre(ring, findFaceAt(ring, [80, 80, 0])!);
+    // 10000 at (50,50) less 400 at (20,20).
+    expect(c[0]).toBeCloseTo((10000 * 50 - 400 * 20) / 9600, 6);
+    expect(c[1]).toBeCloseTo((10000 * 50 - 400 * 20) / 9600, 6);
+  });
+
+  it('a locked move can go as far as a face centre', () => {
+    const m = box();
+    const s = inferAt(m, cam(), [50, 50, 20], { hints: { centres: true, reference: [0, 50, 20], lock: { dir: [1, 0, 0], axis: 0 } }, nudge: [6, 0] });
+    expect(s?.locked).toBe(true);
+    s!.point.forEach((x, i) => expect(x).toBeCloseTo([50, 50, 20][i], 6));
+  });
+
+  it('a line in the model nearer the cursor than the axis wins over the axis, and the other way round', () => {
+    const m = box();
+    const hints: InferenceHints = { reference: [-50, 30, 20] }; // the red axis runs across the top at y = 30
+    const onLine = inferAt(m, cam(), [100, 28, 20], { hints });
+    expect(onLine?.kind).toBe('onEdge');
+    expect(onLine!.point[0]).toBeCloseTo(100, 6);
+    const onAxis = inferAt(m, cam(), [98, 30, 20], { hints });
+    expect(onAxis?.kind).toBe('axis');
+    expect(onAxis!.point[1]).toBeCloseTo(30, 6);
   });
 });

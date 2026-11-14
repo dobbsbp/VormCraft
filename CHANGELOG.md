@@ -4,6 +4,18 @@ What changed in each version of VormCraft. The section for a version is also sho
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
+## 0.5.14
+
+- Move a shape by its centre: with the Move tool, bring the cursor near the middle of a face and a small orange × marks its exact centre. This works on faces at any angle, and for where it goes, so shapes line up centre to centre.
+- Rotate and Scale snap to face centres too, so you can turn or resize a shape about its middle. The Circle and Polygon tools can put their centre there.
+- Spheres the easy way: draw a flat circle, then an upright circle (press → while drawing) with its centre on the flat circle's centre. Select the flat circle, choose Follow Me and click the upright circle. Before, this was refused.
+- An upright rectangle across the middle of a circle turns into a cylinder in the same way.
+- Springs and coils with Follow Me: make a ring as usual (select a flat circle, click a small upright circle on its edge), then type the turns and the rise per turn, for example 5, 40mm, and press Enter. Add a third number to make each turn wider (5, 40mm, 10mm), or use no rise for a flat coil (3, 0, 25mm). Type again to change it. Any profile works, such as a square for a square spring.
+- The Circle and Polygon tools say in the status bar when they are locked upright, and the lock comes off once you use another tool, so the next circle is not drawn standing up by surprise.
+- While Follow Me is in use, a Spiral tips button at the bottom of the window explains how to make a spring or coil, step by step.
+- Scale shows a yellow box round what you select (or point at), with grips on its corners, edges and sides. Drag a corner to resize in proportion, or the middle of a side to stretch it one way. Hold Shift to stretch each way on its own, or Ctrl to scale about the centre. You can still type a factor or a new size while dragging.
+- Snapping to lines already in the model is easier: they are caught from a little further away, and a line nearer the cursor now wins over the red, green or blue axis line.
+
 ## 0.5.13
 
 - Circles and polygons can stand upright: press → or ← while drawing (↑ lays them flat again), as with rectangles and arcs. This is how you draw a profile for Follow Me.

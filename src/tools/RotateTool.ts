@@ -58,8 +58,8 @@ export class RotateTool implements Tool {
   }
 
   inference(): InferenceHints {
-    if (!this.plane || !this.center) return {};
-    return this.ref ? { plane: this.plane } : { reference: this.center, plane: this.plane };
+    if (!this.plane || !this.center) return { centres: true };
+    return this.ref ? { plane: this.plane, centres: true } : { reference: this.center, plane: this.plane, centres: true };
   }
 
   toggleCopy(): boolean {
@@ -104,7 +104,7 @@ export class RotateTool implements Tool {
       this.rawAngle += Math.atan2(Math.sin(step), Math.cos(step));
       const snapped = Math.round(this.rawAngle / SNAP_STEP) * SNAP_STEP;
       // Hovering a real point (a corner, say) means "rotate to there": no 15° snapping then.
-      const pointSnap = e.snap && ['endpoint', 'midpoint', 'guidePoint', 'guideIntersection'].includes(e.snap.kind);
+      const pointSnap = e.snap && ['endpoint', 'midpoint', 'centre', 'guidePoint', 'guideIntersection'].includes(e.snap.kind);
       this.angle = !pointSnap && Math.abs(snapped - this.rawAngle) <= SNAP_WITHIN ? snapped : this.rawAngle;
     }
     this.cursor = p;

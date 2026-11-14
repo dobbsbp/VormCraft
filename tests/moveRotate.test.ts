@@ -24,6 +24,17 @@ const shells = (H: H) => checkWatertight(H.model).shells;
 const hasVertex = (H: H, p: Vec3) => [...H.model.vertices.values()].some((v) => distance(v.pos, p) < 1e-6);
 
 describe('Move tool', () => {
+  it('snaps to the centre of faces, before and after the first click; drawing tools do not', () => {
+    const H = boxH();
+    expect(use(H.controller, 'move').inference().centres).toBe(true);
+    click(H, [5, 10, 30], { kind: 'centre' });
+    expect(H.controller.tool.inference()).toMatchObject({ centres: true, reference: [5, 10, 30] });
+    expect(use(H.controller, 'rotate').inference().centres).toBe(true);
+    expect(use(H.controller, 'scale').inference().centres).toBe(true);
+    expect(use(H.controller, 'circle').inference().centres).toBe(true);
+    expect(use(H.controller, 'line').inference().centres).toBeUndefined();
+  });
+
   it('with nothing selected, moves the whole object clicked', () => {
     const H = boxH();
     use(H.controller, 'move');

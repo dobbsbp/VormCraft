@@ -6,7 +6,7 @@ import type { ToolId } from '../tools/types';
 import type { StandardView } from '../view/navigation';
 import { Viewer } from '../view/Viewer';
 import { FileCommands } from './fileCommands';
-import { choiceDialog, confirmDialog, promptDialog } from './dialogs';
+import { choiceDialog, confirmDialog, messageDialog, promptDialog } from './dialogs';
 import { formatLength } from '../tools/units';
 import { createFileHost, isTauri } from './files';
 import { ICONS } from './icons';
@@ -127,6 +127,12 @@ async function start(): Promise<void> {
   const vcbLabel = document.getElementById('measurements-label')!;
   const unitsButton = document.getElementById('units-button')!;
   unitsButton.addEventListener('click', () => void designProperties());
+  // Tips for the tool in use (Follow Me's spirals), when it has some.
+  const tipsButton = document.getElementById('status-tips')!;
+  tipsButton.addEventListener('click', () => {
+    const tips = controller.tool.tips?.();
+    if (tips) void messageDialog(tips.title, tips.text);
+  });
   const contextBadge = document.getElementById('context-badge')!;
   contextBadge.addEventListener('click', () => controller.exitGroup());
   const autosaved = document.getElementById('status-saved')!;
@@ -218,6 +224,9 @@ async function start(): Promise<void> {
     hint.textContent = controller.hint();
     hint.classList.toggle('is-error', controller.error !== null);
     vcbLabel.textContent = tool.vcbLabel() || 'Measurements';
+    const tips = tool.tips?.();
+    tipsButton.hidden = !tips;
+    tipsButton.textContent = tips?.label ?? '';
     const unitChoice = UNIT_CHOICES.find((c) => c.unit === doc.units.unit)!;
     unitsButton.textContent = doc.units.unit === 'ftin' ? 'ft/in' : doc.units.unit;
     unitsButton.title = `Units: ${unitChoice.label} (click to change)`;

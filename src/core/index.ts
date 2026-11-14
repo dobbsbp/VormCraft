@@ -9,7 +9,7 @@ export { pushPull, extrudeOpenFace, type PushPullResult, type PushPullMode } fro
 export { mergeCoplanarFaces, removeCollinearVertices } from './ops/cleanup';
 export { initBooleanKernel, booleanKernelReady, booleanInPlace, type BooleanOp } from './boolean/manifold';
 export { checkWatertight, type WatertightReport } from './check/watertight';
-export { volume, faceArea } from './check/measure';
+export { volume, faceArea, faceCentre } from './check/measure';
 export { describeSolid, facesPressed, solidReport, solidsMadeWorse, volumeLines, type SolidReport } from './check/solid';
 export { triangulateFace, triangulateFaces, type TriangleMesh } from './triangulate';
 export { findFaceAt } from './model/query';

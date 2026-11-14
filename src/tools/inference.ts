@@ -1,3 +1,4 @@
+import { faceCentre } from '../core/check/measure';
 import { GROUND_PLANE, makePlane, planesCoincide, projectToPlane, signedDistance } from '../core/math/plane';
 import { TOL } from '../core/math/tolerance';
 import { add, distance, dot, scale, sub, type Vec3 } from '../core/math/vec3';
@@ -53,6 +54,7 @@ export const SNAP_PRIORITY: readonly SnapKind[] = [
   'endpoint',
   'origin',
   'midpoint',
+  'centre',
   'guideIntersection',
   'guidePoint',
   'axis',
@@ -69,15 +71,15 @@ interface Candidate {
 
 /**
  * Inference snapping: find the most meaningful point under the cursor. Point-like snaps
- * (endpoints, midpoints, guide intersections and points) beat axis inference, which beats lying
- * on an edge or guide, which beats lying on a face; the ground plane is the fallback. Geometry
+ * (endpoints, midpoints, face centres for Move/Rotate/Scale, guide intersections and points) beat
+ * lines (the axis, an edge or a guide, whichever is nearest the cursor), which beat lying on a face; the ground plane is the fallback. Geometry
  * hidden behind the face under the cursor is ignored. With a plane hint, the result is kept on
  * that plane (point snaps are projected onto it).
  */
 export function infer(input: InferenceInput): Snap | null {
   const { model, guides, projector, cursor, ray, faceHit } = input;
-  const pointTol = input.pointTolerancePx ?? 10;
-  const lineTol = input.lineTolerancePx ?? 7;
+  const pointTol = input.pointTolerancePx ?? 13;
+  const lineTol = input.lineTolerancePx ?? 9;
   const visible = visibilityTest(model, ray, faceHit);
   const px = (p: Vec3) => {
     const s = projector.toScreen(p);
@@ -139,6 +141,12 @@ export function infer(input: InferenceInput): Snap | null {
     if (on && on.t > 0 && distance(on.point, axisFrom) > TOL) offer({ kind: 'axis', point: on.point, axis: i as 0 | 1 | 2, from: axisFrom }, lineTol);
   });
 
+  // The centre of the face under the cursor, caught from a little further away than a corner.
+  if (faceHit && input.hints?.centres) {
+    const point = faceCentre(faceHit.model ?? model, faceHit.face);
+    offer({ kind: 'centre', point, ...(faceHit.model ? {} : { face: faceHit.face }) }, pointTol * 1.6);
+  }
+
   if (faceHit) {
     const onFace: Snap = faceHit.model
       ? { kind: 'onFace', point: faceHit.point, normal: faceHit.model.face(faceHit.face).normal }
@@ -152,6 +160,14 @@ export function infer(input: InferenceInput): Snap | null {
   if (lock && ref) return lockedSnap(found, ray, ref, lock);
   const lockPlane = input.hints?.lockPlane;
   if (lockPlane && ref) return perpendicularSnap(found, ray, ref, lockPlane.normal);
+
+  // Lines compete by distance: the axis, a line in the model or a guide nearest the cursor wins (a
+  // model line by a pixel), so pointing at an existing line while drawing lands on it rather than
+  // sliding along the axis past it.
+  const lines = LINE_KINDS.filter((k) => found.has(k));
+  const nearest = (k: SnapKind) => found.get(k)!.px - (k === 'onEdge' ? 1 : 0);
+  const keep = lines.reduce<SnapKind | null>((best, k) => (best === null || nearest(k) < nearest(best) ? k : best), null);
+  for (const k of lines) if (k !== keep) found.delete(k);
 
   let best: Snap | null = null;
   for (const kind of SNAP_PRIORITY) {
@@ -181,7 +197,9 @@ function perpendicularSnap(found: Map<SnapKind, Candidate>, ray: Ray, ref: Vec3,
   return p ? { ...base, point: p } : null;
 }
 
-const POINT_KINDS: readonly SnapKind[] = ['endpoint', 'origin', 'midpoint', 'guideIntersection', 'guidePoint'];
+const LINE_KINDS: readonly SnapKind[] = ['axis', 'onEdge', 'onGuide'];
+
+const POINT_KINDS: readonly SnapKind[] = ['endpoint', 'origin', 'midpoint', 'centre', 'guideIntersection', 'guidePoint'];
 
 /**
  * Arrow-key lock: the point stays on the line through the reference in the locked direction.

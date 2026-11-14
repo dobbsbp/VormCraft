@@ -7,6 +7,7 @@ import {
   drawCircle,
   drawEdges,
   drawRectangle,
+  facesWithCurveEdges,
   findFaceAt,
   GROUND_PLANE,
   initBooleanKernel,
@@ -51,23 +52,31 @@ const facing = (h: H, faces: FaceId[], axis: 0 | 1 | 2) => faces.find((f) => Mat
  * with `shown` edges drawn (the rest smooth), `flat` loose flat faces left, closed when exported,
  * the same after saving and opening again, and undone and redone as one step.
  */
-function expectSolid(h: H, o: { expected: number; within: number; shown?: number; flat?: number }): void {
+function expectSolid(h: H, o: { expected: number; within: number; shown?: number; flat?: number; label?: string }): void {
   const m = h.model;
   const r = solidReport(m);
   expect(r).toMatchObject({ solids: 1, insideOut: 0, open: 0, pressed: 0, flat: o.flat ?? 0 });
-  const solid = [...m.faces.keys()].filter((f) => m.isClosed(m.connectedFaces(f, false)));
+  const solid: FaceId[] = [];
+  const seen = new Set<FaceId>();
+  for (const f of m.faces.keys()) {
+    if (seen.has(f)) continue;
+    const part = m.connectedFaces(f, false);
+    for (const g of part) seen.add(g);
+    if (m.isClosed(part)) solid.push(...part);
+  }
   expect(checkWatertight(m, solid)).toMatchObject({ watertight: true, shells: 1 });
   expect(Math.abs(r.volumes[0] / o.expected - 1)).toBeLessThan(o.within);
   if (o.shown !== undefined) {
     const shown = new Set<number>();
-    for (const f of solid) for (const e of m.faceHalfEdges(f)) if (isEdgeShown(m, e)) shown.add(Math.min(e, m.he(e).twin));
+    const curved = facesWithCurveEdges(m);
+    for (const f of solid) for (const e of m.faceHalfEdges(f)) if (isEdgeShown(m, e, curved)) shown.add(Math.min(e, m.he(e).twin));
     expect(shown.size).toBe(o.shown);
   }
   expect(openMeshEdges(tessellate(m, solid, { maxDeviation: 0.05 }))).toBe(0);
   expect(solidReport(parseDocument(serializeDocument(h.doc)).root).volumes[0]).toBeCloseTo(r.volumes[0], 3);
-  expect(h.controller.history.undoLabel).toBe('Follow Me');
+  expect(h.controller.history.undoLabel).toBe(o.label ?? 'Follow Me');
   h.controller.undo();
-  expect(h.controller.history.redoLabel).toBe('Follow Me');
+  expect(h.controller.history.redoLabel).toBe(o.label ?? 'Follow Me');
   h.controller.redo();
   expect(solidReport(m).volumes[0]).toBeCloseTo(r.volumes[0], 3);
 }
@@ -115,6 +124,79 @@ describe('Follow Me shapes', () => {
     const { faces } = drawEdges(h.model, [[0, 0, 100], [0, 0, -100]]);
     sweep(h, { faces: [disc] }, facing(h, faces, 1));
     expectSolid(h, { expected: (4 / 3) * Math.PI * 100 ** 3, within: 0.035, shown: 0 });
+  });
+
+  it('a sphere the usual way: a whole circle standing on the centre of a flat one (only its near half is turned)', () => {
+    const h = harness();
+    const disc = drawCircle(h.model, GROUND_PLANE, [0, 0, 0], 100).inner!;
+    const upright = drawCircle(h.model, makePlane([0, 0, 0], [0, -1, 0]), [0, 0, 0], 100).inner!;
+    sweep(h, { faces: [disc] }, upright);
+    expectSolid(h, { expected: (4 / 3) * Math.PI * 100 ** 3, within: 0.035, shown: 0 });
+    // Its poles are the circle's own top and bottom, not flattened.
+    const zs = [...h.model.vertices.values()].map((v) => v.pos[2]);
+    expect(Math.max(...zs)).toBeCloseTo(100, 6);
+    expect(Math.min(...zs)).toBeCloseTo(-100, 6);
+  });
+
+  it('a sphere drawn with the Circle tool: the upright circle centred on the flat one (the centre snap), then Follow Me', () => {
+    const h = harness();
+    use(h.controller, 'circle');
+    const origin = ev(h.doc, [0, 0, 0], { kind: 'origin', face: null });
+    h.controller.tool.pointerMove(origin);
+    h.controller.tool.pointerDown(origin);
+    h.controller.enter();
+    h.controller.typed('100');
+    const disc = findFaceAt(h.model, [10, 10, 0])!;
+    // → (faces red): upright, its centre clicked on the flat circle's centre snap.
+    expect(h.controller.tool.lockAxis!('x')).toMatch(/upright/);
+    const centre = ev(h.doc, [0, 0, 0], { kind: 'centre', face: disc });
+    h.controller.tool.pointerMove(centre);
+    h.controller.tool.pointerDown(centre);
+    h.controller.enter();
+    h.controller.typed('100');
+    const upright = [...h.model.faces.values()].find((f) => Math.abs(f.normal[0]) > 0.99)!.id;
+    sweep(h, { faces: [disc] }, upright);
+    expectSolid(h, { expected: (4 / 3) * Math.PI * 100 ** 3, within: 0.035, shown: 0 });
+  });
+
+  it('the Circle tool says while it is locked upright, and unlocks once another tool changes the model', () => {
+    const h = harness();
+    const disc = drawCircle(h.model, GROUND_PLANE, [0, 0, 0], 100).inner!;
+    const circle = use(h.controller, 'circle');
+    circle.lockAxis!('y');
+    expect(circle.hint()).toMatch(/^Upright, facing the green axis \(press the same arrow again to unlock\)/);
+    const at = ev(h.doc, [100, 0, 10], { kind: 'endpoint', face: null });
+    circle.pointerMove(at);
+    circle.pointerDown(at);
+    h.controller.typed('10mm');
+    // Still locked for the next circle...
+    expect(circle.hint()).toMatch(/^Upright/);
+    const profile = [...h.model.faces.values()].find((f) => Math.abs(f.normal[1]) > 0.99)!.id;
+    sweep(h, { faces: [disc] }, profile);
+    // ...but not after Follow Me: the next circle lies on the face clicked again.
+    expect(circle.hint()).toMatch(/^Click the centre/);
+  });
+
+  it('a smaller circle, or one higher up the centre line, makes a sphere of its own size', () => {
+    for (const [r, z] of [[60, 0], [50, 40]]) {
+      const h = harness();
+      const disc = drawCircle(h.model, GROUND_PLANE, [0, 0, 0], 100).inner!;
+      const upright = drawCircle(h.model, makePlane([0, 0, z], [0, -1, 0]), [0, 0, z], r).inner!;
+      sweep(h, { faces: [disc] }, upright);
+      const solid = solidReport(h.model);
+      expect(solid).toMatchObject({ solids: 1, insideOut: 0, open: 0 });
+      expect(Math.abs(solid.volumes[0] / ((4 / 3) * Math.PI * r ** 3) - 1)).toBeLessThan(0.035);
+    }
+  });
+
+  it('an upright rectangle across the centre line turns into a cylinder', () => {
+    const h = harness();
+    const disc = drawCircle(h.model, GROUND_PLANE, [0, 0, 0], 100).inner!;
+    const { faces } = drawEdges(h.model, [[-40, 0, 0], [40, 0, 0], [40, 0, 70], [-40, 0, 70], [-40, 0, 0]]);
+    sweep(h, { faces: [disc] }, facing(h, faces, 1));
+    const solid = solidReport(h.model);
+    expect(solid).toMatchObject({ solids: 1, insideOut: 0, open: 0 });
+    expect(Math.abs(solid.volumes[0] / (Math.PI * 40 ** 2 * 70) - 1)).toBeLessThan(0.035);
   });
 
   it('a dome: a quarter circle round a circle (the circle under it goes)', () => {
@@ -289,5 +371,84 @@ describe('Follow Me mistakes say what to do', () => {
     expect(t.lockAxis!('z')).toMatch(/flat/);
     expect(t.lockAxis!('perpendicular')).toBeNull();
     expect(t.hint()).toMatch(/Arrow keys/);
+  });
+});
+
+describe('Follow Me spirals: sweep round a circle, then type the turns and the rise', () => {
+  /** A ring of a 10 mm circle round a 100 mm circle, made through the tool; returns the harness. */
+  function ringH(profile: 'circle' | 'square' = 'circle') {
+    const h = harness();
+    const disc = drawCircle(h.model, GROUND_PLANE, [0, 0, 0], 100).inner!;
+    const plane = makePlane([100, 0, 10], [0, 1, 0]);
+    const face =
+      profile === 'circle'
+        ? drawCircle(h.model, plane, [100, 0, 10], 10).inner!
+        : facing(h, drawEdges(h.model, [[90, 0, 0], [110, 0, 0], [110, 0, 20], [90, 0, 20], [90, 0, 0]]).faces, 1);
+    sweep(h, { faces: [disc] }, face);
+    return h;
+  }
+  /** A coil's volume: the profile's area times the length its centre travels (24-sided, so a little under). */
+  const coil = (area: number, turns: number, rise: number, radius = 100) => area * turns * Math.hypot(2 * Math.PI * radius, rise);
+
+  it('a spring: 5 turns climbing 30 mm each, one smooth closed solid', () => {
+    const h = ringH();
+    expect(h.controller.tool.vcbLabel()).toBe('Spiral');
+    expect(h.controller.tool.hint()).toMatch(/type the turns and the rise/);
+    h.controller.typed('5, 30');
+    expect(h.controller.tool.vcbValue()).toBe('5, 30 mm');
+    // Only the two end circles show; the disc it went round stays.
+    expectSolid(h, { expected: coil(Math.PI * 100, 5, 30), within: 0.035, shown: 48, flat: 1, label: 'Spiral' });
+    const zs = [...h.model.vertices.values()].map((v) => v.pos[2]);
+    expect(Math.max(...zs)).toBeCloseTo(150 + 20, 6);
+  });
+
+  it('typing again changes the spiral; undo goes back to before the sweep', () => {
+    const h = ringH();
+    h.controller.typed('2, 25mm');
+    h.controller.typed('3, 40mm');
+    expect(solidReport(h.model)).toMatchObject({ solids: 1, open: 0, insideOut: 0 });
+    expect(Math.max(...[...h.model.vertices.values()].map((v) => v.pos[2]))).toBeCloseTo(120 + 20, 6);
+    h.controller.undo();
+    expect(solidReport(h.model).solids).toBe(0);
+  });
+
+  it('a flat coil (no rise, wider each turn) and a cone-shaped spring', () => {
+    for (const typed of ['3, 0, 25mm', '4, 30mm, -15mm', '0.5, 50mm']) {
+      const h = ringH();
+      h.controller.typed(typed);
+      expect(solidReport(h.model)).toMatchObject({ solids: 1, open: 0, insideOut: 0, pressed: 0 });
+    }
+  });
+
+  it('a square profile gives a square-section spring, its corners shown', () => {
+    const h = ringH('square');
+    h.controller.typed('2, 40');
+    expectSolid(h, { expected: coil(400, 2, 40), within: 0.035, flat: 1, label: 'Spiral' });
+  });
+
+  it('Follow Me offers Spiral tips (the steps and what to type); drawing tools have none', () => {
+    const h = harness();
+    const tips = use(h.controller, 'followMe').tips?.();
+    expect(tips?.label).toBe('Spiral tips');
+    expect(tips?.text).toMatch(/starts as a ring/);
+    expect(tips?.text).toMatch(/5, 30cm/);
+    expect(use(h.controller, 'circle').tips).toBeUndefined();
+  });
+
+  it('refuses coils that would run into each other or reach the centre, and typing with no sweep', () => {
+    const h = ringH();
+    h.controller.typed('5, 10');
+    expect(h.controller.error).toMatch(/run into each other.*at least 20 mm, or widen at least 20 mm/);
+    h.controller.typed('3, 30, -40');
+    expect(h.controller.error).toMatch(/reach the centre line/);
+    h.controller.typed('5');
+    expect(h.controller.error).toMatch(/turns and the rise/);
+    // The ring is left as it was.
+    expect(solidReport(h.model).solids).toBe(1);
+    expect(Math.max(...[...h.model.vertices.values()].map((v) => v.pos[2]))).toBeCloseTo(20, 6);
+    const fresh = harness();
+    use(fresh.controller, 'followMe');
+    fresh.controller.typed('5, 30');
+    expect(fresh.controller.error).toMatch(/sweep a profile round a circle first/);
   });
 });

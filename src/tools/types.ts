@@ -10,6 +10,7 @@ export type SnapKind =
   | 'endpoint'
   | 'origin'
   | 'midpoint'
+  | 'centre'
   | 'guideIntersection'
   | 'guidePoint'
   | 'axis'
@@ -94,11 +95,16 @@ export interface InferenceHints {
   lock?: { dir: Vec3; axis?: 0 | 1 | 2 };
   /** Keep the point on the plane through `reference` with this normal (perpendicular-to-edge lock). */
   lockPlane?: { normal: Vec3 };
+  /**
+   * Offer the centre of the face under the cursor as a point (Move, Rotate, Scale: by a shape's
+   * middle; Circle and Polygon: their centre there).
+   */
+  centres?: boolean;
   /** Keep the inferred point on this plane (projecting snapped points onto it). */
   plane?: Plane;
 }
 
-export type PreviewColor = 'preview' | 'axisX' | 'axisY' | 'axisZ' | 'parallel' | 'guide' | 'select';
+export type PreviewColor = 'preview' | 'axisX' | 'axisY' | 'axisZ' | 'parallel' | 'guide' | 'select' | 'scaleBox';
 
 export interface PreviewLines {
   /** Segment endpoint pairs. */
@@ -124,6 +130,8 @@ export interface Preview {
   box?: { from: [number, number]; to: [number, number]; crossing: boolean };
   /** Screen-space lasso path (Lasso Select). */
   lasso?: { points: [number, number][]; crossing: boolean };
+  /** Handles to drag (Scale's grips), `hot` under the cursor. */
+  grips?: { at: Vec3; hot: boolean }[];
   /** Short texts at points in the model (the angle beside Rotate's protractor). */
   labels?: { at: Vec3; text: string }[];
 }
@@ -181,11 +189,24 @@ export type ToolId =
   /** 3D Text: asks for the text (in the app), then places it like a Library item. */
   | 'text3d';
 
+export interface ToolTips {
+  /** The button's text. */
+  label: string;
+  title: string;
+  /** Plain text; blank lines between paragraphs. */
+  text: string;
+}
+
 export interface Tool {
   readonly id: ToolId;
   readonly name: string;
   /** Status bar instructions for the current step. */
   hint(): string;
+  /**
+   * Longer instructions for something the tool does that is hard to guess (Follow Me's spirals),
+   * behind a small button in the status bar while the tool is in use.
+   */
+  tips?(): ToolTips;
   /** Measurements box label and current value. */
   vcbLabel(): string;
   vcbValue(): string;

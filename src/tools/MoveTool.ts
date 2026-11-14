@@ -13,7 +13,8 @@ import { formatLength, parseLength, parseLengths } from './units';
  * copy instead (the copy follows the mouse; copy mode ends with the copy, as in SketchUp); after a
  * copy type "3x" for a row of 3 copies, or "/3" to spread 3 copies
  * over the distance. Arrow keys lock the direction to an axis. Typing after finishing changes
- * the last move.
+ * the last move. Near the middle of a face it snaps to the face's centre (a small ×), to move
+ * shapes centre to centre.
  */
 export class MoveTool implements Tool {
   readonly id = 'move';
@@ -45,7 +46,7 @@ export class MoveTool implements Tool {
   }
 
   inference(): InferenceHints {
-    return this.from ? { reference: this.from } : {};
+    return this.from ? { reference: this.from, centres: true } : { centres: true };
   }
 
   toggleCopy(): boolean {

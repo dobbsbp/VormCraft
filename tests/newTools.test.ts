@@ -245,49 +245,145 @@ describe('arc tools', () => {
 });
 
 describe('Scale tool', () => {
+  /** A 100 mm cube: big enough that points on it can be clicked away from the grips (1 px per mm). */
   function boxH() {
     const H = harness();
-    pushPull(H.model, drawRectangle(H.model, GROUND_PLANE, [0, 0, 0], 10, 10).inner!, 10);
+    pushPull(H.model, drawRectangle(H.model, GROUND_PLANE, [0, 0, 0], 100, 100).inner!, 100);
     return H;
   }
 
   it('click base, reference, then drag: uniform scale of the clicked object', () => {
     const H = boxH();
     use(H.controller, 'scale');
-    click(H, [0, 0, 0], { kind: 'endpoint', face: findFaceAt(H.model, [5, 5, 0], [0, 0, -1])! });
-    click(H, [10, 0, 0], { kind: 'endpoint' });
-    move(H, [20, 0, 0], { kind: 'onEdge' });
+    click(H, [30, 0, 0], { kind: 'onEdge', face: findFaceAt(H.model, [50, 50, 0], [0, 0, -1])! });
+    click(H, [60, 0, 0], { kind: 'onEdge' });
+    move(H, [90, 0, 0], { kind: 'onEdge' });
     expect(H.controller.tool.vcbValue()).toBe('2');
-    click(H, [20, 0, 0], { kind: 'onEdge' });
-    expect(volume(H.model)).toBeCloseTo(8000);
+    click(H, [90, 0, 0], { kind: 'onEdge' });
+    expect(volume(H.model)).toBeCloseTo(8e6);
     expect(checkWatertight(H.model).watertight).toBe(true);
   });
 
   it('typed factors: uniform, per axis, length, mirror; re-dimension after', () => {
     const H = boxH();
-    H.controller.selection.set([findFaceAt(H.model, [5, 5, 10])!], []);
+    H.controller.selection.set([findFaceAt(H.model, [50, 50, 100])!], []);
     use(H.controller, 'scale');
-    click(H, [0, 0, 0], { kind: 'endpoint' });
+    click(H, [30, 0, 0], { kind: 'onEdge' });
     H.controller.typed('3');
-    expect(volume(H.model)).toBeCloseTo(27000);
+    expect(volume(H.model)).toBeCloseTo(27e6);
     H.controller.typed('2,1,1');
-    expect(volume(H.model)).toBeCloseTo(2000);
+    expect(volume(H.model)).toBeCloseTo(2e6);
     H.controller.typed('-1,1,1');
-    expect(volume(H.model)).toBeCloseTo(1000);
-    expect(H.model.findVertex([-10, 10, 10])).toBeDefined();
+    expect(volume(H.model)).toBeCloseTo(1e6);
+    expect(H.model.findVertex([-40, 100, 100])).toBeDefined();
     expect(checkWatertight(H.model).watertight).toBe(true);
     H.controller.undo();
-    expect(volume(H.model)).toBeCloseTo(1000);
-    expect(H.model.findVertex([10, 10, 10])).toBeDefined();
+    expect(volume(H.model)).toBeCloseTo(1e6);
+    expect(H.model.findVertex([100, 100, 100])).toBeDefined();
   });
 
   it('a typed length sets the new reference distance', () => {
     const H = boxH();
     use(H.controller, 'scale');
-    click(H, [0, 0, 0], { kind: 'endpoint', face: findFaceAt(H.model, [5, 5, 0], [0, 0, -1])! });
-    click(H, [10, 0, 0], { kind: 'endpoint' });
-    H.controller.typed('25mm');
-    expect(H.model.findVertex([25, 25, 25])).toBeDefined();
+    click(H, [30, 0, 0], { kind: 'onEdge', face: findFaceAt(H.model, [50, 50, 0], [0, 0, -1])! });
+    click(H, [60, 0, 0], { kind: 'onEdge' });
+    H.controller.typed('75mm');
+    expect(H.model.findVertex([205, 250, 250])).toBeDefined();
+  });
+
+  it('a yellow box with grips appears round the selection, or the object pointed at', () => {
+    const H = boxH();
+    use(H.controller, 'scale');
+    expect(H.controller.tool.preview()).toEqual({});
+    move(H, [50, 50, 100]);
+    const p = H.controller.tool.preview();
+    expect(p.lines?.[0]).toMatchObject({ color: 'scaleBox' });
+    expect(p.lines?.[0].points).toHaveLength(24);
+    // 8 corners, 12 edge middles, 6 side middles.
+    expect(p.grips).toHaveLength(26);
+    // Over empty space it stays on that object; Esc puts it away.
+    move(H, [300, 300, 0], { face: null });
+    expect(H.controller.tool.preview().grips).toHaveLength(26);
+    H.controller.tool.cancel();
+    expect(H.controller.tool.preview()).toEqual({});
+    // The selection wins, and a flat shape has grips only in its own plane.
+    const flat = drawRectangle(H.model, GROUND_PLANE, [300, 0, 0], 100, 50).inner!;
+    H.controller.selection.set([flat], []);
+    move(H, [500, 500, 0], { face: null });
+    expect(H.controller.tool.preview().grips).toHaveLength(8);
+  });
+
+  /** A free-standing 100 x 50 rectangle, selected, with the Scale tool. */
+  function flatH() {
+    const H = harness();
+    const f = drawRectangle(H.model, GROUND_PLANE, [0, 0, 0], 100, 50).inner!;
+    H.controller.selection.set([f], []);
+    use(H.controller, 'scale');
+    return H;
+  }
+  const size = (H: ReturnType<typeof harness>) => {
+    const xs = [...H.model.vertices.values()].map((v) => v.pos);
+    return [0, 1].map((a) => [Math.min(...xs.map((p) => p[a])), Math.max(...xs.map((p) => p[a]))]);
+  };
+
+  it('a side grip stretches one way, from the opposite side', () => {
+    const H = flatH();
+    move(H, [100, 25, 0]);
+    expect(H.controller.tool.hint()).toMatch(/stretch one way/);
+    expect(H.controller.tool.preview().grips?.filter((g) => g.hot)).toHaveLength(1);
+    click(H, [100, 25, 0]);
+    move(H, [150, 25, 0], { face: null });
+    expect(H.controller.tool.vcbValue()).toBe('1.5');
+    click(H, [150, 25, 0], { face: null });
+    expect(size(H)).toEqual([[0, 150], [0, 50]]);
+    // Typing afterwards changes it, still one way only.
+    H.controller.typed('3');
+    expect(size(H)).toEqual([[0, 300], [0, 50]]);
+  });
+
+  it('a corner grip scales in proportion; Shift frees each way; dragging works as well as clicking', () => {
+    const H = flatH();
+    move(H, [100, 50, 0]);
+    expect(H.controller.tool.hint()).toMatch(/^Corner: drag to scale in proportion/);
+    const press = ev(H.doc, [100, 50, 0]);
+    H.controller.tool.pointerDown(press);
+    move(H, [200, 100, 0], { face: null });
+    click(H, [200, 100, 0], { face: null });
+    expect(size(H)).toEqual([[0, 200], [0, 100]]);
+    H.controller.undo();
+    move(H, [100, 50, 0]);
+    click(H, [100, 50, 0]);
+    move(H, [150, 80, 0], { face: null, shift: true });
+    expect(H.controller.tool.vcbValue()).toBe('1.5, 1.6, 1');
+    click(H, [150, 80, 0], { face: null, shift: true });
+    expect(size(H)[0][1]).toBeCloseTo(150, 6);
+    expect(size(H)[1][1]).toBeCloseTo(80, 6);
+  });
+
+  it('Ctrl scales about the centre; a typed size while dragging sets the new length', () => {
+    const H = flatH();
+    move(H, [100, 25, 0]);
+    click(H, [100, 25, 0], { ctrl: true });
+    click(H, [150, 25, 0], { face: null, ctrl: true });
+    expect(size(H)).toEqual([[-50, 150], [0, 50]]);
+    H.controller.undo();
+    move(H, [50, 50, 0]);
+    click(H, [50, 50, 0]);
+    H.controller.typed('80mm');
+    expect(size(H)).toEqual([[0, 100], [0, 80]]);
+  });
+
+  it('scales a solid by a corner grip in proportion, from the opposite corner', () => {
+    const H = boxH();
+    H.controller.selection.set([findFaceAt(H.model, [50, 50, 100])!], []);
+    use(H.controller, 'scale');
+    move(H, [100, 100, 100]);
+    click(H, [100, 100, 100]);
+    click(H, [200, 200, 0], { face: null });
+    expect(volume(H.model)).toBeCloseTo(8e6);
+    expect(H.model.findVertex([0, 0, 0])).toBeDefined();
+    expect(H.model.findVertex([200, 200, 200])).toBeDefined();
+    expect(checkWatertight(H.model).watertight).toBe(true);
   });
 
   it('with nothing selected or clicked it explains what to do', () => {

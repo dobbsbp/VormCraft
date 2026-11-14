@@ -369,6 +369,24 @@ body {
   fill: #22b8cf;
 }
 
+.viewport-overlay .grip {
+  fill: #fff6cc;
+  stroke: #8a6a00;
+  stroke-width: 1.2;
+}
+
+.viewport-overlay .grip.hot {
+  fill: #e8590c;
+  stroke: #7a2e00;
+}
+
+.snap-centre {
+  fill: none;
+  stroke: #e8590c;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+
 .snap-edge {
   fill: #e03b3b;
 }
@@ -1165,6 +1183,27 @@ body {
 
 .status-hidden button:hover {
   background: var(--chrome);
+}
+
+/* A tool's tips (Follow Me: Spiral tips), opened in a window. */
+.status-tips {
+  padding: 1px 10px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.status-tips:hover {
+  background: var(--chrome);
+}
+
+.status-tips[hidden] {
+  display: none;
 }
 
 /* The bar shown while looking at an earlier version. */

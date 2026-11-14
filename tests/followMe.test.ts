@@ -240,10 +240,10 @@ describe('Follow Me tool', () => {
     expect(m.faces.has(p)).toBe(true);
   });
 
-  it('typing a value explains there is none to type', () => {
+  it('typing a value before sweeping round a circle explains what typing is for (a spiral)', () => {
     const h = harness();
     use(h.controller, 'followMe');
     h.controller.typed('10');
-    expect(h.controller.error).toMatch(/no typed value/);
+    expect(h.controller.error).toMatch(/To make a spiral, sweep a profile round a circle first/);
   });
 });

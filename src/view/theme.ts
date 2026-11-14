@@ -14,6 +14,7 @@ export const THEME = {
   axisY: 0x2e9b45,
   axisZ: 0x3550d0,
   parallel: 0xc026d3,
+  scaleBox: 0xe0b000,
 } as const;
 
 /** Tooltip text for the snap cue. */
@@ -21,6 +22,7 @@ export const SNAP_LABELS: Partial<Record<SnapKind, string>> = {
   endpoint: 'Endpoint',
   origin: 'Origin',
   midpoint: 'Midpoint',
+  centre: 'Centre',
   onEdge: 'On Edge',
   onFace: 'On Face',
   guidePoint: 'Guide Point',

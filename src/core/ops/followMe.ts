@@ -10,6 +10,7 @@ import { extractGeometry } from './group';
 import { unifySolids } from './mergeShapes';
 import { edgeChain } from './offsetEdges';
 import { reverseFaces } from './orient';
+import { applyAffine, rotation } from './transform';
 import { retagCurves, type CurveCandidate } from './pushPull';
 
 /** How far a cutting sweep reaches past its ends, to avoid exactly coplanar booleans. */
@@ -322,8 +323,13 @@ export function followMe(model: Model, profile: FaceId, pathEdges: Iterable<Half
   if (!facing) model.flipFace(profile);
   const oriented = model.faceVertexLoops(profile);
   const on = model.face(profile).normal;
-  const sweep = computeSweep(model, oriented.map((r) => r.map((v) => model.pos(v))), on, verts, chain.closed);
-  const curves = ringCurves(model, oriented);
+  let rings2 = oriented.map((r) => r.map((v) => model.pos(v)));
+  let curves = ringCurves(model, oriented);
+  // A whole circle standing on the centre line of a round path (the usual way to draw a sphere)
+  // would turn its far half through the near one: only the half on the path's side is turned.
+  const axis = chain.closed ? pathAxis(model, verts) : null;
+  if (axis) ({ rings: rings2, curves } = halfOnSide(rings2, curves, on, axis, model.pos(verts[0])));
+  const sweep = computeSweep(model, rings2, on, verts, chain.closed);
   const edges = model.faceHalfEdges(profile);
   model.removeFace(profile);
   const faces = chain.closed
@@ -338,6 +344,211 @@ export function followMe(model: Model, profile: FaceId, pathEdges: Iterable<Half
   const made = [...new Set([...faces, ...merged])].filter((f) => model.faces.has(f));
   faceOutward(model, made);
   return settleIntoSolids(model, made) ?? { mode: 'solid', faces: made };
+}
+
+export interface SpiralOptions {
+  /** Whole or part turns round the path's centre (more than 0). */
+  turns: number;
+  /** How far each turn climbs along the centre line (negative: down). */
+  rise: number;
+  /** How much further from the centre line each turn is (negative: in). */
+  grow?: number;
+}
+
+/** The centre line of a round path given as edges, or null. */
+export function roundPathAxis(model: Model, pathEdges: Iterable<HalfEdgeId>): { centre: Vec3; dir: Vec3; segments: number } | null {
+  const chain = edgeChain(model, [...pathEdges]);
+  return chain.closed ? pathAxis(model, chain.vertices) : null;
+}
+
+/**
+ * Follow Me round a circle that climbs as it goes: a spring or corkscrew (rise), a flat coil
+ * (grow), or a cone-shaped spring (both). The free-standing profile is screwed round the circle's
+ * centre line, a step per segment of the circle, starting where it stands; it is the base, and a
+ * copy of it closes the far end. The twisted sides are each split into two triangles along a
+ * soft diagonal, and the lines between steps are soft, so the coil looks smooth. Coils that would
+ * run into each other, or reach the centre line, are refused.
+ */
+export function followMeSpiral(model: Model, profile: FaceId, pathEdges: Iterable<HalfEdgeId>, opts: SpiralOptions): FollowMeResult {
+  const { turns, rise } = opts;
+  const grow = opts.grow ?? 0;
+  if (!(turns > 0) || turns > 200) throw new Error('Type a number of turns between 0 and 200');
+  const axis = roundPathAxis(model, pathEdges);
+  if (!axis) throw new Error('A spiral goes round a circle: select a circle as the path (or its edge)');
+  if (model.adjacentFaces(profile).size > 0) throw new Error('A spiral needs a profile standing on its own, not part of another shape');
+  const perTurn = Math.max(8, Math.round(axis.segments));
+
+  const rings = model.faceVertexLoops(profile);
+  const n = model.face(profile).normal;
+  const flat = rings.flat().map((v) => model.pos(v));
+  const radial = (p: Vec3) => {
+    const off = sub(p, axis.centre);
+    return sub(off, scale(axis.dir, dot(off, axis.dir)));
+  };
+  const centroid = scale(flat.reduce((a, p) => add(a, p), [0, 0, 0] as Vec3), 1 / flat.length);
+  const out = radial(centroid);
+  const dists = flat.map((p) => length(radial(p)));
+  if (Math.min(...dists) <= TOL || length(out) <= TOL) throw new Error('For a spiral, draw the profile beside the centre line of the circle, not on it (as for a ring)');
+  // Turn the way the profile faces; a profile lying along the circle cannot be swept round it.
+  const tangent = normalize(cross(axis.dir, out));
+  const facing = dot(n, tangent);
+  if (Math.abs(facing) < 0.25) {
+    throw new Error('The profile lies along the path instead of across it. Draw it standing across the circle, facing along it (press → or ← while drawing to stand it upright), then try again.');
+  }
+  const sense = Math.sign(facing);
+
+  // Coils one turn apart must not overlap: the profile has to move clear of itself.
+  const along = flat.map((p) => dot(sub(p, axis.centre), axis.dir));
+  const height = Math.max(...along) - Math.min(...along);
+  const width = Math.max(...dists) - Math.min(...dists);
+  if (turns > 1 + 1e-9 && Math.abs(rise) < height - TOL && Math.abs(grow) < width - TOL) {
+    throw new Error(`The coils would run into each other. Make each turn climb at least ${round(height)} mm${width > TOL ? `, or widen at least ${round(width)} mm` : ''}.`);
+  }
+  if (Math.min(...dists) + Math.min(0, grow) * turns <= TOL) throw new Error('The spiral would reach the centre line: make it narrow less, or take fewer turns');
+
+  const steps = Math.max(1, Math.ceil(turns * perTurn - 1e-9));
+  const outward = normalize(out);
+  const place = (t: number) => {
+    const turn = rotation(axis.centre, axis.dir, sense * 2 * Math.PI * turns * t);
+    const shift = add(scale(axis.dir, rise * turns * t), scale(outward, grow * turns * t));
+    return { point: (p: Vec3) => applyAffine(turn, add(p, shift)), vector: (v: Vec3) => sub(applyAffine(turn, v), applyAffine(turn, [0, 0, 0])) };
+  };
+
+  const curves = ringCurves(model, rings);
+  // The profile stays as the base, facing back along the spiral (the sides take its edges the
+  // other way round).
+  model.flipFace(profile);
+  const ids: VertexId[][][] = [rings];
+  for (let j = 1; j <= steps; j++) {
+    const at = place(j / steps);
+    ids.push(rings.map((ring) => ring.map((v) => model.addVertex(at.point(model.pos(v))))));
+  }
+  const faces: FaceId[] = [];
+  const soft: [VertexId, VertexId][] = [];
+  const wall = (a: VertexId, b: VertexId, c: VertexId, d: VertexId) => {
+    const pa = model.pos(a);
+    const normal = cross(sub(model.pos(b), pa), sub(model.pos(c), pa));
+    if (Math.abs(dot(sub(model.pos(d), pa), normalize(normal))) <= TOL) {
+      faces.push(model.addFace([a, b, c, d]));
+      return;
+    }
+    faces.push(model.addFace([a, b, c]), model.addFace([a, c, d]));
+    soft.push([a, c]);
+  };
+  for (let j = 0; j < steps; j++) {
+    rings.forEach((ring, r) =>
+      ring.forEach((_, k) => {
+        const k2 = (k + 1) % ring.length;
+        wall(ids[j][r][k], ids[j][r][k2], ids[j + 1][r][k2], ids[j + 1][r][k]);
+      }),
+    );
+  }
+  const end = place(1);
+  faces.push(model.addFace(ids[steps][0], ids[steps].slice(1), { normal: end.vector(n) }));
+  // The profile's circles, carried to the far end.
+  const made = new Map<CircleSpec, CurveId>();
+  curves.forEach((ring, r) =>
+    ring.forEach((spec, k) => {
+      if (!spec) return;
+      const circle = { ...spec, center: end.point(spec.center), normal: end.vector(spec.normal) };
+      const a = ids[steps][r][k];
+      const b = ids[steps][r][(k + 1) % ring.length];
+      if (!onCircle(model.pos(a), circle) || !onCircle(model.pos(b), circle)) return;
+      if (!made.has(spec)) made.set(spec, model.addCurve(circle));
+      model.setEdgeCurve(a, b, made.get(spec)!);
+    }),
+  );
+  // Smooth: the diagonals, the lines between steps, and lines along the coil where the profile is round.
+  for (const [a, c] of soft) model.setEdgeSoft(a, c, true);
+  for (let j = 1; j < steps; j++) for (const ring of ids[j]) ring.forEach((a, k) => model.setEdgeSoft(a, ring[(k + 1) % ring.length], true));
+  curves.forEach((ring, r) =>
+    ring.forEach((spec, k) => {
+      if (!spec || ring[(k - 1 + ring.length) % ring.length] !== spec) return;
+      for (let j = 0; j < steps; j++) model.setEdgeSoft(ids[j][r][k], ids[j + 1][r][k], true);
+    }),
+  );
+  faceOutward(model, [profile, ...faces]);
+  return { mode: 'solid', faces: [profile, ...faces] };
+}
+
+const round = (x: number) => Math.round(x * 10) / 10;
+
+/** The centre line of a closed path that is all one circle (its edges' curves), or null. */
+function pathAxis(model: Model, verts: VertexId[]): { centre: Vec3; dir: Vec3; segments: number } | null {
+  let first: CircleCurve | null = null;
+  for (let i = 0; i < verts.length; i++) {
+    const h = model.halfEdgeBetween(verts[i], verts[(i + 1) % verts.length]);
+    const id = h === undefined ? null : model.he(h).curve;
+    const c = id === null ? undefined : model.curves.get(id);
+    if (!c) return null;
+    first ??= c;
+    if (distance(c.center, first.center) > TOL || length(cross(c.normal, first.normal)) > 1e-6) return null;
+  }
+  return first && { centre: first.center, dir: normalize(first.normal), segments: first.segments };
+}
+
+/**
+ * The part of a profile on one side of a lathe's axis, when the profile stands on the axis (its
+ * plane holds the axis) and reaches across it; otherwise the rings unchanged. The side kept is
+ * the one `side` (the start of the path) is on. Where an edge crossing the axis is part of a circle
+ * centred on the axis, the cut is made at the circle's own point on the axis, so a whole circle
+ * gives a true half circle (a sphere's poles are not flattened).
+ */
+function halfOnSide(rings: Vec3[][], curves: (CircleSpec | null)[][], n: Vec3, axis: { centre: Vec3; dir: Vec3 }, side: Vec3): { rings: Vec3[][]; curves: (CircleSpec | null)[][] } {
+  const same = { rings, curves };
+  if (Math.abs(dot(n, axis.dir)) > 1e-6 || Math.abs(dot(sub(axis.centre, rings[0][0]), n)) > TOL) return same;
+  const u = normalize(cross(axis.dir, n));
+  const s = (p: Vec3) => dot(sub(p, axis.centre), u);
+  const sign = Math.sign(s(side));
+  if (!sign || !rings[0].some((p) => s(p) < -TOL) || !rings[0].some((p) => s(p) > TOL)) return same;
+  const onAxis = (p: Vec3) => add(axis.centre, scale(axis.dir, dot(sub(p, axis.centre), axis.dir)));
+  const cut = (a: Vec3, b: Vec3, spec: CircleSpec | null): Vec3 => {
+    const x = add(a, scale(sub(b, a), s(a) / (s(a) - s(b))));
+    if (!spec || distance(onAxis(spec.center), spec.center) > TOL) return x;
+    // The circle's point on the axis nearest the straight cut.
+    const along = dot(sub(x, spec.center), axis.dir) >= 0 ? 1 : -1;
+    return add(spec.center, scale(axis.dir, along * spec.radius));
+  };
+  const out: Vec3[][] = [];
+  const outCurves: (CircleSpec | null)[][] = [];
+  rings.forEach((ring, r) => {
+    const kept = ring.map((p) => s(p) * sign >= -TOL);
+    if (r > 0) {
+      if (kept.every(Boolean)) {
+        out.push(ring);
+        outCurves.push(curves[r]);
+      } else if (kept.some(Boolean)) {
+        throw new Error('The hole in the profile crosses the centre line of the path. Draw the profile on one side of it, then try again.');
+      }
+      return;
+    }
+    const pts: Vec3[] = [];
+    const cs: (CircleSpec | null)[] = [];
+    ring.forEach((a, k) => {
+      const k2 = (k + 1) % ring.length;
+      const b = ring[k2];
+      const spec = curves[r][k];
+      if (kept[k] && kept[k2]) {
+        pts.push(a);
+        cs.push(spec);
+      } else if (kept[k]) {
+        // Leaving the kept side: from here the outline runs along the axis (a straight edge).
+        pts.push(a);
+        if (Math.abs(s(a)) > TOL) {
+          cs.push(spec);
+          pts.push(cut(a, b, spec));
+        }
+        cs.push(null);
+      } else if (kept[k2] && Math.abs(s(b)) > TOL) {
+        // Coming back: the rest of this edge.
+        pts.push(cut(a, b, spec));
+        cs.push(spec);
+      }
+    });
+    out.push(pts);
+    outCurves.push(cs);
+  });
+  return { rings: out, curves: outCurves };
 }
 
 /**

@@ -53,9 +53,15 @@ export class CircleTool implements Tool {
   hint(): string {
     const example = this.shape === 'circle' ? '32s' : '8s';
     if (this.askingSides) return `Type the number of sides and press Enter (Enter keeps ${this.segments}), or click to set the radius.`;
-    return this.center
-      ? `Click to set the radius, or type it and press Enter. Type ${example} to change the sides.`
-      : `Click the centre on a face or on the ground. Sides: ${this.segments} (type e.g. ${example} to change). Arrow keys stand it upright (→ ←) or lay it flat (↑); ↓ stands it square across the last line pointed at.`;
+    if (this.center) return `Click to set the radius, or type it and press Enter. Type ${example} to change the sides.`;
+    // A lock stays on for the next shape too, so say so before the centre is clicked.
+    const i = AXES.findIndex((a) => a === this.axisLock);
+    const locked = this.lineLock
+      ? 'Standing square across the line you pointed at (↓ again to unlock). '
+      : i >= 0
+        ? `${i === 2 ? 'Flat' : 'Upright'}, facing the ${AXIS_NAMES[i]} axis (press the same arrow again to unlock). `
+        : '';
+    return `${locked}Click the centre on a face or on the ground. Sides: ${this.segments} (type e.g. ${example} to change). Arrow keys stand it upright (→ ←) or lay it flat (↑); ↓ stands it square across the last line pointed at.`;
   }
 
   vcbLabel(): string {
@@ -71,7 +77,8 @@ export class CircleTool implements Tool {
   }
 
   inference(): InferenceHints {
-    return this.center ? { plane: this.center.plane } : {};
+    // The centre can go on the middle of a face (an upright circle on a flat one, for a sphere).
+    return this.center ? { plane: this.center.plane } : { centres: true };
   }
 
   pointerMove(e: ToolEvent): void {
@@ -167,9 +174,12 @@ export class CircleTool implements Tool {
     this.askingSides = false;
   }
 
+  /** Also unlocks: after another tool has changed the model, the next shape lies on the face clicked again. */
   reset(): void {
     this.cancel();
     this.last = null;
+    this.axisLock = null;
+    this.lineLock = false;
   }
 
   preview(): Preview {
