@@ -4,6 +4,7 @@ import type { FaceId, HalfEdgeId, VertexId } from '../core/model/Model';
 import type { Document, DocumentSnapshot } from '../doc/Document';
 import type { GroupId } from '../doc/Groups';
 import type { GuideId } from '../doc/Guides';
+import type { SectionId } from '../doc/Sections';
 import type { Selection } from './Selection';
 
 export type SnapKind =
@@ -66,8 +67,15 @@ export interface ToolEvent {
   group: GroupId | null;
   /** The cursor is over geometry outside the group being edited (clicking it closes the group). */
   outside: boolean;
+  /**
+   * The face in front when it is not in the model being edited (a group's, or outside the open
+   * group): whose geometry it is (null: the top level), the face and the point hit.
+   */
+  otherFace?: { owner: GroupId | null; face: FaceId; point: Vec3 } | null;
   /** Guide under the cursor (guide points win over guide lines), if any. */
   guide: { id: GuideId; kind: 'line' | 'point' } | null;
+  /** The section plane whose outline is under the cursor, if any. */
+  section?: SectionId | null;
   ray: Ray;
   screen: [number, number];
   shift: boolean;
@@ -100,11 +108,13 @@ export interface InferenceHints {
    * middle; Circle and Polygon: their centre there).
    */
   centres?: boolean;
+  /** Points not in the model yet that snap like endpoints (Wall: its corners, so a room can be closed). */
+  points?: readonly Vec3[];
   /** Keep the inferred point on this plane (projecting snapped points onto it). */
   plane?: Plane;
 }
 
-export type PreviewColor = 'preview' | 'axisX' | 'axisY' | 'axisZ' | 'parallel' | 'guide' | 'select' | 'scaleBox';
+export type PreviewColor = 'preview' | 'axisX' | 'axisY' | 'axisZ' | 'parallel' | 'guide' | 'select' | 'scaleBox' | 'section';
 
 export interface PreviewLines {
   /** Segment endpoint pairs. */
@@ -126,6 +136,13 @@ export interface Preview {
   groups?: GroupId[];
   /** Guides to highlight (e.g. the one under the Select cursor). */
   guides?: GuideId[];
+  /**
+   * A section plane being moved: the view draws it, and cuts the model, where it would go (as the
+   * active cut), so the cut follows the mouse before the move is made.
+   */
+  sectionMove?: { id: SectionId; point: Vec3; normal: Vec3 };
+  /** Section planes to highlight (the one under the Select or Eraser cursor). */
+  sections?: SectionId[];
   /** Screen-space selection rectangle (Select tool box drag). */
   box?: { from: [number, number]; to: [number, number]; crossing: boolean };
   /** Screen-space lasso path (Lasso Select). */
@@ -185,6 +202,8 @@ export type ToolId =
   | 'pan'
   | 'zoom'
   | 'zoomWindow'
+  | 'section'
+  | 'wall'
   | 'place'
   /** 3D Text: asks for the text (in the app), then places it like a Library item. */
   | 'text3d';

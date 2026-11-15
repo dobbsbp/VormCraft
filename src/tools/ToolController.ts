@@ -10,7 +10,7 @@ import type { VersionKind } from '../doc/Versions';
 import { openVersion, recordVersion } from '../io/versions';
 import type { SkpImport, SkpPart } from '../io/skpImport';
 import { ALL_PARTS, applyScene, captureScene, type SceneId, type SceneParts, type SceneView } from '../doc/Scenes';
-import { extractGeometry, mergeGeometry, modelBounds, scaleModel } from '../core/ops/group';
+import { extractGeometry, mergeGeometry, modelBounds } from '../core/ops/group';
 import { mergeFlatFaces, shapesOf, unifySolids } from '../core/ops/mergeShapes';
 import { reverseFaces } from '../core/ops/orient';
 import { scaling, selectionVertices, transformVertices } from '../core/ops/transform';
@@ -33,6 +33,9 @@ import { NavigationTool } from './NavigationTool';
 import { infer } from './inference';
 import { OffsetTool } from './OffsetTool';
 import { FollowMeTool } from './FollowMeTool';
+import { SectionTool } from './SectionTool';
+import { sectionAt } from './sectionPick';
+import { WallTool } from './WallTool';
 import { PaintTool } from './PaintTool';
 import { PushPullTool } from './PushPullTool';
 import { RectangleTool } from './RectangleTool';
@@ -136,6 +139,8 @@ export class ToolController {
       pushpull: new PushPullTool(this.ctx),
       offset: new OffsetTool(this.ctx),
       followMe: new FollowMeTool(this.ctx),
+      section: new SectionTool(this.ctx),
+      wall: new WallTool(this.ctx),
       paint: new PaintTool(
         this.ctx,
         () => this.paintMaterial,
@@ -192,6 +197,9 @@ export class ToolController {
     try {
       if (base) this.doc.restore(base);
       change();
+      // A change inside a component instance changes the component: its other instances follow.
+      if (this.doc.editing !== null) this.doc.groups.syncFrom(this.doc.editing);
+      this.doc.groups.prune();
       // New faces cut from painted faces keep their paint.
       const was = this.doc.editing === null ? (base ?? before).model : (base ?? before).groups.get(this.doc.editing)?.model;
       if (was && inherit) inheritMaterials(was, this.doc.model);
@@ -229,7 +237,7 @@ export class ToolController {
   private afterDocumentChange(): void {
     this.revision++;
     setActiveUnits(this.doc.units);
-    this.selection.prune(this.doc.model, this.doc.labels, this.doc.guides, (g) => this.doc.groups.get(g)?.parent === this.doc.editing && !this.doc.groups.isHidden(g));
+    this.selection.prune(this.doc.model, this.doc.labels, this.doc.guides, (g) => this.doc.groups.get(g)?.parent === this.doc.editing && !this.doc.groups.isHidden(g), this.doc.sections);
     this.onModelChanged();
     this.onUpdate();
   }
@@ -286,6 +294,11 @@ export class ToolController {
     this.editDocument('Delete material', () => {
       for (const m of this.doc.allModels()) unpaintMaterial(m, id);
       for (const g of this.doc.groups.items.values()) if (g.material === id) delete g.material;
+      for (const c of this.doc.groups.components.values())
+        for (const p of c.parts) {
+          unpaintMaterial(p.model, id);
+          if (p.material === id) delete p.material;
+        }
       this.doc.materials.delete(id);
     });
     if (this.paintMaterial === id) this.setPaintMaterial(undefined);
@@ -339,7 +352,9 @@ export class ToolController {
     if (!this.tool.toggleCopy) return false;
     const on = this.tool.toggleCopy();
     const what = this.tool.id === 'pushpull' ? 'new starting face' : 'copy mode';
-    this.notice = quiet ? null : on ? `${this.tool.name}: ${what} on (press Ctrl again to switch off)` : `${this.tool.name}: ${what} off`;
+    // A tool using Ctrl for something else (Wall: which side of the line) says what it did.
+    const own = this.tool.copying ? null : (this.tool.notice?.() ?? null);
+    this.notice = quiet ? null : (own ?? (on ? `${this.tool.name}: ${what} on (press Ctrl again to switch off)` : `${this.tool.name}: ${what} off`));
     this.onUpdate();
     return true;
   }
@@ -406,6 +421,8 @@ export class ToolController {
       guide,
       group,
       outside: inFront && group === null,
+      otherFace: inFront && other ? { owner: other.owner, face: other.face, point: other.point } : null,
+      section: sectionAt(this.doc, this.projector(), s.screen),
       face: inFront ? null : (s.faceHit?.face ?? null),
       facePoint: inFront ? null : (s.faceHit?.point ?? null),
       edge: s.edge,
@@ -562,7 +579,7 @@ export class ToolController {
 
   deleteSelection(): void {
     if (this.selection.size === 0) return;
-    const { faces, edges, points, labels, guides, groups } = this.selection;
+    const { faces, edges, points, labels, guides, groups, sections } = this.selection;
     // A point erases the lines that meet there (and the faces they bound).
     const model = this.doc.model;
     const pointEdges = [...pointVertices(model, points)].flatMap((v) => [...model.outgoing(v)].map((h) => edgeId(model, h)));
@@ -573,6 +590,7 @@ export class ToolController {
           for (const g of groups) this.doc.groups.delete(g);
           for (const l of labels) this.doc.labels.delete(l);
           for (const g of guides) this.doc.guides.delete(g);
+          for (const s of sections) this.doc.sections.delete(s);
         },
         undefined,
         null,
@@ -608,7 +626,7 @@ export class ToolController {
     let id: SceneId | null = null;
     this.editDocument('Add scene', () => {
       const scenes = this.doc.scenes;
-      id = scenes.add({ name: scenes.nextName(), parts: { ...ALL_PARTS }, ...captureScene(this.view(), this.doc.groups, this.doc.guides) });
+      id = scenes.add({ name: scenes.nextName(), parts: { ...ALL_PARTS }, ...captureScene(this.view(), this.doc.groups, this.doc.guides, this.doc.sections) });
     });
     if (id !== null) this.currentScene = id;
     this.onUpdate();
@@ -617,7 +635,7 @@ export class ToolController {
 
   /** Overwrite a scene with the current view (its name, place and saved parts stay). */
   updateScene(id: SceneId): void {
-    this.editDocument('Update scene', () => this.doc.scenes.update(id, captureScene(this.view(), this.doc.groups, this.doc.guides)));
+    this.editDocument('Update scene', () => this.doc.scenes.update(id, captureScene(this.view(), this.doc.groups, this.doc.guides, this.doc.sections)));
     this.currentScene = id;
     this.onUpdate();
   }
@@ -662,9 +680,9 @@ export class ToolController {
   goToScene(id: SceneId, seconds = this.doc.scenes.transition): void {
     const s = this.doc.scenes.get(id);
     if (!s) return;
-    const hiddenBefore = [...this.doc.groups.items.values()].map((g) => !!g.hidden).join();
-    applyScene(s, this.view(), this.doc.groups, this.doc.guides, seconds);
-    if ([...this.doc.groups.items.values()].map((g) => !!g.hidden).join() !== hiddenBefore) this.dirty = true;
+    const hiddenBefore = [...this.doc.groups.items.values()].map((g) => !!g.hidden).join() + this.doc.sections.active;
+    applyScene(s, this.view(), this.doc.groups, this.doc.guides, seconds, this.doc.sections);
+    if ([...this.doc.groups.items.values()].map((g) => !!g.hidden).join() + this.doc.sections.active !== hiddenBefore) this.dirty = true;
     this.currentScene = id;
     this.notice = `Scene: ${s.name}`;
     this.afterDocumentChange();
@@ -850,7 +868,11 @@ export class ToolController {
     const g = this.doc.groups.get(id);
     if (!g || g.parent !== this.doc.editing) return;
     this.switchContext(id);
-    this.notice = `Editing ${g.name}. Esc (with nothing selected) or a click outside it closes the group.`;
+    const copies = g.component ? this.doc.groups.instances(g.component.id).length : 0;
+    this.notice =
+      copies > 1
+        ? `Editing ${g.name}: changes reach all ${copies} copies. Esc (with nothing selected) or a click outside it closes the component.`
+        : `Editing ${g.name}. Esc (with nothing selected) or a click outside it closes the ${g.component ? 'component' : 'group'}.`;
     this.onUpdate();
   }
 
@@ -1126,6 +1148,8 @@ export class ToolController {
     const guide = e.guide && (e.guide.kind === 'point' || e.edge === null) ? e.guide.id : null;
     if (guide !== null) {
       if (!sel.guides.has(guide)) sel.set([], [], [guide]);
+    } else if (e.section != null && e.edge === null) {
+      if (!sel.sections.has(e.section)) sel.toggleSection(e.section, false);
     } else if (e.edge !== null) {
       const id = edgeId(model, e.edge);
       if (!sel.edges.has(id)) sel.set([], [id]);
@@ -1242,7 +1266,7 @@ export class ToolController {
     const groups = [...this.selection.groups];
     this.editDocument(`Flip along ${['red', 'green', 'blue'][axis]}`, () => {
       if (vertices.size) transformVertices(this.doc.model, vertices, scaling(centre, factors));
-      for (const id of groups) for (const m of this.doc.groups.subtree(id).map((g) => g.model)) scaleModel(m, centre, factors);
+      for (const id of groups) this.doc.groups.transform(id, scaling(centre, factors));
     });
   }
 
@@ -1305,8 +1329,141 @@ export class ToolController {
     }
     this.editDocument('Rename group', () => {
       const g = this.doc.groups.get(id);
-      if (g) g.name = name.trim();
+      if (g?.component) this.doc.groups.renameComponent(g.component.id, name.trim());
+      else if (g) g.name = name.trim();
     });
+  }
+
+  /**
+   * Make Component: the selected group (or a new group of the selected geometry) becomes a
+   * component. Copies of it then stay linked: editing one changes them all.
+   */
+  makeComponent(): void {
+    const { faces, edges, groups } = this.selection;
+    if (this.doc.editing !== null && this.doc.groups.instanceOf(this.doc.editing)) {
+      this.error = 'A component cannot be made inside another component; close the component first';
+      this.onUpdate();
+      return;
+    }
+    if (faces.size === 0 && edges.size === 0 && groups.size === 0) {
+      this.error = 'Select what to make into a component first (faces, edges or a group)';
+      this.onUpdate();
+      return;
+    }
+    const single = faces.size === 0 && edges.size === 0 && groups.size === 1 ? [...groups][0] : null;
+    if (single !== null && this.doc.groups.get(single)?.component) {
+      this.notify(`${this.doc.groups.get(single)!.name} is already a component`);
+      return;
+    }
+    let id: GroupId | null = single;
+    this.run(() =>
+      this.apply(
+        () => {
+          if (id === null) {
+            const model = extractGeometry(this.doc.model, faces, edges);
+            id = this.doc.groups.add(model, this.doc.editing);
+            for (const g of groups) {
+              const child = this.doc.groups.get(g);
+              if (child) child.parent = id;
+            }
+          }
+          this.doc.groups.makeComponent(id);
+        },
+        undefined,
+        null,
+        'Make component',
+      ),
+    );
+    if (id !== null && this.doc.groups.has(id)) {
+      this.selection.set([], [], [], [id]);
+      if (this.error === null) this.notify(`Made ${this.doc.groups.get(id)!.name}. Copies of it stay linked: editing one changes them all.`);
+    }
+  }
+
+  /** Whether the selection holds a component instance that has other instances (Make Unique applies). */
+  canMakeUnique(): boolean {
+    return [...this.selection.groups].some((id) => {
+      const c = this.doc.groups.get(id)?.component;
+      return c !== undefined && this.doc.groups.instances(c.id).length > 1;
+    });
+  }
+
+  /** Make Unique: each selected component copy gets a component of its own. */
+  makeUnique(): void {
+    const ids = [...this.selection.groups].filter((id) => this.doc.groups.get(id)?.component);
+    if (!ids.length) {
+      this.error = 'Select a component to make unique';
+      this.onUpdate();
+      return;
+    }
+    this.editDocument('Make unique', () => {
+      // Selected copies of one component stay linked to each other.
+      const made = new Map<number, number>();
+      for (const id of ids) {
+        const g = this.doc.groups.get(id)!;
+        const from = g.component!.id;
+        const to = made.get(from);
+        if (to === undefined) made.set(from, this.doc.groups.makeUnique(id));
+        else {
+          g.component = { id: to, place: g.component!.place };
+          g.name = this.doc.groups.components.get(to)!.name;
+        }
+      }
+    });
+  }
+
+  /** The section plane the section commands act on: the selected one, else the active one, else the newest. */
+  private currentSection(): number | null {
+    const s = this.doc.sections;
+    const [picked] = [...this.selection.sections].filter((id) => s.items.has(id));
+    if (picked !== undefined) return picked;
+    if (s.active !== null) return s.active;
+    const ids = [...s.items.keys()];
+    return ids.length ? ids[ids.length - 1] : null;
+  }
+
+  /** Section commands, or why they cannot run: there must be a section plane. */
+  private withSection(label: string, change: (id: number) => void): void {
+    const id = this.currentSection();
+    if (id === null) {
+      this.error = 'There is no section plane yet: use the Section Plane tool to cut the model';
+      this.onUpdate();
+      return;
+    }
+    this.editDocument(label, () => change(id));
+  }
+
+  /** Reverse Cut: the other side of the section plane is cut away. */
+  reverseSection(): void {
+    this.withSection('Reverse cut', (id) => {
+      const p = this.doc.sections.items.get(id)!;
+      p.normal = [-p.normal[0], -p.normal[1], -p.normal[2]];
+      this.doc.sections.active = id;
+    });
+  }
+
+  /** Turn the cut on (the newest plane, if none is active) or off. */
+  toggleSectionCut(): void {
+    const on = this.doc.sections.active === null;
+    this.withSection(on ? 'Section cut on' : 'Section cut off', (id) => (this.doc.sections.active = on ? id : null));
+  }
+
+  /** Make the next section plane (in the order made) the one that cuts. */
+  nextSection(): void {
+    const ids = [...this.doc.sections.items.keys()];
+    const at = ids.indexOf(this.currentSection() ?? -1);
+    this.withSection('Next section', () => (this.doc.sections.active = ids[(at + 1) % ids.length]));
+  }
+
+  /** Show or hide the section planes themselves (the cut stays). */
+  toggleSectionPlanes(): void {
+    const show = !this.doc.sections.visible;
+    this.withSection(show ? 'Show section planes' : 'Hide section planes', () => (this.doc.sections.visible = show));
+  }
+
+  /** Delete the current section plane (the cut goes with it). */
+  deleteSection(): void {
+    this.withSection('Delete section plane', (id) => this.doc.sections.delete(id));
   }
 
   /** Show a message in the status bar until the next action. */
@@ -1333,8 +1490,8 @@ export class ToolController {
         if (group.length > 1) surfaces++;
         else flat++;
       }
-      const items = [part(this.selection.groups.size, 'group'), part(surfaces, 'curved surface'), part(flat, 'face'), part(edges.size, 'edge'), part(this.selection.points.size, 'point'), part(this.selection.guides.size, 'guide'), part(this.selection.labels.size, 'label')];
-      return `Selected: ${items.filter(Boolean).join(', ')}. Delete erases, Esc clears.`;
+      const items = [part(this.selection.groups.size, 'group'), part(surfaces, 'curved surface'), part(flat, 'face'), part(edges.size, 'edge'), part(this.selection.points.size, 'point'), part(this.selection.guides.size, 'guide'), part(this.selection.labels.size, 'label'), part(this.selection.sections.size, 'section plane')];
+      return `Selected: ${items.filter(Boolean).join(', ')}. Delete erases, Esc clears.${this.selection.sections.size && this.selection.size === this.selection.sections.size ? ' Move or the Section Plane tool moves it.' : ''}`;
     }
     return this.tool.hint();
   }

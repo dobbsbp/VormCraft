@@ -5,11 +5,14 @@ import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeome
 import type { Vec3 } from '../core/math/vec3';
 import type { FaceId, HalfEdgeId, MaterialId, Model, VertexId } from '../core/model/Model';
 import { modelBounds } from '../core/ops/group';
+import { planeFrame, sectionCut } from '../core/ops/section';
 import { DEFAULT_BACKDROP, type Backdrop } from '../doc/Backdrop';
 import type { Document } from '../doc/Document';
 import type { GroupId } from '../doc/Groups';
 import type { Guide, GuideId, Guides } from '../doc/Guides';
 import type { LabelId, Labels } from '../doc/Labels';
+import type { SectionId } from '../doc/Sections';
+import { sectionFrames } from '../tools/sectionPick';
 import type { Material, Materials } from '../doc/Materials';
 import { DEFAULT_STYLE, type CameraView, type DisplayStyle, type FaceStyle, type SceneView } from '../doc/Scenes';
 import { dimensionLayout } from '../tools/dimension';
@@ -36,6 +39,8 @@ export interface Overlay {
   selectedLabels: Iterable<LabelId>;
   selectedGuides: Iterable<GuideId>;
   selectedGroups: Iterable<GroupId>;
+  /** Selected section planes (their outlines are drawn in the selection colour). */
+  selectedSections?: Iterable<SectionId>;
   preview: Preview;
   snap: Snap | null;
 }
@@ -49,7 +54,11 @@ const PREVIEW_COLORS: Record<PreviewColor, number> = {
   guide: THEME.guide,
   select: THEME.select,
   scaleBox: THEME.scaleBox,
+  section: THEME.section,
 };
+
+/** How far past a section plane things still show (mm), so the filled cut on the plane is not clipped. */
+const SECTION_EPS = 0.01;
 
 /** Drawn geometry of one model other than the one being edited. */
 interface Layer {
@@ -137,6 +146,17 @@ export class Viewer implements SceneView {
   private sphere: THREE.Sphere | null = null;
   private readonly overlayGroup = new THREE.Group();
   private readonly guideGroup = new THREE.Group();
+  private readonly sectionGroup = new THREE.Group();
+  /**
+   * Drawn after the model without the section cut, so they show on the cut-away side too: the
+   * section planes' outlines (`freeSection`) and the tools' previews and outline highlights
+   * (`freeOverlay`), such as a plane being moved up past the cut.
+   */
+  private readonly unclipped = new THREE.Group();
+  /** A section plane being moved (`Preview.sectionMove`): it cuts the view in place of the active one. */
+  private sectionLive: { id: SectionId; point: Vec3; normal: Vec3 } | null = null;
+  private readonly freeSection = new THREE.Group();
+  private readonly freeOverlay = new THREE.Group();
   private readonly lineMaterials: LineMaterial[] = [];
   private readonly svg: SVGSVGElement;
   private readonly boxEl: HTMLDivElement;
@@ -209,7 +229,8 @@ export class Viewer implements SceneView {
     this.backEdges.visible = false;
     this.backEdges.renderOrder = -1;
     this.hiddenEdges = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineDashedMaterial({ color: THEME.edge, dashSize: 4, gapSize: 3, transparent: true, opacity: 0.6 }));
-    this.scene.add(this.frontMesh, this.backMesh, this.edges, this.backEdges, this.hiddenEdges, this.layerGroup, buildAxes(), this.guideGroup, this.overlayGroup);
+    this.scene.add(this.frontMesh, this.backMesh, this.edges, this.backEdges, this.hiddenEdges, this.layerGroup, buildAxes(), this.guideGroup, this.sectionGroup, this.overlayGroup);
+    this.unclipped.add(this.freeSection, this.freeOverlay);
 
     this.svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     this.svg.classList.add('viewport-overlay');
@@ -273,6 +294,7 @@ export class Viewer implements SceneView {
     const dash = Math.max(this.sceneSphere().radius / 120, 0.5);
     for (const l of [this.backEdges, this.hiddenEdges]) Object.assign(l.material as THREE.LineDashedMaterial, { dashSize: dash, gapSize: dash * 0.75 });
     this.rebuildGuides();
+    this.rebuildSection();
     this.rebuildOverlay();
   }
 
@@ -600,6 +622,7 @@ export class Viewer implements SceneView {
       if (this.nav.projection === 'parallel') this.nav.syncParallel(this.ortho, sphere);
       this.backdropLayer.update(this.view());
       this.renderer.render(this.scene, this.view());
+      this.renderUnclipped();
       this.drawScreenOverlay();
     });
   }
@@ -668,11 +691,30 @@ export class Viewer implements SceneView {
     }
   }
 
+  /** The second pass: what the section cut must not hide, over the model already drawn (keeping its depth). */
+  private renderUnclipped(): void {
+    if (!this.freeSection.children.length && !this.freeOverlay.children.length) return;
+    const clip = this.renderer.clippingPlanes;
+    const autoClear = this.renderer.autoClear;
+    this.renderer.clippingPlanes = [];
+    this.renderer.autoClear = false;
+    this.renderer.render(this.unclipped, this.view());
+    this.renderer.autoClear = autoClear;
+    this.renderer.clippingPlanes = clip;
+  }
+
   private rebuildOverlay(): void {
     this.clearGroup(this.overlayGroup);
+    this.clearGroup(this.freeOverlay);
     const { preview, snap } = this.overlay;
+    const live = preview.sectionMove ?? null;
+    if (JSON.stringify(live) !== JSON.stringify(this.sectionLive)) {
+      this.sectionLive = live && { id: live.id, point: [...live.point], normal: [...live.normal] };
+      this.rebuildSection();
+    }
     const m = this.model;
     const add = (o: THREE.Object3D | null) => o && this.overlayGroup.add(o);
+    const addFree = (o: THREE.Object3D | null) => o && this.freeOverlay.add(o);
 
     const selectedFaces = [...this.overlay.selectedFaces].filter((f) => m.faces.has(f));
     add(this.tint(selectedFaces, THEME.select, 0.32));
@@ -711,6 +753,22 @@ export class Viewer implements SceneView {
       if (pts.length) add(this.lines(pts, this.lineMaterial(color, width, { dashed: true }), 2));
     }
 
+    // Selected and hovered section planes: their outlines, thicker and in the selection colours.
+    const frames = this.doc.sections.items.size && this.doc.sections.visible ? sectionFrames(this.doc) : null;
+    if (frames) {
+      for (const [ids, color] of [
+        [new Set(this.overlay.selectedSections ?? []), THEME.select],
+        [new Set(preview.sections ?? []), THEME.hover],
+      ] as const) {
+        const pts: number[] = [];
+        for (const id of ids) {
+          const c = frames.get(id);
+          if (c) for (let i = 0; i < 4; i++) pts.push(...c[i], ...c[(i + 1) % 4]);
+        }
+        if (pts.length) addFree(this.lines(pts, this.lineMaterial(color, 3, { onTop: true }), 3));
+      }
+    }
+
     const previewLines: PreviewLines[] = [...(preview.lines ?? [])];
     if ((snap?.kind === 'axis' || snap?.kind === 'parallel' || snap?.kind === 'perpendicular') && snap.from) {
       const color = snap.kind === 'axis' ? (['axisX', 'axisY', 'axisZ'] as const)[snap.axis ?? 0] : 'parallel';
@@ -719,7 +777,7 @@ export class Viewer implements SceneView {
     }
     for (const l of previewLines) {
       if (l.points.length < 2) continue;
-      add(this.lines(l.points.flatMap((p) => [...p]), this.lineMaterial(PREVIEW_COLORS[l.color], l.width ?? 1.5, { dashed: l.dashed, onTop: true }), 3));
+      addFree(this.lines(l.points.flatMap((p) => [...p]), this.lineMaterial(PREVIEW_COLORS[l.color], l.width ?? 1.5, { dashed: l.dashed, onTop: true }), 3));
     }
 
     const box = preview.box;
@@ -1055,17 +1113,86 @@ export class Viewer implements SceneView {
     const viewport = this.viewport();
     const ndc = new THREE.Vector2((screen[0] / viewport.width) * 2 - 1, -(screen[1] / viewport.height) * 2 + 1);
     const wire = this.faceStyle === 'wireframe';
-    const hits = pickHits({ camera: this.view(), ndc, viewport, faceObjects: wire ? [] : [this.frontMesh, this.backMesh], data: this.data, seeThrough: this.faceStyle === 'xray' });
+    const keep = this.sectionKeep();
+    const hits = pickHits({ camera: this.view(), ndc, viewport, faceObjects: wire ? [] : [this.frontMesh, this.backMesh], data: this.data, seeThrough: this.faceStyle === 'xray', keep });
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(ndc, this.view());
     const meshes = wire ? [] : this.layers.flatMap((l) => [l.front, l.back]);
-    const hit = raycaster.intersectObjects(meshes, false).find((h) => h.faceIndex !== undefined && h.faceIndex !== null);
+    const hit = raycaster.intersectObjects(meshes, false).find((h) => h.faceIndex !== undefined && h.faceIndex !== null && (!keep || keep([h.point.x, h.point.y, h.point.z])));
     const layer = hit && this.layers.find((l) => l.front === hit.object || l.back === hit.object);
     if (!hit || !layer || (hits.face && hits.face.distance <= hit.distance)) return { ...hits, other: null };
     const other = { owner: layer.owner, face: layer.data.triangleFaces[hit.faceIndex!], point: [hit.point.x, hit.point.y, hit.point.z] as Vec3, distance: hit.distance };
     // An edge of the edited model behind the other geometry is hidden by it.
     const edge = hits.edge && (this.faceStyle === 'xray' || hits.edge.distance <= hit.distance * (1 + 1e-3)) ? hits.edge : null;
     return { face: null, edge, other };
+  }
+
+  /** With a section cut: whether a point is on the side that shows (so it can be picked). */
+  /** The plane cutting the view: one being moved, else the active one. */
+  private cutPlane(): { id: SectionId; point: Vec3; normal: Vec3 } | undefined {
+    const live = this.sectionLive;
+    if (live && this.doc.sections.items.has(live.id)) return live;
+    return this.doc.sections.activePlane();
+  }
+
+  private sectionKeep(): ((p: Vec3) => boolean) | undefined {
+    const s = this.cutPlane();
+    if (!s) return undefined;
+    const [px, py, pz] = s.point;
+    const [nx, ny, nz] = s.normal;
+    return (p) => (p[0] - px) * nx + (p[1] - py) * ny + (p[2] - pz) * nz <= SECTION_EPS;
+  }
+
+  /**
+   * The section cut: the view is clipped at the active plane (the backdrop is not), the cut
+   * through each visible model is outlined and filled, and the planes are drawn (if shown).
+   */
+  private rebuildSection(): void {
+    this.clearGroup(this.sectionGroup);
+    this.clearGroup(this.freeSection);
+    const sections = this.doc.sections;
+    const active = this.cutPlane();
+    this.renderer.clippingPlanes = active
+      ? [new THREE.Plane(new THREE.Vector3(...active.normal).negate(), active.normal[0] * active.point[0] + active.normal[1] * active.point[1] + active.normal[2] * active.point[2] + SECTION_EPS)]
+      : [];
+    if (active) {
+      const lines: number[] = [];
+      const fill: number[] = [];
+      const owners: (GroupId | null)[] = [null, ...this.doc.groups.items.keys()];
+      for (const owner of owners) {
+        if (owner !== null && this.doc.groups.isHidden(owner)) continue;
+        const cut = sectionCut(this.doc.modelOf(owner), active.point, active.normal);
+        for (const [a, b] of cut.segments) lines.push(...a, ...b);
+        for (const p of cut.fill) fill.push(...p);
+      }
+      if (fill.length && this.faceStyle !== 'wireframe') {
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(fill), 3));
+        const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: THEME.sectionFill, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }));
+        this.sectionGroup.add(mesh);
+      }
+      if (lines.length) this.sectionGroup.add(this.lines(lines, this.lineMaterial(THEME.sectionCut, 2.5), 1));
+    }
+    if (!sections.visible || !sections.items.size) return;
+    const frames = sectionFrames(this.doc);
+    const live = this.sectionLive;
+    if (live && frames.has(live.id)) {
+      const b = modelBounds(this.doc.allModels()) ?? { min: [-1000, -1000, 0] as Vec3, max: [1000, 1000, 1000] as Vec3 };
+      frames.set(live.id, planeFrame(live.point, live.normal, b.min, b.max));
+    }
+    for (const s of sections.items.values()) {
+      const on = s.id === active?.id;
+      const c = frames.get(s.id)!;
+      const pts: number[] = [];
+      for (let i = 0; i < 4; i++) pts.push(...c[i], ...c[(i + 1) % 4]);
+      // Arrows from two corners pointing to the side that shows.
+      const size = Math.hypot(c[1][0] - c[0][0], c[1][1] - c[0][1], c[1][2] - c[0][2]) * 0.06;
+      for (const corner of [c[0], c[2]]) {
+        const tip: Vec3 = [corner[0] - s.normal[0] * size, corner[1] - s.normal[1] * size, corner[2] - s.normal[2] * size];
+        pts.push(...corner, ...tip);
+      }
+      this.freeSection.add(this.lines(pts, this.lineMaterial(on ? THEME.section : THEME.sectionIdle, on ? 2 : 1.2, { dashed: !on }), 1));
+    }
   }
 
   /** Pick at a viewport position and package it for the tools. */

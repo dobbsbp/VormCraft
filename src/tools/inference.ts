@@ -134,6 +134,7 @@ export function infer(input: InferenceInput): Snap | null {
   // otherwise the model axes through the origin.
   const ORIGIN: Vec3 = [0, 0, 0];
   offer({ kind: 'origin', point: ORIGIN }, pointTol);
+  for (const p of input.hints?.points ?? []) offer({ kind: 'endpoint', point: p }, pointTol);
   const ref = input.hints?.reference;
   const axisFrom = ref ?? ORIGIN;
   AXES.forEach((axis, i) => {

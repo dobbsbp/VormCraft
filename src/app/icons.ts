@@ -54,6 +54,8 @@ export const ICONS = {
   previousView: svg('<path d="M9 6 4 11l5 5"/><path d="M4 11h9a6 6 0 0 1 6 6v2"/><rect x="14" y="3" width="7" height="5" rx="1"/>'),
   circle: svg('<circle cx="12" cy="12" r="8"/><path d="M12 12h8" stroke-dasharray="2 1.5"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/>'),
   pushpull: svg('<path d="M3 16 9 19l12-5-6-3Z"/><path d="M12 14V4M8.5 7.5 12 4l3.5 3.5"/>'),
+  wall: svg('<path d="M3 20V9l6-3v14M9 6l12 2v12H9" fill="currentColor" fill-opacity="0.15"/><path d="M9 13h12M15 8v5M12 13v7M18 13v7"/>'),
+  section: svg('<path d="M4 8 12 4l8 4v8l-8 4-8-4z" fill="currentColor" fill-opacity="0.12"/><path d="M3 13h18" stroke-width="2.2"/><path d="M12 13v6m-2.5-2.5L12 19l2.5-2.5"/>'),
   followMe: svg('<path d="M3 21V13h5v3h3" fill="currentColor" fill-opacity="0.25"/><path d="M8 16h6a5 5 0 0 0 5-5V4" stroke-dasharray="2 1.5"/><path d="m16.5 6.5 2.5-2.5 2.5 2.5"/>'),
   paint: svg('<path d="m10 3 8 8-6.5 6.5a1.5 1.5 0 0 1-2 0L3.5 11.5a1.5 1.5 0 0 1 0-2Z"/><path d="M3.5 10.5h13.5"/><path d="M19.5 14.5s1.8 2.2 1.8 3.4a1.8 1.8 0 0 1-3.6 0c0-1.2 1.8-3.4 1.8-3.4Z" fill="currentColor"/>'),
   text3d: svg('<path d="M4 5h11v3h-4v11H8V8H4z"/><path d="M15 5l3-2v3l-3 2M11 19l3-2V8"/>'),

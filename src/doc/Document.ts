@@ -4,6 +4,7 @@ import { Guides } from './Guides';
 import { Labels } from './Labels';
 import { Materials } from './Materials';
 import { Scenes } from './Scenes';
+import { Sections } from './Sections';
 import { DEFAULT_UNITS, type DisplayUnits } from './Units';
 import { Versions } from './Versions';
 import type { Step } from './History';
@@ -18,6 +19,8 @@ export interface DocumentSnapshot {
   readonly scenes: Scenes;
   /** Missing in undo steps saved before units could be chosen (they keep the units as they are). */
   readonly units?: DisplayUnits;
+  /** Missing in undo steps from before section planes (they keep the planes as they are). */
+  readonly sections?: Sections;
 }
 
 /**
@@ -33,6 +36,8 @@ export class Document {
   readonly labels: Labels;
   readonly materials: Materials;
   readonly scenes: Scenes;
+  /** Section planes (cuts through the model to see inside). */
+  readonly sections: Sections;
   /** The units lengths are shown and typed in (the model itself is always in millimetres). */
   units: DisplayUnits = DEFAULT_UNITS;
   /** The design's version history (saved in the file, not part of undo). */
@@ -42,7 +47,8 @@ export class Document {
   /** Undo steps read from the file (oldest first), taken over by the undo history when it opens. */
   savedUndo: Step[] = [];
 
-  constructor(model = new Model(), guides = new Guides(), labels = new Labels(), materials = new Materials(), groups = new Groups(), scenes = new Scenes()) {
+  constructor(model = new Model(), guides = new Guides(), labels = new Labels(), materials = new Materials(), groups = new Groups(), scenes = new Scenes(), sections = new Sections()) {
+    this.sections = sections;
     this.root = model;
     this.guides = guides;
     this.labels = labels;
@@ -67,7 +73,7 @@ export class Document {
   }
 
   snapshot(): DocumentSnapshot {
-    return { model: this.root.clone(), groups: this.groups.clone(), guides: this.guides.clone(), labels: this.labels.clone(), materials: this.materials.clone(), scenes: this.scenes.clone(), units: this.units };
+    return { model: this.root.clone(), groups: this.groups.clone(), guides: this.guides.clone(), labels: this.labels.clone(), materials: this.materials.clone(), scenes: this.scenes.clone(), units: this.units, sections: this.sections.clone() };
   }
 
   /**
@@ -84,6 +90,7 @@ export class Document {
     this.materials.copyFrom(s.materials);
     this.scenes.copyFrom(s.scenes);
     if (s.units) this.units = s.units;
+    if (s.sections) this.sections.copyFrom(s.sections);
     this.editing = path.find((id) => this.groups.has(id)) ?? null;
   }
 }

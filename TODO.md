@@ -38,12 +38,16 @@ CHANGELOG.md when it ships.
 - **Library:**
   - My Library: save a selection as your own item with tags, stored locally and optionally on
     Drive. Wanted only after seeing how the Library works.
-  - More categories: Building (doors, windows, stairs, railings), Office, Outdoor.
+  - More categories: Building (stairs, railings), Office, Outdoor.
   - Size versions for more items.
-- **Components** (linked copies). Library items and SketchUp imports are full copies today, so
-  files grow quickly.
+- **Components:** components inside components (nested ones become plain groups today);
+  SketchUp imports still come in as full copies; a component browser listing them.
+- **Section planes:** snapping still reaches points on the cut-away side.
+- **Walls and openings:** doors and windows do not stay glued to their opening (moving one leaves
+  the hole); walls drawn into each other are not joined (Merge Shapes can unify them); the wall
+  thickness and height are not remembered between sessions.
 - Locking groups.
-- **Views:** section planes, tags/layers, sun and shadows (scenes should save these too).
+- **Views:** tags/layers, sun and shadows (scenes should save these too).
 - **Settings sync:** automatic (today Save and Load are by hand); two devices saving at the same moment could overwrite one another.
 - A field-of-view control.
 - **Export:**

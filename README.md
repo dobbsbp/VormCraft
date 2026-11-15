@@ -52,6 +52,8 @@ Both versions have the same version number and open the same `.vorm` files.
 - **Move** and **Rotate**: press Ctrl to copy instead (a + shows on the cursor and the copy follows the mouse; copy mode ends with the copy), then type a count (`5x` or `/5`) to make arrays. **Push/Pull** with Ctrl makes a new starting face: an edge loop stays where the face was, so the new sides are separate faces (stacking floors, for example). **Scale** shows a yellow box with grips round the selection: drag a corner to resize in proportion, the middle of a side to stretch one way (Shift: each way on its own; Ctrl: about the centre); negative factors mirror.
 - **Points**: click where two or more lines meet to select that corner, then Move, Rotate or Scale it; the faces around it stretch (or fold) to follow. The arrow keys lock the axis.
 - **Merge Shapes** (right-click): overlapping flat faces in one plane become one face; for solids and groups, choose **Unify** (one solid, with the faces inside removed) or **Keep shapes** (put together in one group, unchanged). Flat faces selected along with solids (such as the circle left inside a Follow Me ring) are left as they are, and if a merge isn't possible it says why.
+- **Wall**: click along the floor to draw walls (or type each length), and click the first corner to close a room. Type `thickness, height` (`150, 2700`); Ctrl puts the walls centred on the line, to its left or to its right. The walls come out as one closed solid in a group.
+- **Section Plane**: click a face to cut the model there and look inside (click the ground for a level cut), then type a distance to move the cut. The cut is outlined and filled. Drag a plane's outline with the tool to slide it along, and the cut follows as you drag (it snaps to points, or type how far); Move slides a plane straight along too, and Rotate turns it. **Section tips** in the status bar explain placing, moving and removing cuts. Click a plane's outline to select it (Delete removes it, as does the Eraser); right-click it to reverse the cut, turn it off or hide the planes. Scenes remember the cut.
 - **Eraser**, **Tape Measure** (measure, place guides, rescale the model) and **Text** labels (Delete, the Eraser, a box or right-click erases them; drag to move, double-click to edit).
 - **Dimension**: click a line (or two points) and pull out to show its length end to end, with dashed extension lines and arrows. Drag the value to move it further out; double-click it to type your own text.
 - **Units** per design: millimetres, centimetres, metres, inches, feet, or feet and inches (3' 6 1/2"). New asks which; click the design's name to change them. A number typed without a unit means the design's unit.
@@ -60,14 +62,16 @@ Both versions have the same version number and open the same `.vorm` files.
 - Curves keep their true radius, so circles and arcs export smoothly at any resolution.
 
 ### Library
-- **Library** (toolbar): 49 household objects made for VormCraft at real-world sizes: furniture, kitchen units and appliances, bathroom fittings, electronics, lighting and decor.
+- **Library** (toolbar): 51 objects made for VormCraft at real-world sizes: furniture, kitchen units and appliances, bathroom fittings, electronics, lighting, decor, and doors and windows.
 - Search by name or other words ("couch", "fridge", "telly"; typos are fine), narrow by room or kind, and pick a size (beds from Single to King, TVs from 43" to 75", kitchen units 300 to 900 mm wide).
-- Click an object, then click in the model to place it; arrow keys turn it first. Each object comes in as a group with a group for each paint, so parts are easy to recolour. Wall items come in at their usual height, and pendant lights hang from the point you click.
+- Click an object, then click in the model to place it; arrow keys turn it first. Each object comes in as a component (linked copies) with a group for each paint, so parts are easy to recolour. Wall items come in at their usual height, and pendant lights hang from the point you click.
+- **Doors and windows**: point at a wall and click. The door or window faces out of the wall, sits in the middle of it, and cuts its own opening right through.
 
 ### Groups
 - Select geometry and press **Ctrl+G** to make a group. A group keeps its geometry to itself, so it never sticks to or merges with anything it touches, and groups can hold other groups.
 - A group selects, moves, rotates, scales, copies, flips and paints as one piece.
 - Double-click a group to edit what's inside it; the rest of the model fades while you work. Press Esc (or click outside it) to close it.
+- **Components** (right-click → Make Component): linked copies. Copy a component with Move or Rotate (Ctrl) and editing any copy changes them all, however each is turned, sized or mirrored. **Make Unique** unlinks a copy. A component is saved once in the file, however many copies there are.
 - **Explode** turns a group back into loose geometry; **Hide** and **Unhide All** hide and show groups.
 - **Hide lines**: select lines (or faces, for the lines between them) and press **Ctrl+H** to stop them being drawn; the faces stay as they are. While anything is hidden, the status bar shows **Show** (draws hidden lines dashed, so you can select a few and right-click → **Unhide**) and **Unhide all**.
 - Rename groups and see their size and contents in **Entity Info**.
@@ -124,7 +128,7 @@ Right-click anything to select it and get a menu for it:
 
 ### Files and export
 - Saves to its own `.vorm` file format, including groups, materials, scenes and history. Files from every earlier version keep opening (each format version is tested), including `.benup` files from before the rename. The first save over an older-format file keeps a backup of the original.
-- **Import SketchUp (.skp) files** (Ctrl+I, or the Import button). The file comes in as a group, with its groups and components inside it as groups of their own (each placement of a component becomes its own copy, as VormCraft has no components yet), keeping faces and holes, true circles and arcs, soft edges, paint (colours, transparency and textures at their real size), and, if you choose, its scenes and guides. Faces that SketchUp allows but VormCraft's solids do not are turned round or kept on edges of their own, and the import reports how many. Files are read by [OpenSKP](https://github.com/iamahsanmehmood/openskp), an independent open-source reader; SketchUp 2018 and later read well, some older files cannot be read yet.
+- **Import SketchUp (.skp) files** (Ctrl+I, or the Import button). The file comes in as a group, with its groups and components inside it as groups of their own (each placement of a SketchUp component becomes its own copy; they do not come in as linked components yet), keeping faces and holes, true circles and arcs, soft edges, paint (colours, transparency and textures at their real size), and, if you choose, its scenes and guides. Faces that SketchUp allows but VormCraft's solids do not are turned round or kept on edges of their own, and the import reports how many. Files are read by [OpenSKP](https://github.com/iamahsanmehmood/openskp), an independent open-source reader; SketchUp 2018 and later read well, some older files cannot be read yet.
 - **Import OBJ and STL** (Ctrl+I, or the Import button). Each object comes in as a group; flat areas are joined back into single faces (a triangulated box becomes six faces you can push and pull) and curved surfaces are smoothed. You choose the file's units (with a live size preview) and whether Y or Z is up. Broken or duplicate triangles are left out and counted.
 - **Export** (one toolbar button): **STL** (binary) with a watertight check and adjustable curve resolution, for 3D printing, or **OBJ** for other 3D programs.
 - Unlimited undo and redo.
@@ -236,10 +240,11 @@ Units are millimetres, and Z is up (red = X, green = Y, blue = Z). The full desi
 
 Features are added as real use calls for them. Ideas on the list:
 
-- Section planes, tags/layers, sun and shadows (scenes will save these too)
+- Tags/layers, sun and shadows (scenes will save these too)
 - Settings that keep in step across devices by themselves (today you save and load them by hand)
-- Components (reusable, linked copies) and locking groups
-- More Library categories (building parts, office, outdoor) and saving your own items to the Library
+- Components inside components, a list of the design's components, and locking groups
+- Doors and windows that keep their opening when moved, and walls that join where they meet
+- More Library categories (stairs and railings, office, outdoor) and saving your own items to the Library
 - A field-of-view control
 - STEP export (true curves, through OpenCascade)
 - Exporting materials with OBJ

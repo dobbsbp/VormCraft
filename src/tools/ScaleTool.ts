@@ -5,7 +5,7 @@ import { pointVertices } from '../core/ops/points';
 import { connectedVertices, scalePieces } from '../core/ops/scale';
 import type { DocumentSnapshot } from '../doc/Document';
 import type { GroupId } from '../doc/Groups';
-import { scaleModel } from '../core/ops/group';
+import { scaling } from '../core/ops/transform';
 import { closestRayLine, rayPlane } from './geom';
 import { groupModels } from './groupModels';
 import { makePlane } from '../core/math/plane';
@@ -262,7 +262,7 @@ export class ScaleTool implements Tool {
     this.hovered = null;
     const snapshot = this.ctx.apply(() => {
       if (targets.vertices.size) scalePieces(this.ctx.doc.model, targets.vertices, basePoint, factors);
-      for (const id of targets.groups) for (const m of groupModels(this.ctx.doc, id)) scaleModel(m, basePoint, factors);
+      for (const id of targets.groups) this.ctx.doc.groups.transform(id, scaling(basePoint, factors));
     }, base);
     this.last = { snapshot, targets, base: basePoint, refLength, factors, axes };
   }

@@ -19,9 +19,12 @@ export { chainPlane, edgeChain, offsetChain, offsetChainPoints, offsetEdges, off
 export { drawEdges, insertSegment, type DrawEdgesResult } from './ops/edges';
 export { arcAroundCenter, arcFromBulge, arcPoints, arcThroughPoints, drawArc, drawPie, DEFAULT_ARC_SEGMENTS, type Arc } from './ops/arcs';
 export { connectedVertices, scalePieces } from './ops/scale';
-export { applyAffine, BendError, duplicateVertices, rotation, scaling, selectionVertices, transformVertices, translation, type Affine } from './ops/transform';
+export { applyAffine, BendError, composeAffine, duplicateVertices, IDENTITY, invertAffine, rotation, scaling, selectionVertices, transformVertices, translation, type Affine } from './ops/transform';
 export { facesWithCurveEdges, isEdgeShown, isSoftEdge, smoothSurface, surfaceOutline } from './model/surfaces';
 export { followMe, type FollowMeMode, type FollowMeResult } from './ops/followMe';
+export { planeFrame, sectionCut, type SectionCut } from './ops/section';
+export { buildWalls, wallFootprint, type WallAlign, type WallFootprint } from './ops/wall';
+export { cutOpening, openingCorners, wallThickness, type Opening } from './ops/opening';
 export { inheritMaterials, paintFaces, unpaintMaterial } from './ops/materials';
 export { reverseFaces } from './ops/orient';
 export { extractGeometry, mergeGeometry, modelBounds, scaleModel, transformModel } from './ops/group';

@@ -1,6 +1,7 @@
 import { gunzipSync, gzipSync, strFromU8, strToU8 } from 'fflate';
 import type { Vec3 } from '../core/math/vec3';
 import { Model } from '../core/model/Model';
+import type { Affine } from '../core/ops/transform';
 import { Document, type DocumentSnapshot } from '../doc/Document';
 import type { SavedStep, Step, StepState } from '../doc/History';
 import { Groups } from '../doc/Groups';
@@ -9,6 +10,7 @@ import { Labels } from '../doc/Labels';
 import { Materials, type Material } from '../doc/Materials';
 import { ALL_PARTS, DEFAULT_STYLE, Scenes, type Scene } from '../doc/Scenes';
 import { validBackdrop } from '../doc/Backdrop';
+import { Sections } from '../doc/Sections';
 import { DEFAULT_UNITS, validUnits, type DisplayUnits } from '../doc/Units';
 import type { Version } from '../doc/Versions';
 import { hashText } from './hash';
@@ -18,7 +20,7 @@ import { applyPatch, diffLines, type Patch } from './lineDiff';
 export const FILE_EXTENSION = 'vorm';
 /** Extensions of files saved before the app was renamed (they still open). */
 export const OLD_FILE_EXTENSIONS = ['benup'];
-export const FORMAT_VERSION = 7;
+export const FORMAT_VERSION = 8;
 
 /**
  * Geometry as stored: vertices, faces as vertex-id loops (outer first, then holes), every edge with
@@ -43,13 +45,14 @@ interface GeometryData {
  * with each face's material). Version 3 adds groups, each with geometry of its own; version 4
  * hidden groups and scenes (saved views); version 5 the design's version history (compressed);
  * version 6 the last undo steps (each stored as only what changed: see `encodeUndo`); version 7
- * hidden edges (a fifth entry per edge), the units lengths are shown in, and dimensions (labels with an `end`). Geometry is always in
+ * hidden edges (a fifth entry per edge), the units lengths are shown in, and dimensions (labels with an `end`); version 8
+ * components (each definition saved once; an instance is a group with only its placement) and section planes. Geometry is always in
  * millimetres (`units`).
  * Older versions still open, and so do files from before the app was renamed (format tag 'benup').
  */
 interface FileV3 extends GeometryData {
   format: 'vormcraft' | 'benup';
-  version: 1 | 2 | 3 | 4 | 5 | 6 | 7;
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
   units: 'mm';
   /** The units lengths are shown and typed in (version 7; millimetres before). */
   displayUnits?: DisplayUnits;
@@ -59,7 +62,15 @@ interface FileV3 extends GeometryData {
   /** Materials (version 2); textures are embedded as data URLs. */
   materials?: Material[];
   /** Groups (version 3), parents before the groups inside them. */
-  groups?: ({ id: number; name: string; parent: number | null; material?: string; hidden?: boolean } & GeometryData)[];
+  groups?: ({ id: number; name: string; parent: number | null; material?: string; hidden?: boolean; component?: { id: number; place: Affine } } & GeometryData)[];
+  /**
+   * Component definitions (version 8), in their own coordinates. Instances are groups with
+   * `component` and no geometry of their own; the groups inside them are not saved either: they
+   * are made again from the definition when the file is read.
+   */
+  /** Section planes (version 8): which one cuts the view, and whether the planes are drawn. */
+  sections?: { active: number | null; visible: boolean; items: { id: number; point: Vec3; normal: Vec3 }[] };
+  components?: { id: number; name: string; source?: string; parts: ({ key: number; parent: number | null; name: string; material?: string; hidden?: boolean } & GeometryData)[] }[];
   /** Scenes in order, and the glide and slideshow timings (version 4). */
   scenes?: { transition: number; delay: number; items: Scene[] };
   /** The version history (version 5): compressed documents, and the texture images they use. */
@@ -106,10 +117,15 @@ export const UNDO_LIMIT_BYTES = 8 * 1024 * 1024;
 /** The design itself as a file object (no history, no undo). */
 function documentFile(doc: Document): FileV3 {
   // Parents first, so a reader can create groups in order.
-  const ordered = doc.groups.children(null).flatMap((g) => doc.groups.subtree(g.id));
+  // Groups inside component instances are made from the definition, so they are left out.
+  const ordered = doc.groups
+    .children(null)
+    .flatMap((g) => doc.groups.subtree(g.id))
+    .filter((g) => g.parent === null || !doc.groups.instanceOf(g.parent));
+  const empty = geometryData(new Model());
   return {
     format: 'vormcraft',
-    version: 7,
+    version: 8,
     units: 'mm',
     displayUnits: { unit: doc.units.unit, precision: doc.units.precision },
     ...geometryData(doc.root),
@@ -120,8 +136,28 @@ function documentFile(doc: Document): FileV3 {
     },
     labels: [...doc.labels.items.values()].map((l) => ({ anchor: l.anchor, position: l.position, text: l.text, ...(l.end ? { end: l.end } : {}) })),
     materials: [...doc.materials.items.values()],
-    groups: ordered.map((g) => ({ id: g.id, name: g.name, parent: g.parent, ...(g.material !== undefined ? { material: g.material } : {}), ...(g.hidden ? { hidden: true } : {}), ...geometryData(g.model) })),
+    groups: ordered.map((g) => ({
+      id: g.id,
+      name: g.name,
+      parent: g.parent,
+      ...(g.material !== undefined ? { material: g.material } : {}),
+      ...(g.hidden ? { hidden: true } : {}),
+      ...(g.component ? { component: { id: g.component.id, place: { m: [...g.component.place.m] as unknown as Affine['m'], t: g.component.place.t } }, ...empty } : geometryData(g.model)),
+    })),
+    ...(doc.groups.components.size
+      ? {
+          components: [...doc.groups.components.values()].map((c) => ({
+            id: c.id,
+            name: c.name,
+            ...(c.source ? { source: c.source } : {}),
+            parts: c.parts.map((p) => ({ key: p.key, parent: p.parent, name: p.name, ...(p.material !== undefined ? { material: p.material } : {}), ...(p.hidden ? { hidden: true } : {}), ...geometryData(p.model) })),
+          })),
+        }
+      : {}),
     scenes: { transition: doc.scenes.transition, delay: doc.scenes.delay, items: doc.scenes.items },
+    ...(doc.sections.items.size || !doc.sections.visible
+      ? { sections: { active: doc.sections.active, visible: doc.sections.visible, items: [...doc.sections.items.values()].map((s) => ({ id: s.id, point: s.point, normal: s.normal })) } }
+      : {}),
   };
 }
 
@@ -172,7 +208,7 @@ const encoded = new WeakMap<StepState, { newer: unknown; data: string; full: boo
 /** The design text of an undo step. */
 function stepText(s: StepState): string {
   if ('saved' in s) return s.text();
-  const doc = new Document(s.model, s.guides, s.labels, s.materials, s.groups, s.scenes);
+  const doc = new Document(s.model, s.guides, s.labels, s.materials, s.groups, s.scenes, s.sections);
   if (s.units) doc.units = s.units;
   return linedJson(documentFile(doc));
 }
@@ -235,7 +271,7 @@ function decodeUndo(base: string, undo: FileUndo): Step[] {
       text,
       snapshot(): DocumentSnapshot {
         const d = parseDocument(text());
-        return { model: d.root, groups: d.groups, guides: d.guides, labels: d.labels, materials: d.materials, scenes: d.scenes };
+        return { model: d.root, groups: d.groups, guides: d.guides, labels: d.labels, materials: d.materials, scenes: d.scenes, sections: d.sections };
       },
     };
   });
@@ -293,6 +329,13 @@ function readGeometry(f: Partial<GeometryData>, materials: Materials): Model {
   return model;
 }
 
+/** A saved placement, checked. */
+function affine(a: unknown): Affine {
+  const x = a as Partial<Affine> | null;
+  if (!x || !Array.isArray(x.m) || x.m.length !== 9 || !x.m.every(Number.isFinite)) throw new Error('a component has a bad placement');
+  return { m: [...x.m] as unknown as Affine['m'], t: vec(x.t, 'component placement') };
+}
+
 /** Parse a VormCraft file. Throws FileFormatError with a readable message for bad or newer files. */
 export function parseDocument(text: string): Document {
   let raw: unknown;
@@ -324,7 +367,22 @@ export function parseDocument(text: string): Document {
       if (g.material !== undefined && !materials.get(g.material)) throw new Error(`group ${g.id} uses missing material ${g.material}`);
       groups.add(readGeometry(g, materials), g.parent, { id: g.id, name: typeof g.name === 'string' ? g.name : undefined, material: g.material });
       if (g.hidden) groups.get(g.id)!.hidden = true;
+      if (g.component) groups.get(g.id)!.component = { id: g.component.id, place: affine(g.component.place) };
     }
+    for (const c of f.components ?? []) {
+      if (!Number.isInteger(c.id) || c.id <= 0) throw new Error('a component has a bad id');
+      if (!Array.isArray(c.parts) || !c.parts.length || c.parts[0].key !== 0) throw new Error(`component ${c.id} has no geometry`);
+      const keys = new Set<number>();
+      const parts = c.parts.map((p) => {
+        if (p.parent !== null && !keys.has(p.parent)) throw new Error(`a part of component ${c.id} is inside a missing part`);
+        if (p.material !== undefined && !materials.get(p.material)) throw new Error(`component ${c.id} uses missing material ${p.material}`);
+        keys.add(p.key);
+        return { key: p.key, parent: p.parent, name: typeof p.name === 'string' ? p.name : 'Group', ...(p.material !== undefined ? { material: p.material } : {}), ...(p.hidden ? { hidden: true } : {}), model: readGeometry(p, materials) };
+      });
+      groups.components.set(c.id, { id: c.id, name: typeof c.name === 'string' ? c.name : `Component ${c.id}`, parts, ...(typeof c.source === 'string' ? { source: c.source } : {}) });
+      groups.reserveComponentId(c.id);
+    }
+    for (const g of groups.items.values()) if (g.component && !groups.components.has(g.component.id)) throw new Error(`group ${g.id} uses missing component ${g.component.id}`);
     if (f.scenes) {
       if (f.scenes.transition >= 0) scenes.transition = f.scenes.transition;
       if (f.scenes.delay >= 0) scenes.delay = f.scenes.delay;
@@ -338,11 +396,15 @@ export function parseDocument(text: string): Document {
             camera: { position: vec(c.position, 'scene camera'), target: vec(c.target, 'scene target'), fov: c.fov, projection: c.projection, height: c.height },
             hidden: (s.hidden ?? []).filter((id) => groups.has(id)),
             style: { ...DEFAULT_STYLE, ...s.style, backdrop: validBackdrop(s.style?.backdrop) },
+            ...(s.section === null || (typeof s.section === 'number' && Number.isInteger(s.section)) ? { section: s.section } : {}),
           },
           s.id,
         );
       }
     }
+    // Instances are made from their definitions (after the scenes, so the new groups inside them are
+    // not mistaken for groups a scene hides).
+    for (const g of [...groups.items.values()]) if (g.component) groups.rebuild(g.id);
   } catch (err) {
     throw new FileFormatError(`The file is damaged: ${err instanceof Error ? err.message : String(err)}.`);
   }
@@ -356,7 +418,20 @@ export function parseDocument(text: string): Document {
     if (typeof l.text !== 'string') throw new FileFormatError('The file is damaged: a label has no text.');
     labels.add(l.anchor, l.position, l.text, l.end === undefined ? undefined : vec(l.end, 'dimension end'));
   }
-  const doc = new Document(model, guides, labels, materials, groups, scenes);
+  const sections = new Sections();
+  if (f.sections) {
+    try {
+      for (const s of f.sections.items ?? []) {
+        if (!Number.isInteger(s.id) || s.id <= 0) throw new Error('a section plane has a bad id');
+        sections.add(vec(s.point, 'section point'), vec(s.normal, 'section direction'), s.id);
+      }
+    } catch (err) {
+      throw new FileFormatError(`The file is damaged: ${err instanceof Error ? err.message : String(err)}.`);
+    }
+    sections.active = sections.get(f.sections.active ?? null) ? f.sections.active : null;
+    sections.visible = f.sections.visible !== false;
+  }
+  const doc = new Document(model, guides, labels, materials, groups, scenes, sections);
   // Units that cannot be read fall back to millimetres rather than stopping the design opening.
   doc.units = validUnits(f.displayUnits) ?? DEFAULT_UNITS;
   // Undo steps: left out if they do not belong to this exact design (or are damaged).

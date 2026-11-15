@@ -11,6 +11,16 @@ export interface LibraryVariant {
 }
 
 /**
+ * The opening a door or window cuts in the wall it is placed on: the frame's outside size, and
+ * how high its bottom sits above the floor.
+ */
+export interface LibraryOpening {
+  readonly width: number;
+  readonly height: number;
+  readonly sill: number;
+}
+
+/**
  * An object in the library. Items are built by code (our own, at real-world sizes, in mm): they
  * stand on the ground centred on the origin with their front facing -Y, or, if `hangs`, they hang
  * from the point they are placed at (a pendant light from the ceiling).
@@ -26,6 +36,8 @@ export interface LibraryItem {
   /** The first is the default. */
   readonly variants?: readonly LibraryVariant[];
   readonly hangs?: boolean;
+  /** Doors and windows: the opening they cut when placed on a wall (per size). */
+  opening?(variant?: string): LibraryOpening;
   /** The item's parts, one per paint. */
   build(variant?: string): LibraryPart[];
 }

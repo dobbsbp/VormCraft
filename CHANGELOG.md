@@ -4,6 +4,15 @@ What changed in each version of VormCraft. The section for a version is also sho
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
+## 0.5.16
+
+- Components: right-click a group (or some geometry) and choose Make Component. Copies of it stay linked, so changing one changes them all, even copies that are turned, resized or mirrored. Make Unique (right-click) unlinks a copy. Entity Info shows how many linked copies there are.
+- Library objects come in as components: placing the same object again adds another copy of it, and the file stores its shape only once, so designs with many chairs or windows stay small.
+- Section Plane tool: click a face to cut the model there and see inside, or click the ground for a level cut, then type a distance to move the cut (for example 1200 for a floor plan). Move a plane later by dragging its outline with the Section Plane tool, and the cut follows as you drag (it snaps to points on the model, or type how far), or with Move and Rotate. Section tips in the status bar explain it all. The cut is outlined and filled in dark grey. To remove a section plane, click its outline and press Delete, or click it with the Eraser. Right-click it for Reverse Cut, Turn Cut Off and Hide Section Planes. Scenes remember which cut is on.
+- Wall tool: click along the floor to draw walls, typing each length if you like, and click the first corner again to close a room. Type the thickness and height, such as 150, 2700, and press Ctrl to put the walls centred on the line, to its left or to its right. The walls are one closed solid in a group of their own.
+- Doors and windows in the Library (Doors and windows): point at a wall and click, and the door or window turns to face out of the wall, sits in the middle of it and cuts its own opening. Doors stand on the floor; windows go in at their usual height.
+- Files saved by this version need this version or newer to open.
+
 ## 0.5.15
 
 - Windows and doors through walls: a rectangle drawn on a wall and pushed in as far as the wall is thick, or further, now cuts a hole right through. Before, walls made by pulling up an offset rectangle (open underneath) got a box poking through them instead.

@@ -20,6 +20,8 @@ export interface PickInput {
   edgeTolerancePx?: number;
   /** Faces do not hide edges behind them (X-ray). */
   seeThrough?: boolean;
+  /** Points that can be picked (a section cut hides the rest); all when missing. */
+  keep?: (p: Vec3) => boolean;
 }
 
 export type FacePick = Extract<Pick, { kind: 'face' }>;
@@ -30,7 +32,8 @@ export function pickHits(input: PickInput): { face: FacePick | null; edge: EdgeP
   const { camera, ndc, data } = input;
   const raycaster = new THREE.Raycaster();
   raycaster.setFromCamera(ndc, camera);
-  const hits = raycaster.intersectObjects(input.faceObjects, false).filter((h) => h.faceIndex !== undefined && h.faceIndex !== null);
+  const keep = input.keep ?? (() => true);
+  const hits = raycaster.intersectObjects(input.faceObjects, false).filter((h) => h.faceIndex !== undefined && h.faceIndex !== null && keep([h.point.x, h.point.y, h.point.z]));
   const faceHit = hits[0];
   const face: FacePick | null = faceHit
     ? { kind: 'face', face: data.triangleFaces[faceHit.faceIndex!], point: [faceHit.point.x, faceHit.point.y, faceHit.point.z], distance: faceHit.distance }
@@ -76,6 +79,7 @@ function pickEdge(input: PickInput, ray: THREE.Ray, occluderDistance: number, oc
     const s0 = new THREE.Vector3().fromArray(data.edgePositions, i * 6);
     const s1 = new THREE.Vector3().fromArray(data.edgePositions, i * 6 + 3);
     ray.distanceSqToSegment(s0, s1, onRay, onSeg);
+    if (input.keep && !input.keep([onSeg.x, onSeg.y, onSeg.z])) continue;
     const distance = onRay.distanceTo(ray.origin);
     // Hidden only when deeper than the hit face and behind its plane (edges on the face stay
     // pickable at grazing angles, where the hit point is well in front of them along the ray).

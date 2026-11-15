@@ -48,6 +48,38 @@ function similarityScale(a: Affine): number | null {
 
 export const translation = (v: Vec3): Affine => ({ m: [1, 0, 0, 0, 1, 0, 0, 0, 1], t: v });
 
+export const IDENTITY: Affine = { m: [1, 0, 0, 0, 1, 0, 0, 0, 1], t: [0, 0, 0] };
+
+/** `a` after `b`: p ↦ a(b(p)). */
+export function composeAffine(a: Affine, b: Affine): Affine {
+  const x = a.m;
+  const y = b.m;
+  const m = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) m[r * 3 + c] = x[r * 3] * y[c] + x[r * 3 + 1] * y[3 + c] + x[r * 3 + 2] * y[6 + c];
+  return { m: m as unknown as Affine['m'], t: applyAffine(a, b.t) };
+}
+
+/** The inverse map (throws for one that flattens space). */
+export function invertAffine(a: Affine): Affine {
+  const m = a.m;
+  const d = det(m);
+  if (!(Math.abs(d) > 1e-12)) throw new Error('This shape has been flattened and cannot be turned back');
+  const inv = [
+    (m[4] * m[8] - m[5] * m[7]) / d,
+    (m[2] * m[7] - m[1] * m[8]) / d,
+    (m[1] * m[5] - m[2] * m[4]) / d,
+    (m[5] * m[6] - m[3] * m[8]) / d,
+    (m[0] * m[8] - m[2] * m[6]) / d,
+    (m[2] * m[3] - m[0] * m[5]) / d,
+    (m[3] * m[7] - m[4] * m[6]) / d,
+    (m[1] * m[6] - m[0] * m[7]) / d,
+    (m[0] * m[4] - m[1] * m[3]) / d,
+  ] as unknown as Affine['m'];
+  const r: Affine = { m: inv, t: [0, 0, 0] };
+  return { m: inv, t: scale(applyAffine(r, a.t), -1) };
+}
+
+
 export function scaling(base: Vec3, f: Vec3): Affine {
   return { m: [f[0], 0, 0, 0, f[1], 0, 0, 0, f[2]], t: [base[0] * (1 - f[0]), base[1] * (1 - f[1]), base[2] * (1 - f[2])] };
 }

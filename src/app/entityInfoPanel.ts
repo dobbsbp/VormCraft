@@ -99,17 +99,24 @@ export class EntityInfoPanel {
       const faces = sub.reduce((n, x) => n + x.model.faces.size, 0);
       const edges = sub.reduce((n, x) => n + [...x.model.edges()].length, 0);
       const b = modelBounds(sub.map((x) => x.model));
-      const edit = el('button', { type: 'button', className: 'panel-button' }, 'Edit group');
+      const copies = g.component ? doc.groups.instances(g.component.id).length : 0;
+      const edit = el('button', { type: 'button', className: 'panel-button' }, g.component ? 'Edit component' : 'Edit group');
       edit.addEventListener('click', () => c.enterGroup(id));
+      const buttons = [edit];
+      if (g.component && copies > 1) {
+        const unique = el('button', { type: 'button', className: 'panel-button' }, 'Make unique');
+        unique.addEventListener('click', () => c.makeUnique());
+        buttons.push(unique);
+      }
       out.push(
-        el('p', { className: 'panel-note' }, 'Group'),
+        el('p', { className: 'panel-note' }, g.component ? `Component: ${copies === 1 ? 'the only copy' : `${copies} linked copies (editing one changes them all)`}` : 'Group'),
         el('label', { className: 'panel-field' }, el('span', {}, 'Name'), name),
         this.row('Contents', [plural(faces, 'face'), plural(edges, 'edge'), sub.length > 1 ? plural(sub.length - 1, 'group') + ' inside' : ''].filter(Boolean).join(', ')),
         this.row('Size', b ? formatLengths(b.max.map((x, i) => x - b.min[i]), ' × ') : 'empty'),
         ...this.volumeRows([{ name: g.name, volume: this.groupVolume(id) }]),
         this.row('Paint', this.materialName(g.material)),
         ...this.solidRows(solidReport(g.model)),
-        el('div', { className: 'panel-row' }, edit),
+        el('div', { className: 'panel-row' }, ...buttons),
       );
       return out;
     }

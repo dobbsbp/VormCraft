@@ -20,6 +20,7 @@ describe('files from every format version open', () => {
     ['format-v5.vorm', 5],
     ['format-v6.vorm', 6],
     ['format-v7.vorm', 7],
+    ['format-v8.vorm', 8],
   ])('%s', (name, version) => {
     const text = fixture(name);
     expect(JSON.parse(text).version).toBe(version);
@@ -36,7 +37,7 @@ describe('files from every format version open', () => {
       expect(doc.labels.items.size).toBe(version >= 7 ? 3 : version >= 5 ? 2 : 1);
     }
     if (version >= 3) {
-      expect(doc.groups.items.size).toBe(2);
+      expect(doc.groups.items.size).toBe(version >= 8 ? 4 : 2);
       const block = [...doc.groups.items.values()].find((g) => g.name === 'Block')!;
       expect(block.model.faces.size).toBe(6);
       expect(block.material).toBeDefined();
@@ -64,6 +65,20 @@ describe('files from every format version open', () => {
     expect([...doc.root.halfEdges.values()].filter((h) => h.hidden)).toHaveLength(version >= 7 ? 2 : 0);
     expect(doc.units).toEqual(version >= 7 ? { unit: 'cm', precision: 1 } : { unit: 'mm', precision: 2 });
     expect([...doc.labels.items.values()].filter((l) => l.end)).toHaveLength(version >= 7 ? 1 : 0);
+    // Version 8 keeps components: two linked copies of a peg, the second moved and turned.
+    const pegs = [...doc.groups.items.values()].filter((g) => g.component);
+    expect(pegs).toHaveLength(version >= 8 ? 2 : 0);
+    if (version >= 8) {
+      expect(doc.groups.components.size).toBe(1);
+      for (const p of pegs) expect(checkWatertight(p.model).watertight).toBe(true);
+      expect(pegs[1].model.findVertex([525, 325 - 25 * Math.SQRT2, 0])).toBeDefined();
+      // And a section plane cutting the view half way up the plate, which the scene remembers.
+      expect(doc.sections.activePlane()).toMatchObject({ point: [0, 0, 50], normal: [0, 0, 1] });
+      expect(doc.scenes.items[0].section).toBe(doc.sections.active);
+    } else {
+      expect(doc.sections.items.size).toBe(0);
+      expect(doc.scenes.items[0]?.section).toBeUndefined();
+    }
     // Opened and saved again, it is in the current format and still opens.
     const again = parseDocument(serializeDocument(doc));
     expect(JSON.parse(serializeDocument(again)).version).toBe(FORMAT_VERSION);
@@ -71,7 +86,7 @@ describe('files from every format version open', () => {
   });
 
   it('there is a fixture for the current format version', () => {
-    const names = ['format-v1.benup', 'format-v2.vorm', 'format-v3.vorm', 'format-v4.vorm', 'format-v5.vorm', 'format-v6.vorm', 'format-v7.vorm'];
+    const names = ['format-v1.benup', 'format-v2.vorm', 'format-v3.vorm', 'format-v4.vorm', 'format-v5.vorm', 'format-v6.vorm', 'format-v7.vorm', 'format-v8.vorm'];
     expect(names.some((n) => n.includes(`v${FORMAT_VERSION}.`))).toBe(true);
   });
 });

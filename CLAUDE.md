@@ -10,35 +10,40 @@ TypeScript, Three.js, Manifold, Tauri and Vitest.
 `README.md` is the public feature list; keep it current when adding features.
 Unfinished work and known bugs live in `TODO.md`.
 
-## Current state (0.5.15, November 2026)
+## Current state (0.5.16, November 2026)
 - Released for Windows (NSIS installer, auto-update) and the web (installable PWA, works offline).
   Both are built by GitHub Actions from a version tag.
 - **Modelling tools:** Line, Rectangle (and Rotated), Circle, Polygon, Arcs/Pie, Push/Pull with
   boolean cuts and merging, Offset, Follow Me, Move/Rotate/Scale (with copies and arrays), Points
-  editing, Eraser, Tape Measure/guides, Text labels, Dimensions, 3D Text, Paint Bucket.
+  editing, Eraser, Tape Measure/guides, Text labels, Dimensions, 3D Text, Paint Bucket, Wall,
+  Section Plane.
   - Follow Me makes spheres from two whole circles, and springs and coils (typed turns and rise
     after a ring; Spiral tips in the status bar). Scale has a yellow box with grips.
   - Move, Rotate, Scale (and Circle centres) snap to face centres.
-- **Groups and right-click menu:** groups, and Merge Shapes (union) in the right-click menu.
+- **Groups and right-click menu:** groups, components (linked copies: Make Component, Make Unique;
+  `Groups.components`, synced after each change inside one), and Merge Shapes (union) in the
+  right-click menu.
+- **Section planes:** a cut through the view (one active), filled; saved, and remembered by scenes.
 - **Hiding:** groups and lines (Ctrl+H), Show Hidden Lines, Unhide / Unhide All.
 - **Units:** per design (mm, cm, m, in, ft, feet and inches), chosen on New, changed in Design
   Properties (click the design's name).
 - **View and workspace:**
   - scenes and a slideshow; face styles; perspective or parallel projection;
   - Viewer mode for touch screens;
-  - the Library (49 household objects);
+  - the Library (51 objects, placed as components; doors and windows cut their own opening in the
+    wall clicked);
   - a movable, customisable tool palette (tools can be left out, under ⋯) and a hideable top bar;
   - a Views button that cycles the standard views;
   - sky and ground behind the model (per device; scenes can keep their own).
 - **Checks:** Entity Info shows volumes and whether shapes are proper solids; tests refuse changes
   that break solids.
 - **Files:**
-  - save/open `.vorm` (format 7, with design history and undo saved inside);
+  - save/open `.vorm` (format 8, with design history and undo saved inside; components saved once);
   - autosave and recovery;
   - Google Drive save, open and autosave, and each device's settings saved/loaded by hand
     (`VormCraft settings.json`; Google-verified; `drive.file` scope only);
   - import SKP/OBJ/STL; export STL/OBJ.
-- About 650 Vitest tests; `npm test`, `npm run typecheck` and the build must stay clean, with no
+- About 700 Vitest tests; `npm test`, `npm run typecheck` and the build must stay clean, with no
   warnings.
 
 ## Rules
@@ -65,6 +70,7 @@ Unfinished work and known bugs live in `TODO.md`.
   - Operations (`ops/`):
     - drawing, imprint, push/pull, offset, Follow Me, transform (with auto-fold), points;
     - erase, cleanup, groups, mesh import, Merge Shapes;
+    - walls (`wall.ts`), openings for doors and windows (`opening.ts`), section cuts (`section.ts`);
     - 3D text outline tracing (`text3d.ts`).
   - Booleans through Manifold (`boolean/manifold.ts`); `triangulate.ts`; watertight checks
     (`check/`).
@@ -204,7 +210,7 @@ Unfinished work and known bugs live in `TODO.md`.
     deploys the web app only).
   - See `docs/RELEASING.md`.
 - **File format changes:**
-  - Bump `FORMAT_VERSION` (now 7) and keep reading older versions.
+  - Bump `FORMAT_VERSION` (now 8) and keep reading older versions.
   - Add `tests/fixtures/format-vN.vorm` and its case in `tests/compatibility.test.ts`.
   - Never edit or delete existing fixtures.
 - **Library items:** when they change shape, bump `LIBRARY_VERSION` so cached preview pictures are

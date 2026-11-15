@@ -1,6 +1,6 @@
 import { TOL } from '../core/math/tolerance';
 import { add, distance, dot, length, normalize, scale, sub, type Vec3 } from '../core/math/vec3';
-import { scaling } from '../core/ops/transform';
+import { composeAffine, scaling } from '../core/ops/transform';
 import type { Document, DocumentSnapshot } from '../doc/Document';
 import { transformModel } from '../core/ops/group';
 import { applyToTargets } from './targets';
@@ -175,13 +175,14 @@ function withLength(m: Measure, d: number): Measure {
   return { ...m, to: add(m.from, scale(normalize(sub(m.to!, m.from)), d)) };
 }
 
-/** Scale everything (geometry, guides, labels) about the origin by `factor`. */
+/** Scale everything (geometry, guides, labels, section planes) about the origin by `factor`. */
 export function rescaleDocument(doc: Document, factor: number): void {
   if (!(factor > 0)) throw new Error('The new length must be more than zero');
   const a = scaling([0, 0, 0], [factor, factor, factor]);
   // Every group too, wherever editing is: the whole model changes size.
   for (const m of doc.allModels()) if (m !== doc.model) transformModel(m, a);
-  const targets = { vertices: new Set(doc.model.vertices.keys()), labels: [...doc.labels.items.keys()], guides: [...doc.guides.items.keys()], groups: [] };
+  for (const g of doc.groups.items.values()) if (g.component) g.component = { id: g.component.id, place: composeAffine(a, g.component.place) };
+  const targets = { vertices: new Set(doc.model.vertices.keys()), labels: [...doc.labels.items.keys()], guides: [...doc.guides.items.keys()], groups: [], sections: [...doc.sections.items.keys()] };
   applyToTargets(doc, targets, [a], false);
 }
 

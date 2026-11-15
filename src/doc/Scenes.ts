@@ -2,6 +2,7 @@ import type { Vec3 } from '../core/math/vec3';
 import type { Backdrop } from './Backdrop';
 import type { GroupId, Groups } from './Groups';
 import type { Guides } from './Guides';
+import type { SectionId, Sections } from './Sections';
 
 export type SceneId = number;
 
@@ -48,6 +49,11 @@ export interface Scene {
   /** Hidden groups. */
   hidden: GroupId[];
   style: DisplayStyle;
+  /**
+   * The section plane cutting the view (null: none), restored with the style. Missing in scenes
+   * saved before section planes: those leave the cut as it is.
+   */
+  section?: SectionId | null;
 }
 
 export const DEFAULT_STYLE: DisplayStyle = { faces: 'textured', backEdges: false, guides: true, background: '#d8dadd' };
@@ -136,11 +142,12 @@ function cloneScene(s: Scene): Scene {
 }
 
 /** The live state as scene fields (everything is captured; `parts` says what gets restored). */
-export function captureScene(view: SceneView, groups: Groups, guides: Guides): Omit<Scene, 'id' | 'name' | 'parts'> {
+export function captureScene(view: SceneView, groups: Groups, guides: Guides, sections?: Sections): Omit<Scene, 'id' | 'name' | 'parts'> {
   return {
     camera: view.cameraView(),
     hidden: [...groups.items.values()].filter((g) => g.hidden).map((g) => g.id),
     style: { ...view.displayStyle(), guides: guides.visible },
+    ...(sections ? { section: sections.active } : {}),
   };
 }
 
@@ -148,10 +155,11 @@ export function captureScene(view: SceneView, groups: Groups, guides: Guides): O
  * Show a scene: its style and hidden groups take effect at once, then the camera glides to the
  * scene's view over `seconds`. Only the parts the scene saves are changed.
  */
-export function applyScene(scene: Scene, view: SceneView, groups: Groups, guides: Guides, seconds: number): void {
+export function applyScene(scene: Scene, view: SceneView, groups: Groups, guides: Guides, seconds: number, sections?: Sections): void {
   if (scene.parts.style) {
     view.setDisplayStyle(scene.style);
     guides.visible = scene.style.guides;
+    if (sections && scene.section !== undefined) sections.active = scene.section !== null && sections.items.has(scene.section) ? scene.section : null;
   }
   if (scene.parts.hidden) {
     const hidden = new Set(scene.hidden);

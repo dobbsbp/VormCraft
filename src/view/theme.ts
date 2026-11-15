@@ -15,6 +15,11 @@ export const THEME = {
   axisZ: 0x3550d0,
   parallel: 0xc026d3,
   scaleBox: 0xe0b000,
+  /** Section planes: the active one, others, the cut lines and the filled cut. */
+  section: 0xe0702a,
+  sectionIdle: 0x8a8f99,
+  sectionCut: 0x111214,
+  sectionFill: 0x5b6070,
 } as const;
 
 /** Tooltip text for the snap cue. */

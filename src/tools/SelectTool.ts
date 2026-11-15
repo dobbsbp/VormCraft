@@ -1,3 +1,4 @@
+import type { SectionId } from '../doc/Sections';
 import type { Document } from '../doc/Document';
 import type { LabelId } from '../doc/Labels';
 import type { FaceId, HalfEdgeId, VertexId } from '../core/model/Model';
@@ -26,13 +27,14 @@ export class SelectTool implements Tool {
   private hoverEdge: HalfEdgeId | null = null;
   private hoverPoint: VertexId | null = null;
   private hoverGuide: GuideId | null = null;
+  private hoverSection: SectionId | null = null;
   private hoverGroup: GroupId | null = null;
   private lastDouble: { time: number; screen: [number, number] } | null = null;
 
   constructor(private readonly ctx: ToolContext) {}
 
   hint(): string {
-    return 'Click or drag to select (faces, edges, points, groups, guides). Shift = add/remove. Double-click a face: face and its edges; a group: edit it. Delete erases.';
+    return 'Click or drag to select (faces, edges, points, groups, guides, section planes by their outline). Shift = add/remove. Double-click a face: face and its edges; a group: edit it. Delete erases.';
   }
 
   vcbLabel(): string {
@@ -49,6 +51,7 @@ export class SelectTool implements Tool {
 
   pointerMove(e: ToolEvent): void {
     this.hoverGuide = guideFirst(e);
+    this.hoverSection = this.hoverGuide === null && e.edge === null ? (e.section ?? null) : null;
     this.hoverPoint = this.hoverGuide === null ? pointUnder(this.ctx, e) : null;
     this.hoverEdge = this.hoverGuide === null && this.hoverPoint === null && e.edge !== null ? edgeId(this.ctx.doc.model, e.edge) : null;
     this.hoverGroup = this.hoverGuide === null && this.hoverEdge === null ? e.group : null;
@@ -83,6 +86,8 @@ export class SelectTool implements Tool {
       } else if (guide !== null) {
         if (e.shift) selection.toggle([], [], [guide]);
         else selection.set([], [], [guide]);
+      } else if (e.section != null && e.edge === null) {
+        selection.toggleSection(e.section, e.shift);
       } else if (e.group !== null && e.edge === null) {
         if (e.shift) selection.toggle([], [], [], [e.group]);
         else selection.set([], [], [], [e.group]);
@@ -166,6 +171,7 @@ export class SelectTool implements Tool {
     const p: Preview = {};
     if (this.box) p.box = { from: this.box.from, to: this.box.to, crossing: this.box.to[0] < this.box.from[0] };
     else if (this.hoverGuide !== null) p.guides = [this.hoverGuide];
+    else if (this.hoverSection !== null) p.sections = [this.hoverSection];
     else if (this.hoverPoint !== null) p.points = [this.hoverPoint];
     else if (this.hoverEdge !== null) p.edges = [this.hoverEdge];
     else if (this.hoverGroup !== null) p.groups = [this.hoverGroup];

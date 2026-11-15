@@ -7,9 +7,10 @@ import { pointVertices } from '../core/ops/points';
 import { applyAffine, duplicateVertices, transformVertices, type Affine } from '../core/ops/transform';
 import type { Document } from '../doc/Document';
 import type { GroupId } from '../doc/Groups';
-import { transformModel } from '../core/ops/group';
 import { groupModels } from './groupModels';
 import type { LabelId } from '../doc/Labels';
+import type { SectionId } from '../doc/Sections';
+import { sectionFrames } from './sectionPick';
 import type { ToolContext, ToolEvent, Vec3Pair } from './types';
 
 /** What Move / Rotate act on. Groups move whole. */
@@ -18,6 +19,8 @@ export interface Targets {
   labels: LabelId[];
   guides: GuideId[];
   groups: GroupId[];
+  /** Section planes (moved or turned like guides). */
+  sections: SectionId[];
 }
 
 /**
@@ -35,14 +38,15 @@ export function targetsAt(ctx: ToolContext, e: ToolEvent): Targets {
       vertices.add(doc.model.dest(ed));
     }
     pointVertices(doc.model, selection.points).forEach((v) => vertices.add(v));
-    return { vertices, labels: [...selection.labels], guides: [...selection.guides], groups: [...selection.groups] };
+    return { vertices, labels: [...selection.labels], guides: [...selection.guides], groups: [...selection.groups], sections: [...selection.sections] };
   }
   // Nothing selected: the guide under the cursor (it sits on top), else the object.
   const guide = guideFirst(e);
-  if (guide !== null) return { vertices: new Set(), labels: [], guides: [guide], groups: [] };
-  if (e.edge !== null) return { vertices: connectedVertices(doc.model, [], [e.edge]), labels: [], guides: [], groups: [] };
-  if (e.group !== null) return { vertices: new Set(), labels: [], guides: [], groups: [e.group] };
-  if (e.face !== null) return { vertices: connectedVertices(doc.model, [e.face], []), labels: [], guides: [], groups: [] };
+  if (guide !== null) return { vertices: new Set(), labels: [], guides: [guide], groups: [], sections: [] };
+  if (e.section != null && e.edge === null) return { vertices: new Set(), labels: [], guides: [], groups: [], sections: [e.section] };
+  if (e.edge !== null) return { vertices: connectedVertices(doc.model, [], [e.edge]), labels: [], guides: [], groups: [], sections: [] };
+  if (e.group !== null) return { vertices: new Set(), labels: [], guides: [], groups: [e.group], sections: [] };
+  if (e.face !== null) return { vertices: connectedVertices(doc.model, [e.face], []), labels: [], guides: [], groups: [], sections: [] };
   throw new Error('Select something first, or click on the object');
 }
 
@@ -53,11 +57,18 @@ export function targetsAt(ctx: ToolContext, e: ToolEvent): Targets {
 export function applyToTargets(doc: Document, t: Targets, steps: Affine[], copy: boolean): void {
   if (!copy) {
     if (t.vertices.size) transformVertices(doc.model, t.vertices, steps[0]);
-    for (const id of t.groups) for (const m of groupModels(doc, id)) transformModel(m, steps[0]);
+    for (const id of t.groups) if (doc.groups.has(id)) doc.groups.transform(id, steps[0]);
     moveLabels(doc, t.labels, steps[0]);
     for (const id of t.guides) {
       const g = doc.guides.items.get(id);
       if (g) doc.guides.update(transformGuide(g, steps[0]));
+    }
+    for (const id of t.sections) {
+      const s = doc.sections.items.get(id);
+      if (!s) continue;
+      const m = transformSection(s, steps[0]);
+      s.point = m.point;
+      s.normal = m.normal;
     }
     return;
   }
@@ -69,7 +80,7 @@ export function applyToTargets(doc: Document, t: Targets, steps: Affine[], copy:
     for (const id of t.groups) {
       if (!doc.groups.has(id)) continue;
       const copy = doc.groups.duplicate(id, doc.groups.get(id)!.parent);
-      for (const m of groupModels(doc, copy)) transformModel(m, a);
+      doc.groups.transform(copy, a);
     }
     for (const id of t.labels) {
       const l = doc.labels.items.get(id);
@@ -79,7 +90,20 @@ export function applyToTargets(doc: Document, t: Targets, steps: Affine[], copy:
       const g = doc.guides.items.get(id);
       if (g) doc.guides.addLike(transformGuide(g, a));
     }
+    for (const id of t.sections) {
+      const s = doc.sections.items.get(id);
+      if (s) {
+        const m = transformSection(s, a);
+        doc.sections.add(m.point, m.normal);
+      }
+    }
   }
+}
+
+/** A section plane's point and normal after an affine map (the normal turns with it). */
+function transformSection(s: { point: Vec3; normal: Vec3 }, a: Affine): { point: Vec3; normal: Vec3 } {
+  const point = applyAffine(a, s.point);
+  return { point, normal: normalize(sub(applyAffine(a, add(s.point, s.normal)), point)) };
 }
 
 /** A guide moved by an affine map (its line direction turns with it). */
@@ -119,6 +143,14 @@ export function previewEdges(doc: Document, t: Targets, a: Affine): Vec3Pair[] {
     const moved = transformGuide(g, a);
     if (moved.kind === 'line') out.push([add(moved.point, scale(moved.dir, -2000)), add(moved.point, scale(moved.dir, 2000))]);
     else for (const d of [[5, 0, 0], [0, 5, 0], [0, 0, 5]] as Vec3[]) out.push([sub(moved.pos, d), add(moved.pos, d)]);
+  }
+  // Moved section planes: their outline where it would be.
+  if (t.sections.length) {
+    const frames = sectionFrames(doc);
+    for (const id of t.sections) {
+      const c = frames.get(id);
+      if (c) for (let i = 0; i < 4; i++) out.push([applyAffine(a, c[i]), applyAffine(a, c[(i + 1) % 4])]);
+    }
   }
   return out;
 }

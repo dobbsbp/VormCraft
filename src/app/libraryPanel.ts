@@ -106,7 +106,7 @@ export class LibraryPanel {
     this.results = el('div', { className: 'library-grid' });
     this.root.replaceChildren(
       el('div', { className: 'panel-head' }, el('h2', {}, 'Library'), close),
-      el('p', { className: 'panel-note' }, 'Household objects at real sizes. Click one, then click in the model to place it (arrow keys turn it).'),
+      el('p', { className: 'panel-note' }, 'Objects at real sizes. Click one, then click in the model to place it (arrow keys turn it). Doors and windows go into the wall you click.'),
       search,
       room,
       chips,
@@ -249,6 +249,8 @@ export class LibraryPanel {
     this.controller.place({
       name: variant ? `${item.name}, ${variant.name}` : item.name,
       hangs: item.hangs,
+      source: `library:${item.id}${variantId ? `:${variantId}` : ''}`,
+      opening: item.opening?.(variantId),
       parts: parts.map((p) => {
         const paint = lib.PAINTS[p.paint];
         return { name: p.name, model: p.model, paint: { name: paint.name, color: paint.color, opacity: 'opacity' in paint ? paint.opacity : 1 } };

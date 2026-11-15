@@ -40,12 +40,14 @@ export function contextMenuItems(c: ToolController, host: MenuHost): MenuEntry[]
 
   if (groups === 1 && geometry === 0) {
     const [id] = sel.groups;
-    entries.push({ label: 'Edit Group', run: () => c.enterGroup(id) });
+    entries.push({ label: doc.groups.get(id)?.component ? 'Edit Component' : 'Edit Group', run: () => c.enterGroup(id) });
   }
-  if (doc.editing !== null) entries.push({ label: 'Close Group', run: () => c.exitGroup(), shortcut: 'Esc' });
+  if (doc.editing !== null) entries.push({ label: doc.groups.instanceOf(doc.editing) ? 'Close Component' : 'Close Group', run: () => c.exitGroup(), shortcut: 'Esc' });
   entries.push(
     { label: 'Explode', run: () => c.explodeSelection(), disabled: groups === 0 },
     { label: 'Make Group', run: () => c.makeGroup(), disabled: !shapes, shortcut: 'Ctrl+G' },
+    { label: 'Make Component', run: () => c.makeComponent(), disabled: !shapes || (geometry === 0 && groups === 1 && !!doc.groups.get([...sel.groups][0])?.component) },
+    ...(c.canMakeUnique() ? [{ label: 'Make Unique', run: () => c.makeUnique() }] : []),
     // Clickable whenever two or more things are selected, so it can say why when it cannot merge.
     { label: 'Merge Shapes…', run: () => host.mergeShapes(), disabled: sel.faces.size + groups < 2 },
     'separator',
@@ -76,5 +78,19 @@ export function contextMenuItems(c: ToolController, host: MenuHost): MenuEntry[]
     { label: 'Unsoften Edges', run: () => c.softenSelection(false), disabled: !c.canSoften() },
     { label: 'Zoom Selection', run: () => c.zoomSelection(), disabled: !anything },
   );
+  const sections = doc.sections;
+  if (sections.items.size) {
+    entries.push('separator', {
+      label: 'Section',
+      items: [
+        { label: sections.active === null ? 'Turn Cut On' : 'Turn Cut Off', run: () => c.toggleSectionCut() },
+        { label: 'Reverse Cut', run: () => c.reverseSection() },
+        ...(sections.items.size > 1 ? [{ label: 'Next Section', run: () => c.nextSection() }] : []),
+        { label: sections.visible ? 'Hide Section Planes' : 'Show Section Planes', run: () => c.toggleSectionPlanes() },
+        'separator',
+        { label: 'Delete Section Plane', run: () => c.deleteSection() },
+      ],
+    });
+  }
   return entries;
 }

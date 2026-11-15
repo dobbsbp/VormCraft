@@ -2,11 +2,12 @@ import type { FaceId, HalfEdgeId, Model, VertexId } from '../core/model/Model';
 import type { GroupId } from '../doc/Groups';
 import type { GuideId, Guides } from '../doc/Guides';
 import type { LabelId, Labels } from '../doc/Labels';
+import type { SectionId, Sections } from '../doc/Sections';
 
 /**
  * The current selection: faces, edges and points by id in the model being edited (edges by their
  * lower half-edge id; points by a vertex where two or more lines meet), groups inside it, guides
- * and labels.
+ * labels and section planes.
  */
 export class Selection {
   readonly faces = new Set<FaceId>();
@@ -15,10 +16,11 @@ export class Selection {
   readonly guides = new Set<GuideId>();
   readonly labels = new Set<LabelId>();
   readonly groups = new Set<GroupId>();
+  readonly sections = new Set<SectionId>();
   private listeners: (() => void)[] = [];
 
   get size(): number {
-    return this.faces.size + this.edges.size + this.points.size + this.guides.size + this.labels.size + this.groups.size;
+    return this.faces.size + this.edges.size + this.points.size + this.guides.size + this.labels.size + this.groups.size + this.sections.size;
   }
 
   onChange(fn: () => void): void {
@@ -37,6 +39,17 @@ export class Selection {
     this.guides.clear();
     this.labels.clear();
     this.groups.clear();
+    this.sections.clear();
+    this.changed();
+  }
+
+  /** Select a section plane alone, or (Shift) add/remove it. */
+  toggleSection(id: SectionId, additive: boolean): void {
+    if (!additive) {
+      this.set([], []);
+      this.sections.add(id);
+    } else if (this.sections.has(id)) this.sections.delete(id);
+    else this.sections.add(id);
     this.changed();
   }
 
@@ -49,6 +62,7 @@ export class Selection {
       this.guides.clear();
       this.labels.clear();
       this.groups.clear();
+      this.sections.clear();
       this.labels.add(id);
     } else if (this.labels.has(id)) this.labels.delete(id);
     else this.labels.add(id);
@@ -62,6 +76,7 @@ export class Selection {
     this.guides.clear();
     this.labels.clear();
     this.groups.clear();
+    this.sections.clear();
     for (const f of faces) this.faces.add(f);
     for (const e of edges) this.edges.add(e);
     for (const g of guides) this.guides.add(g);
@@ -98,7 +113,7 @@ export class Selection {
   }
 
   /** Drop ids that no longer exist after a change (`groupOk`: whether a group can stay selected). */
-  prune(model: Model, labels?: Labels, guides?: Guides, groupOk?: (g: GroupId) => boolean): void {
+  prune(model: Model, labels?: Labels, guides?: Guides, groupOk?: (g: GroupId) => boolean, sections?: Sections): void {
     let changed = false;
     const keep = <T>(set: Set<T>, exists: (x: T) => boolean) => {
       for (const x of set) {
@@ -110,6 +125,7 @@ export class Selection {
     };
     if (labels) keep(this.labels, (l) => labels.items.has(l));
     if (guides) keep(this.guides, (g) => guides.items.has(g));
+    if (sections) keep(this.sections, (s) => sections.items.has(s) && sections.visible);
     keep(this.faces, (f) => model.faces.has(f));
     keep(this.edges, (e) => model.halfEdges.has(e));
     keep(this.points, (v) => model.vertices.has(v) && model.outgoing(v).size > 0);
