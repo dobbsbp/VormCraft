@@ -1,36 +1,40 @@
-# Pushing a version tag (v0.2.0) builds the Windows installer on GitHub, signs the update with the
-# private key kept in the repository secrets, and publishes a GitHub Release with latest.json,
-# which installed copies of VormCraft read to find the update.
+# Pushing a version tag (v0.2.0) builds VormCraft for Windows (installer) and Linux (AppImages for
+# x86_64 and ARM64) on GitHub, signs the updates with the private key kept in the repository
+# secrets, and publishes a GitHub Release with latest.json, which installed copies of VormCraft
+# read to find the update. Then the same version is published as the web app.
+#
+# The release stays a draft until every build has uploaded its files, and latest.json is written
+# once at the end, with every system in it. A beta tag (v0.6.0-beta.1) is published as a
+# pre-release: installed copies are not offered it, and the web app is not changed.
 name: Release
 
 on:
   push:
     tags: ['v*']
   # Run by hand (Actions > Release > Run workflow) to publish the web app again from main
-  # without a new installer, for example when the Pages deploy failed.
+  # without a new release, for example when the Pages deploy failed.
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  windows:
+  # Tests, then an empty draft release for the builds to upload to.
+  check:
     if: github.event_name == 'push'
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.draft.outputs.id }}
+      prerelease: ${{ steps.draft.outputs.prerelease }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri
       - run: npm ci
 
       - name: The tag matches the app version
-        shell: bash
         run: |
           v=$(node -p "require('./package.json').version")
           if [ "v$v" != "$GITHUB_REF_NAME" ]; then
@@ -41,36 +45,108 @@ jobs:
       - run: npm run typecheck
       - run: npm test
 
-      - name: Release notes from CHANGELOG.md
-        id: notes
-        shell: bash
+      - name: Draft release with the notes from CHANGELOG.md
+        id: draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          {
-            echo 'body<<NOTES_END'
-            node scripts/release-notes.mjs "${GITHUB_REF_NAME#v}"
-            echo 'NOTES_END'
-          } >> "$GITHUB_OUTPUT"
+          node scripts/release-notes.mjs "${GITHUB_REF_NAME#v}" > notes.md
+          case "$GITHUB_REF_NAME" in *-*) pre=true ;; *) pre=false ;; esac
+          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME" --silent 2>/dev/null; then
+            echo "A published release $GITHUB_REF_NAME already exists"
+            exit 1
+          fi
+          # A draft left by an earlier run of this tag is used again.
+          id=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=50" --jq ".[] | select(.draft and .tag_name == \"$GITHUB_REF_NAME\") | .id" | head -n 1)
+          if [ -z "$id" ]; then
+            id=$(gh api "repos/$GITHUB_REPOSITORY/releases" \
+              -f tag_name="$GITHUB_REF_NAME" -f name="VormCraft $GITHUB_REF_NAME" -F body=@notes.md \
+              -F draft=true -F prerelease=$pre --jq .id)
+          fi
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$pre" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+            bundles: nsis
+          # Built on Ubuntu 22.04 so the AppImages also run on older Linux systems (glibc 2.35 and up).
+          - name: Linux x86_64
+            os: ubuntu-22.04
+            bundles: appimage
+          - name: Linux ARM64
+            os: ubuntu-22.04-arm
+            bundles: appimage
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Linux build tools
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev libssl-dev libdbus-1-dev \
+            libxdo-dev libayatana-appindicator3-dev patchelf file libfuse2 xdg-utils
+
+      - run: npm ci
 
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          # Google Drive sign-in for the Windows app (the desktop client JSON from Google; read by src-tauri/build.rs).
+          # Google Drive sign-in for the desktop app (the desktop client JSON from Google; read by src-tauri/build.rs).
           GOOGLE_DESKTOP_CLIENT_JSON: ${{ secrets.GOOGLE_DESKTOP_CLIENT_JSON }}
+          # The AppImage tools run without FUSE on the build machines.
+          APPIMAGE_EXTRACT_AND_RUN: 1
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: VormCraft ${{ github.ref_name }}
-          releaseBody: ${{ steps.notes.outputs.body }}
-          releaseDraft: false
-          prerelease: false
-          includeUpdaterJson: true
+          releaseId: ${{ needs.check.outputs.release_id }}
+          # latest.json is written once, by the publish job.
+          includeUpdaterJson: false
+          args: --bundles ${{ matrix.bundles }}
+
+  # Every build is in: write latest.json and publish the release.
+  publish:
+    needs: [check, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: latest.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node scripts/release-notes.mjs "${GITHUB_REF_NAME#v}" > notes.md
+          node scripts/updater-json.mjs "${{ needs.check.outputs.release_id }}" "$GITHUB_REF_NAME" notes.md
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          latest=$([ "${{ needs.check.outputs.prerelease }}" = true ] && echo false || echo true)
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/${{ needs.check.outputs.release_id }}" \
+            -F draft=false -f make_latest=$latest --silent
 
   # The same version as a web app (installable, works offline) on GitHub Pages, published only
-  # after the Windows release succeeded, so both always carry the same version.
+  # after the release succeeded, so both always carry the same version. Betas leave it alone.
   web:
-    needs: windows
-    if: ${{ !cancelled() && (needs.windows.result == 'success' || github.event_name == 'workflow_dispatch') }}
+    needs: [check, publish]
+    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || (needs.publish.result == 'success' && needs.check.outputs.prerelease == 'false')) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read

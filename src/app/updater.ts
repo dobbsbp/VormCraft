@@ -14,6 +14,10 @@ export interface UpdateHooks {
 /** A plain-language reason the check failed. */
 export function updateErrorMessage(err: unknown): string {
   const text = err instanceof Error ? err.message : String(err);
+  // The newest release has no download for this system (Linux before the first stable release with it).
+  if (/platform .* not found/i.test(text)) return 'There is no newer version for this computer yet.';
+  // An AppImage replaces itself, so it must be somewhere the person can write to.
+  if (/permission denied|read-only file system|os error (13|30)/i.test(text)) return 'VormCraft could not replace its own file. Move the VormCraft AppImage to a folder you can change, such as your home folder or ~/Applications, and try again.';
   if (/404|valid release json|not found/i.test(text)) return 'No release has been published on GitHub yet.';
   if (/dns|connect|network|timed? ?out|offline|resolve|request/i.test(text)) return 'GitHub could not be reached. Check your internet connection and try again.';
   if (/signature/i.test(text)) return 'The update’s signature did not match, so it was not installed.';

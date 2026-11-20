@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-VormCraft is a free, SketchUp-style direct modeler (push/pull) for Windows and the web, built with
+VormCraft is a free, SketchUp-style direct modeler (push/pull) for Windows, Linux (beta) and the web, built with
 TypeScript, Three.js, Manifold, Tauri and Vitest.
 - Repo: github.com/dobbsbp/VormCraft (public, MIT).
 - Web app: https://vormcraft.app.
@@ -12,7 +12,10 @@ Unfinished work and known bugs live in `TODO.md`.
 
 ## Current state (0.5.16, November 2026)
 - Released for Windows (NSIS installer, auto-update) and the web (installable PWA, works offline).
-  Both are built by GitHub Actions from a version tag.
+  All are built by GitHub Actions from a version tag.
+- Linux (beta, not yet released): AppImages for x86_64 and ARM64 with auto-update, on WebKitGTK.
+  Betas (`x.y.z-beta.N`) are GitHub pre-releases; the web app is left alone. Settings → Graphics
+  card is Windows-only (follow-up in TODO.md).
 - **Modelling tools:** Line, Rectangle (and Rotated), Circle, Polygon, Arcs/Pie, Push/Pull with
   boolean cuts and merging, Offset, Follow Me, Move/Rotate/Scale (with copies and arrays), Points
   editing, Eraser, Tape Measure/guides, Text labels, Dimensions, 3D Text, Paint Bucket, Wall,
@@ -120,9 +123,10 @@ Unfinished work and known bugs live in `TODO.md`.
   - `materialLibrary.ts`: colours and textures drawn in code.
   - `text3dDialog.ts`: draws the text on a canvas, then calls the core tracer.
   - `toolOrder.ts`: palette order.
-- `src-tauri`: the desktop shell.
+- `src-tauri`: the desktop shell (Windows and Linux; platform code behind `#[cfg(windows)]` /
+  `#[cfg(target_os = "linux")]`).
   - Native dialogs, file access, the updater, `launch_file` (a `.vorm` double-clicked in Explorer).
-  - `google.rs`: the loopback sign-in for Drive.
+  - `google.rs`: the loopback sign-in for Drive (token in Credential Manager or the Linux keyring).
   - Capabilities in `capabilities/default.json`.
 - Web: `scripts/offline.ts` (Vite plugin: service worker and `version.json`),
   `src/app/webApp.ts`, `public/manifest.webmanifest`.
@@ -163,6 +167,8 @@ Unfinished work and known bugs live in `TODO.md`.
 ## Key decisions
 - **Releases:** builds come from GitHub Actions only. The Windows installer is unsigned (SmartScreen
   warning accepted), installs per user, and updates through the Tauri updater from GitHub Releases.
+  The Linux AppImages are built on Ubuntu 22.04 (x86_64 and ARM64 runners) and update the same way.
+  One `latest.json` for every system is written by `scripts/updater-json.mjs` after all builds.
 - **Identity and keys:**
   - Never change the app identifier `app.vormcraft.modeler`.
   - The update signing key and the Google desktop client JSON are secrets.
@@ -197,15 +203,17 @@ Unfinished work and known bugs live in `TODO.md`.
 
 ## Releases and compatibility
 - **Steps:**
-  1. `npm run version:set -- x.y.z` (writes package.json, Cargo.toml and tauri.conf.json).
+  1. `npm run version:set -- x.y.z` (writes package.json, Cargo.toml and tauri.conf.json; `x.y.z-beta.N`
+   for a beta pre-release).
   2. Rename `## Unreleased` in CHANGELOG.md to `## x.y.z`. Check it has no BOM: avoid PowerShell
      `Set-Content`, and use sed or Python.
   3. Check the notes with `node scripts/release-notes.mjs x.y.z`.
   4. Run the tests, typecheck and build.
   5. Commit, using a message file (`git commit -F`).
   6. Tag `vx.y.z` and push.
-- **What the workflow does:** `.github/workflows/release.yml` builds the Windows release, then
-  publishes the web app to Pages.
+- **What the workflow does:** `.github/workflows/release.yml`: `check` (tests, a draft release),
+  `build` (Windows, Linux x86_64, Linux ARM64), `publish` (latest.json, release made public), then
+  `web` publishes the web app to Pages (stable releases only).
   - If only the Pages deploy fails, use Actions → Release → Run workflow (`workflow_dispatch`
     deploys the web app only).
   - See `docs/RELEASING.md`.

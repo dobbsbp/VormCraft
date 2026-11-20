@@ -9,7 +9,7 @@ export const LINKS = {
   newIssue: 'https://github.com/dobbsbp/VormCraft/issues/new',
   /** Donations (GitHub Sponsors). */
   support: 'https://github.com/sponsors/dobbsbp',
-  /** The newest Windows installer. */
+  /** The newest desktop app (the Windows installer and the Linux AppImages). */
   windowsApp: 'https://github.com/dobbsbp/VormCraft/releases/latest',
   /** The pages around the app (public/about, public/privacy, public/terms). */
   about: 'https://vormcraft.app/about/',

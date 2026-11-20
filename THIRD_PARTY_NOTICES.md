@@ -1,7 +1,7 @@
 # Third-party software
 
 VormCraft (MIT licence, see [LICENSE](LICENSE)) includes the following open-source libraries in
-its Windows app and web app. Each is used under its own licence, linked below.
+its Windows app, Linux app and web app. Each is used under its own licence, linked below.
 
 | Library | Used for | Licence | Copyright |
 | --- | --- | --- | --- |
@@ -11,7 +11,7 @@ its Windows app and web app. Each is used under its own licence, linked below.
 | [fflate](https://github.com/101arrowz/fflate) 0.8 | Compressing design history; reading SketchUp files | MIT | © Arjun Barrett |
 | [OpenSKP](https://github.com/iamahsanmehmood/openskp) 1.4.0 | Reading SketchUp (.skp) files | MIT | © Ahsan Mehmood |
 | [FlatBuffers](https://github.com/google/flatbuffers) 25.9 | Reading SketchUp (.skp) files (used by OpenSKP) | Apache-2.0 | © Google Inc. |
-| [Tauri](https://github.com/tauri-apps/tauri) 2 | The Windows app | Apache-2.0 or MIT | © Tauri Programme within The Commons Conservancy |
+| [Tauri](https://github.com/tauri-apps/tauri) 2 | The Windows and Linux apps | Apache-2.0 or MIT | © Tauri Programme within The Commons Conservancy |
 
 ## MIT licence (three.js, fflate, OpenSKP)
 
@@ -40,6 +40,17 @@ its Windows app and web app. Each is used under its own licence, linked below.
 ## Apache License 2.0 (Manifold, FlatBuffers, Tauri)
 
 The full text is at https://www.apache.org/licenses/LICENSE-2.0.
+
+## Linux AppImages: bundled system libraries
+
+The Linux AppImages carry the system libraries VormCraft needs to draw its window, so they run on
+computers that do not have them installed. Chief among them are
+[WebKitGTK](https://webkitgtk.org/) (shows the app; LGPL-2.1 and BSD-style), [GTK](https://gtk.org/),
+GLib, Pango, cairo, HarfBuzz, libsoup and their dependencies (mostly LGPL-2.1 or later, or MIT).
+They are unchanged copies from Ubuntu 22.04, whose source code is available from Ubuntu
+(https://packages.ubuntu.com/jammy/). They are separate shared libraries inside the AppImage and can
+be replaced: run the AppImage with `--appimage-extract`, swap a library in `squashfs-root/usr/lib`,
+and start `squashfs-root/AppRun`.
 
 ## SketchUp files
 

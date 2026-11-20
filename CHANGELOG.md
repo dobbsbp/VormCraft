@@ -4,6 +4,11 @@ What changed in each version of VormCraft. The section for a version is also sho
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
+## 0.6.0-beta.1
+
+- VormCraft for Linux (beta): AppImages for ordinary PCs (x86_64) and for ARM computers such as a Raspberry Pi 5 (ARM64), on the Releases page. They update themselves like the Windows app. Linux builds come out as pre-releases until they have been tried on more computers.
+- On Linux, the Google Drive sign-in is kept in the system keyring (GNOME Keyring or KWallet). Without one, VormCraft keeps it until it closes.
+
 ## 0.5.16
 
 - Components: right-click a group (or some geometry) and choose Make Component. Copies of it stay linked, so changing one changes them all, even copies that are turned, resized or mirrored. Make Unique (right-click) unlinks a copy. Entity Info shows how many linked copies there are.

@@ -85,12 +85,12 @@ export function showSettingsDialog(current: Settings, ctx: SettingsContext): Pro
   dlg.querySelector('.gpu')!.textContent = ctx.graphicsInUse;
   const graphicsBox = dlg.querySelector<HTMLFieldSetElement>('fieldset.graphics')!;
   if (ctx.graphics === null) {
-    // The web version: the browser picks the graphics card.
+    // The web version (the browser picks the graphics card) or the Linux app (the system does).
     graphicsBox.querySelectorAll('label').forEach((l) => l.remove());
     const note = graphicsBox.querySelector<HTMLElement>('.note')!;
     const kind = classifyGpu(ctx.graphicsInUse);
-    note.textContent = `In use now: ${ctx.graphicsInUse}${kind === 'integrated' ? ' (built-in graphics)' : kind === 'dedicated' ? ' (graphics card)' : ''}. In the web version the browser chooses the graphics card${onWindows() ? '; Windows decides which one the browser gets.' : '.'}`;
-    if (onWindows()) {
+    note.textContent = `In use now: ${ctx.graphicsInUse}${kind === 'integrated' ? ' (built-in graphics)' : kind === 'dedicated' ? ' (graphics card)' : ''}. ${desktop ? 'The system chooses the graphics card for VormCraft.' : `In the web version the browser chooses the graphics card${onWindows() ? '; Windows decides which one the browser gets.' : '.'}`}`;
+    if (onWindows() && !desktop) {
       const intro = document.createElement('p');
       intro.className = 'note';
       intro.textContent = 'To use a faster graphics card:';

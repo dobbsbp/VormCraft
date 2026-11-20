@@ -36,7 +36,7 @@ function google(answer: (url: string, form: URLSearchParams) => object) {
 
 const b64url = (b: Buffer) => b.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
-describe('Windows app Google sign-in', () => {
+describe('Desktop app Google sign-in', () => {
   it('signs in with PKCE through the browser and keeps the lasting sign-in', async () => {
     const s = shell((u) => `state=${u.searchParams.get('state')}&code=the-code&scope=drive.file`);
     const g = google(() => ({ access_token: 'access-1', expires_in: 3600, refresh_token: 'refresh-1' }));
@@ -98,5 +98,23 @@ describe('Windows app Google sign-in', () => {
     expect(s.saved).toBeNull();
     expect(g.calls[0].url).toBe('https://oauth2.googleapis.com/revoke');
     expect(g.calls[0].form.get('token')).toBe('refresh-1');
+  });
+
+  it('without a keyring (Linux), keeps the sign-in until the app closes', async () => {
+    const s = shell((u) => `state=${u.searchParams.get('state')}&code=the-code`);
+    const broken = new Error('No Secret Service on this computer');
+    s.native.savedToken = async () => { throw broken; };
+    s.native.saveToken = async () => { throw broken; };
+    s.native.forgetToken = async () => { throw broken; };
+    let n = 0;
+    const g = google((url) => (url.endsWith('/revoke') ? {} : { access_token: `access-${++n}`, expires_in: 30, refresh_token: n === 1 ? 'refresh-1' : undefined }));
+    const auth = new DesktopGoogleAuth(undefined, s.native, g.http);
+    expect(await auth.signIn(false)).toBe('access-1');
+    // The token runs out at once (30 s): it is renewed from the sign-in kept in memory.
+    expect(await auth.source(() => false)(false)).toBe('access-2');
+    expect(g.calls[1].form.get('refresh_token')).toBe('refresh-1');
+    await auth.signOut();
+    expect(g.calls[2].form.get('token')).toBe('refresh-1');
+    await expect(auth.source(() => false)(false)).rejects.toBeInstanceOf(SignInNeeded);
   });
 });

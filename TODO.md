@@ -35,6 +35,17 @@ CHANGELOG.md when it ships.
   move them to IndexedDB if the library grows a lot.
 
 ## Unfinished / planned
+- **Linux (beta):**
+  - Follow up: let Linux users choose the graphics card (Settings → Graphics card is Windows-only
+    for now). On laptops with two graphics chips this means starting WebKitGTK with `DRI_PRIME=1`
+    (AMD/Intel) or `__NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia` (Nvidia), set in
+    `src-tauri/src/lib.rs` before the window opens, like the Nvidia DMA-BUF workaround there.
+  - Try the AppImages on real computers (x86_64 under WSL2 or a Linux PC; ARM64 on a Raspberry Pi
+    5 or an ARM laptop): opening and saving, a .vorm passed on the command line, Google sign-in
+    with and without a keyring, booleans, speed on a large model, and an update.
+  - Betas are pre-releases, so a beta is not offered the next beta (the updater reads the latest
+    stable release); beta users download each one. The first stable release with Linux updates
+    them all. Leave beta once it has worked on a few computers.
 - **Library:**
   - My Library: save a selection as your own item with tags, stored locally and optionally on
     Drive. Wanted only after seeing how the Library works.

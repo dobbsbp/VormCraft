@@ -20,9 +20,9 @@
     </header>
     <main>
       <h1>Privacy Policy</h1>
-      <p class="updated">Last updated: 12 November 2026</p>
+      <p class="updated">Last updated: 20 November 2026</p>
 
-      <p>VormCraft is a free, open-source 3D modeling program made by Ben Dobbs, an independent developer. It runs in your web browser at <a href="https://vormcraft.app">vormcraft.app</a> and as a Windows app. This policy explains what happens to your information when you use either one.</p>
+      <p>VormCraft is a free, open-source 3D modeling program made by Ben Dobbs, an independent developer. It runs in your web browser at <a href="https://vormcraft.app">vormcraft.app</a> and as a desktop app for Windows and Linux. This policy explains what happens to your information when you use any of them.</p>
 
       <div class="summary">
         <h2>The short version</h2>
@@ -36,11 +36,11 @@
       <h2>What stays on your device</h2>
       <ul>
         <li><strong>Your designs.</strong> Saving writes a <code>.vorm</code> file wherever you choose (in the web version, Save downloads the file). A <code>.vorm</code> file also contains the design's version history and its last undo steps, so you can go back after reopening it. To share a design without them, use <em>Save a Copy Without History</em>.</li>
-        <li><strong>Autosaved recovery copies.</strong> In the Windows app they are kept in the app's data folder (or a folder you choose in Settings); in the web version, in your browser's storage for vormcraft.app. They are deleted after a set number of days (14 by default).</li>
+        <li><strong>Autosaved recovery copies.</strong> In the Windows and Linux apps they are kept in the app's data folder (or a folder you choose in Settings); in the web version, in your browser's storage for vormcraft.app. They are deleted after a set number of days (14 by default).</li>
         <li><strong>Settings.</strong> Your preferences (autosave, version history, sky and ground, tools, whether Google Drive is shown and so on) are kept in the app's storage on your device. They are copied to your Google Drive only when you choose to save them there (see below).</li>
         <li><strong>Imported files.</strong> SketchUp, OBJ and STL files you import are read and converted on your device. They are not uploaded anywhere.</li>
       </ul>
-      <p>None of this is sent to us. You can remove it at any time: delete your files, uninstall the Windows app (and its backup folder), or clear the site data for vormcraft.app in your browser.</p>
+      <p>None of this is sent to us. You can remove it at any time: delete your files, uninstall the Windows app or delete the Linux AppImage (and its backup folder), or clear the site data for vormcraft.app in your browser.</p>
 
       <h2>Google Drive (optional)</h2>
       <p>You can connect a Google account to save designs to Google Drive, open them from there, and keep an autosaved copy there. Nothing is connected unless you choose to.</p>
@@ -68,6 +68,7 @@
       <ul>
         <li>In the web version, the token is kept in memory only and lasts up to an hour.</li>
         <li>In the Windows app, a token that lets VormCraft stay signed in between sessions is kept in Windows Credential Manager on your computer, protected by your Windows account.</li>
+        <li>In the Linux app, that token is kept in your system keyring (such as GNOME Keyring or KWallet), protected by your login. Without a keyring it is kept in memory only, until VormCraft closes.</li>
         <li>To remember which account to suggest next time, the email address of the connected account is kept in the app's storage on your device.</li>
       </ul>
 
@@ -77,7 +78,7 @@
       <h2>Connections VormCraft makes</h2>
       <ul>
         <li><strong>The website.</strong> vormcraft.app is hosted on GitHub Pages. Like any web host, GitHub may record technical details such as your IP address and browser when you load the site; see <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">GitHub's privacy statement</a>. VormCraft adds no tracking of its own.</li>
-        <li><strong>Update checks.</strong> The web version checks vormcraft.app for a newer version. The Windows app checks VormCraft's GitHub Releases page when it starts; you can switch this off in Settings.</li>
+        <li><strong>Update checks.</strong> The web version checks vormcraft.app for a newer version. The Windows and Linux apps check VormCraft's GitHub Releases page when they start; you can switch this off in Settings.</li>
         <li><strong>Google.</strong> Only when you use Google Drive: Google's sign-in and Drive services (accounts.google.com and googleapis.com). Google's handling of your data is covered by <a href="https://policies.google.com/privacy">Google's privacy policy</a>.</li>
         <li><strong>Links you choose to open,</strong> such as the GitHub project page, reporting a problem, or donating, take you to those websites, which have their own privacy policies.</li>
       </ul>

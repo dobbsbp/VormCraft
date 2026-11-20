@@ -1,8 +1,8 @@
 # Releasing a new version
 
-Releases are built by GitHub Actions on Windows, not on your PC. Installed copies of VormCraft
-find the new version on their own (they read `latest.json` from the newest GitHub Release) and
-offer to install it.
+Releases are built by GitHub Actions, not on your PC: the Windows installer and Linux AppImages
+for x86_64 and ARM64. Installed copies of VormCraft find the new version on their own (they read
+`latest.json` from the newest GitHub Release) and offer to install it.
 
 ## Every release
 
@@ -22,7 +22,8 @@ offer to install it.
    git push && git push --tags
    ```
 5. Watch the **Actions** tab on GitHub. In about 15 minutes the release appears under
-   **Releases** with the installer (`VormCraft_0.3.0_x64-setup.exe`) and `latest.json`, and then
+   **Releases** with the installer (`VormCraft_0.3.0_x64-setup.exe`), the AppImages
+   (`VormCraft_0.3.0_amd64.AppImage`, `VormCraft_0.3.0_aarch64.AppImage`) and `latest.json`, and then
    the same version is published as the web app at https://vormcraft.app.
    Installed web apps pick it up the next time they open (they ask before switching).
 
@@ -30,6 +31,37 @@ The release workflow refuses to build if the tag and the app version differ, or 
 
 Version numbers: `major.minor.patch`. Bump the patch for fixes (0.2.0 → 0.2.1), the minor for new
 features (0.2.1 → 0.3.0).
+
+## How the workflow runs
+
+`.github/workflows/release.yml` has four jobs:
+
+1. `check`: the tag matches the version, typecheck and tests, then an empty **draft** release
+   with the notes.
+2. `build`: Windows, Linux x86_64 and Linux ARM64 at the same time, each uploading its signed
+   download to the draft. The Linux builds run on Ubuntu 22.04 so the AppImages work on older
+   systems too.
+3. `publish`: once all three are in, `scripts/updater-json.mjs` writes one `latest.json` with
+   every system in it, and the release is published.
+4. `web`: the web app (stable releases only).
+
+If a build fails, nothing is published: the draft stays (only you can see it). Re-run the failed
+jobs from the run's page; the draft is used again. To give up on a version, delete the draft and
+the tag.
+
+## Beta releases
+
+A version like `0.6.0-beta.1` (`npm run version:set -- 0.6.0-beta.1`, a `## 0.6.0-beta.1`
+section in CHANGELOG.md, tag `v0.6.0-beta.1`) is built the same way but published as a
+**pre-release**:
+
+- Installed copies are not offered it (the updater only reads the latest stable release), so
+  testers download it from the Releases page.
+- The web app is not changed.
+- The About page's "Download for Windows" button (the latest stable release) does not lead to it.
+
+Linux builds are in beta until they have been tried on a few computers; then the next stable
+release carries them, and from then on Linux copies update themselves.
 
 ## The update signing key
 
@@ -62,9 +94,8 @@ the app do not show this. A code-signing certificate can be added to the workflo
 
 ## Troubleshooting: the website step failed
 
-A release run has two jobs: `windows` (the installer and the GitHub Release) and `web` (the web
-app on https://vormcraft.app). If `windows` succeeds but `web` fails, the release itself is fine:
-the installer is published and installed copies will update. Only the website is still on the
+If `publish` succeeds but `web` fails, the release itself is fine: the installer and AppImages
+are published and installed copies will update. Only the website is still on the
 older version.
 
 1. Open the failed run in the **Actions** tab and read the `web` job's log.

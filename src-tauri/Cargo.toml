@@ -1,6 +1,6 @@
 [package]
 name = "vormcraft"
-version = "0.5.16"
+version = "0.6.0-beta.1"
 description = "VormCraft: a free push/pull 3D modeler"
 authors = ["Ben Dobbs"]
 edition = "2024"
@@ -23,7 +23,14 @@ tauri-plugin-process = "2"
 tauri-plugin-updater = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+
+# Where the Google Drive sign-in is kept: Windows Credential Manager, or the Secret Service
+# (GNOME Keyring, KWallet) on Linux.
+[target.'cfg(windows)'.dependencies]
 keyring = { version = "3", features = ["windows-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }
 
 [profile.release]
 codegen-units = 4

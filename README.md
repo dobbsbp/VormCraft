@@ -4,7 +4,7 @@
 
 **A free, fast, direct 3D modeler: draw a shape, grab a face, push it.**
 
-VormCraft is a push/pull 3D modeling program for woodworking, architecture sketches, 3D printing and CAD/CAM handoff. There is no parametric timeline and no constraint solver. You draw on faces, push and pull them, and the model follows. It works much like SketchUp, but it is free and open source.
+VormCraft is a push/pull 3D modeling program for woodworking, architecture sketches, 3D printing and CAD/CAM handoff. There is no parametric timeline and no constraint solver. You draw on faces, push and pull them, and the model follows. It works much like SketchUp, but it is free and open source. It runs on Windows, on Linux (beta) and in the browser.
 
 ![VormCraft with a spring and a sphere made with Follow Me, and a box with the Scale tool's yellow grip box, under the sky and over the ground](docs/screenshot.jpg)
 
@@ -20,9 +20,22 @@ The installer is not code-signed yet, so the first time Windows may say "Windows
 
 VormCraft checks for a new version when it starts and installs it with one click (**Install and restart**). You can also use **Check for Updates** in the Help menu (the ? button).
 
-**Everywhere else (Android tablets and folding phones, Chromebooks, Mac, Linux):** open **https://vormcraft.app** in Chrome or Edge and choose **Install** (Chrome menu → *Add to home screen* / *Install app*). It then opens in its own window like any app, works fully offline, and updates itself, asking before it restarts into a new version. Your models stay on your device (or in your own Google Drive, if you connect it). A keyboard and mouse are recommended for modeling; on a phone or tablet, tap **Viewer** (the eye) to look around a model with touch. In the web version, Save downloads the `.vorm` file (instead of saving over it), and autosave copies are kept in the app's own storage.
+**Linux (beta):** get the AppImage for your computer from the [Releases](../../releases) page: `VormCraft_x.y.z_amd64.AppImage` for most PCs (Intel and AMD), or `VormCraft_x.y.z_aarch64.AppImage` for ARM computers such as a Raspberry Pi 5 (64-bit Raspberry Pi OS) or an ARM laptop. Linux builds are in beta, starting with 0.6.0-beta.1: they are on pre-releases (under **Releases**, marked *Pre-release*) until they have been tried on more computers. Feedback in [Issues](../../issues) is very welcome. It needs a 64-bit system from 2022 or later (for example Ubuntu 22.04, Debian 12, Fedora 36 or newer).
 
-Both versions have the same version number and open the same `.vorm` files.
+```bash
+chmod +x VormCraft_*.AppImage
+./VormCraft_*.AppImage
+```
+
+- Keep the AppImage in a folder you can change, such as your home folder or `~/Applications`: VormCraft updates itself by replacing that file, like the Windows app (**Install and restart**).
+- If it does not start on Ubuntu 24.04 or newer, install FUSE 2 (`sudo apt install libfuse2t64`), or run it with `--appimage-extract-and-run`.
+- To have `.vorm` files open with a double-click and VormCraft in your applications menu, add the AppImage with [Gear Lever](https://flathub.org/apps/it.mijorus.gearlever) or AppImageLauncher.
+- Google Drive's sign-in is kept in your keyring (GNOME Keyring or KWallet). Without one, you sign in again each time VormCraft starts.
+- The system chooses the graphics card; the Windows app's Graphics card setting is not on Linux yet.
+
+**Everywhere else (Android tablets and folding phones, Chromebooks, Mac):** open **https://vormcraft.app** in Chrome or Edge and choose **Install** (Chrome menu → *Add to home screen* / *Install app*). It then opens in its own window like any app, works fully offline, and updates itself, asking before it restarts into a new version. Your models stay on your device (or in your own Google Drive, if you connect it). A keyboard and mouse are recommended for modeling; on a phone or tablet, tap **Viewer** (the eye) to look around a model with touch. In the web version, Save downloads the `.vorm` file (instead of saving over it), and autosave copies are kept in the app's own storage.
+
+All versions have the same version number and open the same `.vorm` files.
 
 ---
 
@@ -113,16 +126,16 @@ Right-click anything to select it and get a menu for it:
 - Older versions are thinned out over time (everything from the last day, one per hour for a week, then one per day) and the history has a size limit.
 - **Undo after reopening:** the last 100 undo steps are saved in the file too, so Ctrl+Z still goes back after you close and reopen a design. Each step stores only what changed, so 100 steps usually add well under a megabyte.
 - **Save a Copy Without History** for sending a design to someone (it leaves out the undo steps too).
-- **Settings** (gear button): autosave on/off and how often, the backup folder, how long unrecovered backups are kept, history on/off and its size limit, the graphics card, update checks.
+- **Settings** (gear button): autosave on/off and how often, the backup folder, how long unrecovered backups are kept, history on/off and its size limit, the graphics card (Windows), update checks.
 
 ### Google Drive (optional)
-- Save and open designs in your own Google Drive (the cloud button), from the web version and the Windows app, and optionally keep an autosaved copy there.
+- Save and open designs in your own Google Drive (the cloud button), from the web version and the desktop app, and optionally keep an autosaved copy there.
 - Save each device's settings (sky and ground, tools, units, autosave and so on) to Drive under a name, and load them back, or onto a new computer. Each device keeps its own.
 - VormCraft asks only for access to the files it creates or that you open with it, never the rest of your Drive. Saving checks first whether the file was changed elsewhere (Replace or Keep both).
 - Works with any Google account: VormCraft is verified by Google.
 
 ### Graphics and help
-- Uses the graphics card through WebGL (Direct3D 11 on Windows). On laptops with two graphics chips, the Windows app uses the faster one by default; **Settings → Graphics card** switches between High performance, Power saving and Let Windows decide. If a computer can only draw without the graphics card, VormCraft says so.
+- Uses the graphics card through WebGL (Direct3D 11 on Windows, WebKitGTK on Linux). On laptops with two graphics chips, the Windows app uses the faster one by default; **Settings → Graphics card** switches between High performance, Power saving and Let Windows decide. If a computer can only draw without the graphics card, VormCraft says so.
 - In the web version, Windows chooses the graphics card for the whole browser, usually the built-in one. When VormCraft runs on built-in graphics there, it shows once how to give the browser the faster card (Windows Settings → System → Display → Graphics → High performance); Settings → Graphics card shows the same steps.
 - **Help** (the ? button): Keyboard and Mouse reference (also **F1**), What's New, Check for Updates, Report a Problem or Idea, and About (version and graphics card in use).
 
@@ -202,13 +215,14 @@ npm run typecheck    # TypeScript strict type check
 npm run build        # type check + production web build in dist/
 ```
 
-### Desktop app (Windows)
+### Desktop app (Windows and Linux)
 
-The desktop version uses [Tauri](https://tauri.app/) and needs the [Rust toolchain](https://www.rust-lang.org/tools/install) as well as Node.js.
+The desktop version uses [Tauri](https://tauri.app/) and needs the [Rust toolchain](https://www.rust-lang.org/tools/install) as well as Node.js. On Linux it also needs WebKitGTK and a few other system libraries (on Ubuntu: `libwebkit2gtk-4.1-dev librsvg2-dev libssl-dev libdbus-1-dev patchelf`).
 
 ```bash
-npm run desktop:dev      # desktop window against the dev server
-npm run desktop:build    # installer in src-tauri/target/release/bundle/nsis/
+npm run desktop:dev                              # desktop window against the dev server
+npm run desktop:build                            # Windows: installer in src-tauri/target/release/bundle/nsis/
+npm run desktop:build -- --bundles appimage      # Linux: AppImage in src-tauri/target/release/bundle/appimage/
 ```
 
 Releases are built by GitHub Actions when a version tag is pushed: see [docs/RELEASING.md](docs/RELEASING.md).

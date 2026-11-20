@@ -58,6 +58,7 @@ function browserName(): string {
 }
 
 export const onWindows = (): boolean => /Windows/.test(navigator.userAgent);
+export const onLinux = (): boolean => /Linux/.test(navigator.userAgent) && !/Android/.test(navigator.userAgent);
 
 /** Windows' graphics settings page; the browser asks before opening it. */
 const GRAPHICS_SETTINGS = 'ms-settings:display-advancedgraphics';

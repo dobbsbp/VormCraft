@@ -1,10 +1,11 @@
 // Set the app version everywhere it is written: package.json (+ lock), src-tauri/Cargo.toml and
-// src-tauri/tauri.conf.json. Usage: npm run version:set -- 0.2.0
+// src-tauri/tauri.conf.json. Usage: npm run version:set -- 0.2.0 (or 0.6.0-beta.1 for a beta, which is
+// published as a pre-release: installed copies are not offered it).
 import { readFileSync, writeFileSync } from 'node:fs';
 
 const version = process.argv[2];
-if (!/^\d+\.\d+\.\d+$/.test(version ?? '')) {
-  console.error('Usage: npm run version:set -- <major.minor.patch>, e.g. 0.2.0');
+if (!/^\d+\.\d+\.\d+(-beta\.\d+)?$/.test(version ?? '')) {
+  console.error('Usage: npm run version:set -- <major.minor.patch>, e.g. 0.2.0, or 0.6.0-beta.1 for a beta');
   process.exit(1);
 }
 

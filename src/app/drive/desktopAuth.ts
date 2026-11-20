@@ -40,14 +40,17 @@ const base64url = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).rep
 const random = (n: number) => base64url(crypto.getRandomValues(new Uint8Array(n)));
 
 /**
- * The Windows app's sign-in: Google's page opens in the person's own browser (with PKCE; the
+ * The desktop app's sign-in: Google's page opens in the person's own browser (with PKCE; the
  * answer comes back to the app on this computer), and the lasting sign-in is kept in Windows
- * Credential Manager, so it carries over between sessions and a token that runs out is renewed
- * without asking.
+ * Credential Manager (or a Linux keyring), so it carries over between sessions and a token that
+ * runs out is renewed without asking. A Linux computer without a keyring keeps it only until
+ * VormCraft closes.
  */
 export class DesktopGoogleAuth implements GoogleAuth {
   private token: string | null = null;
   private expires = 0;
+  /** The lasting sign-in, while the keyring cannot keep it. */
+  private unkept: string | null = null;
   private renewing: Promise<string | null> | null = null;
 
   constructor(
@@ -96,13 +99,13 @@ export class DesktopGoogleAuth implements GoogleAuth {
   private renew(): Promise<string | null> {
     this.renewing ??= (async () => {
       try {
-        const refresh = await this.native.savedToken();
+        const refresh = (await this.native.savedToken().catch(() => null)) ?? this.unkept;
         if (!refresh) return null;
         const c = await this.client();
         const r = await this.post(TOKEN_URL, { client_id: c.id, client_secret: c.secret, refresh_token: refresh, grant_type: 'refresh_token' });
         if (r.access_token) return this.took(r);
         // Taken back (in the Google account's settings, say) or expired: sign in again.
-        if (r.error === 'invalid_grant') await this.native.forgetToken();
+        if (r.error === 'invalid_grant') await this.forget();
         return null;
       } finally {
         this.renewing = null;
@@ -134,8 +137,17 @@ export class DesktopGoogleAuth implements GoogleAuth {
     if (error) throw new Error(error === 'access_denied' ? accessDeniedMessage() : `Google sign-in failed: ${error}`);
     const r = await this.post(TOKEN_URL, { code: answer.get('code') ?? '', client_id: c.id, client_secret: c.secret, redirect_uri: reply.redirect_uri, grant_type: 'authorization_code', code_verifier: verifier });
     if (!r.access_token) throw new Error(`Google sign-in failed${r.error_description ? `: ${r.error_description}` : r.error ? `: ${r.error}` : ''}`);
-    if (r.refresh_token) await this.native.saveToken(r.refresh_token);
+    if (r.refresh_token) {
+      const refresh = r.refresh_token;
+      this.unkept = null;
+      await this.native.saveToken(refresh).catch(() => void (this.unkept = refresh));
+    }
     return this.took(r);
+  }
+
+  private async forget(): Promise<void> {
+    this.unkept = null;
+    await this.native.forgetToken().catch(() => undefined);
   }
 
   remember(email: string): void {
@@ -144,10 +156,10 @@ export class DesktopGoogleAuth implements GoogleAuth {
 
   /** Disconnect: give the permission back to Google and forget the sign-in on this computer. */
   async signOut(): Promise<void> {
-    const token = (await this.native.savedToken().catch(() => null)) ?? this.token;
+    const token = (await this.native.savedToken().catch(() => null)) ?? this.unkept ?? this.token;
     this.token = null;
     this.expires = 0;
-    await this.native.forgetToken();
+    await this.forget();
     if (token) await this.post(REVOKE_URL, { token }).catch(() => undefined);
   }
 }

@@ -2,7 +2,9 @@
 // page opens in the person's own browser, and Google sends the answer back to a one-off address
 // on this computer (http://127.0.0.1:<port>) that the app listens on for that sign-in only. The
 // web front end does the rest (the PKCE codes, swapping the answer for tokens, the Drive calls).
-// The long-lived sign-in (refresh token) is kept in Windows Credential Manager, never in a file.
+// The long-lived sign-in (refresh token) is kept in Windows Credential Manager, or on Linux in the
+// Secret Service (GNOME Keyring, KWallet), never in a file. Without a keyring there, the sign-in
+// lasts until VormCraft closes.
 
 use std::io::{Read, Write};
 use std::net::TcpListener;
