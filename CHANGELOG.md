@@ -4,14 +4,10 @@ What changed in each version of VormCraft. The section for a version is also sho
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
-## 0.6.0-beta.2
+## 0.6.0
 
-- Linux: About and Settings show the real graphics chip VormCraft draws with, and any other chip in the computer, such as "NVIDIA GeForce RTX 3050 Laptop GPU (in use) · Intel Iris Xe Graphics (also in this computer)". Before, they said "Apple GPU", a made-up name the system's web engine gives instead of the real one.
-- Linux: VormCraft now warns when it is drawing without a graphics card (in software), as on Windows.
-
-## 0.6.0-beta.1
-
-- VormCraft for Linux (beta): AppImages for ordinary PCs (x86_64) and for ARM computers such as a Raspberry Pi 5 (ARM64), on the Releases page. They update themselves like the Windows app. Linux builds come out as pre-releases until they have been tried on more computers.
+- VormCraft for Linux: AppImages for ordinary PCs (x86_64) and for ARM computers such as a Raspberry Pi 5 (ARM64), on the Releases page. They update themselves like the Windows app, as long as the AppImage is in a folder you can change, such as your home folder.
+- On Linux, About and Settings show the graphics chip VormCraft draws with, and any other chip in the computer, and VormCraft warns when it is drawing without a graphics card.
 - On Linux, the Google Drive sign-in is kept in the system keyring (GNOME Keyring or KWallet). Without one, VormCraft keeps it until it closes.
 
 ## 0.5.16

@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-VormCraft is a free, SketchUp-style direct modeler (push/pull) for Windows, Linux (beta) and the web, built with
+VormCraft is a free, SketchUp-style direct modeler (push/pull) for Windows, Linux and the web, built with
 TypeScript, Three.js, Manifold, Tauri and Vitest.
 - Repo: github.com/dobbsbp/VormCraft (public, MIT).
 - Web app: https://vormcraft.app.
@@ -10,12 +10,12 @@ TypeScript, Three.js, Manifold, Tauri and Vitest.
 `README.md` is the public feature list; keep it current when adding features.
 Unfinished work and known bugs live in `TODO.md`.
 
-## Current state (0.5.16, November 2026)
+## Current state (0.6.0, November 2026)
 - Released for Windows (NSIS installer, auto-update) and the web (installable PWA, works offline).
   All are built by GitHub Actions from a version tag.
-- Linux (beta, not yet released): AppImages for x86_64 and ARM64 with auto-update, on WebKitGTK.
-  Betas (`x.y.z-beta.N`) are GitHub pre-releases; the web app is left alone. Settings → Graphics
-  card is Windows-only (follow-up in TODO.md).
+- Linux (since 0.6.0): AppImages for x86_64 and ARM64 with auto-update, on WebKitGTK. About shows
+  the real GPU (`gpu.rs`). Settings → Graphics card is Windows-only (follow-up in TODO.md).
+  Betas (`x.y.z-beta.N`) are GitHub pre-releases; the web app is left alone.
 - **Modelling tools:** Line, Rectangle (and Rotated), Circle, Polygon, Arcs/Pie, Push/Pull with
   boolean cuts and merging, Offset, Follow Me, Move/Rotate/Scale (with copies and arrays), Points
   editing, Eraser, Tape Measure/guides, Text labels, Dimensions, 3D Text, Paint Bucket, Wall,

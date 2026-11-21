@@ -4,7 +4,7 @@
 
 **A free, fast, direct 3D modeler: draw a shape, grab a face, push it.**
 
-VormCraft is a push/pull 3D modeling program for woodworking, architecture sketches, 3D printing and CAD/CAM handoff. There is no parametric timeline and no constraint solver. You draw on faces, push and pull them, and the model follows. It works much like SketchUp, but it is free and open source. It runs on Windows, on Linux (beta) and in the browser.
+VormCraft is a push/pull 3D modeling program for woodworking, architecture sketches, 3D printing and CAD/CAM handoff. There is no parametric timeline and no constraint solver. You draw on faces, push and pull them, and the model follows. It works much like SketchUp, but it is free and open source. It runs on Windows, on Linux and in the browser.
 
 ![VormCraft with a spring and a sphere made with Follow Me, and a box with the Scale tool's yellow grip box, under the sky and over the ground](docs/screenshot.jpg)
 
@@ -20,7 +20,7 @@ The installer is not code-signed yet, so the first time Windows may say "Windows
 
 VormCraft checks for a new version when it starts and installs it with one click (**Install and restart**). You can also use **Check for Updates** in the Help menu (the ? button).
 
-**Linux (beta):** get the AppImage for your computer from the [Releases](../../releases) page: `VormCraft_x.y.z_amd64.AppImage` for most PCs (Intel and AMD), or `VormCraft_x.y.z_aarch64.AppImage` for ARM computers such as a Raspberry Pi 5 (64-bit Raspberry Pi OS) or an ARM laptop. Linux builds are in beta, starting with 0.6.0-beta.1: they are on pre-releases (under **Releases**, marked *Pre-release*) until they have been tried on more computers. Feedback in [Issues](../../issues) is very welcome. It needs a 64-bit system from 2022 or later (for example Ubuntu 22.04, Debian 12, Fedora 36 or newer).
+**Linux:** get the AppImage for your computer from the [Releases](../../releases) page: `VormCraft_x.y.z_amd64.AppImage` for most PCs (Intel and AMD), or `VormCraft_x.y.z_aarch64.AppImage` for ARM computers such as a Raspberry Pi 5 (64-bit Raspberry Pi OS) or an ARM laptop. Linux builds are new since 0.6.0, so feedback in [Issues](../../issues) is very welcome. It needs a 64-bit system from 2022 or later (for example Ubuntu 22.04, Debian 12, Fedora 36 or newer).
 
 ```bash
 chmod +x VormCraft_*.AppImage

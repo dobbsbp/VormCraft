@@ -35,20 +35,13 @@ CHANGELOG.md when it ships.
   move them to IndexedDB if the library grows a lot.
 
 ## Unfinished / planned
-- **Linux (beta):**
+- **Linux:**
   - Follow up: let Linux users choose the graphics card (Settings → Graphics card is Windows-only
     for now). On laptops with two graphics chips this means starting WebKitGTK with `DRI_PRIME=1`
     (AMD/Intel) or `__NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia` (Nvidia), set in
     `src-tauri/src/lib.rs` before the window opens, like the Nvidia DMA-BUF workaround there.
-  - Try the AppImages on real computers (x86_64 under WSL2 or a Linux PC; ARM64 on a Raspberry Pi
-    5 or an ARM laptop): opening and saving, a .vorm passed on the command line, Google sign-in
-    with and without a keyring, booleans, speed on a large model, and an update.
-  - Check About's graphics line on a laptop with two chips (0.6.0-beta.2): in Pop!_OS's
-    Integrated, Hybrid and NVIDIA modes it should name the chip that draws (compare with
-    `nvidia-smi`). If WebKit's processes have both chips open, it lists both as in use.
-  - Betas are pre-releases, so a beta is not offered the next beta (the updater reads the latest
-    stable release); beta users download each one. The first stable release with Linux updates
-    them all. Leave beta once it has worked on a few computers.
+  - Try the ARM64 AppImage on a real computer (a Raspberry Pi 5 or an ARM laptop): x86_64 was
+    tried on Pop!_OS (0.6.0-beta.2, with the right graphics chip in About), ARM64 only built.
 - **Library:**
   - My Library: save a selection as your own item with tags, stored locally and optionally on
     Drive. Wanted only after seeing how the Library works.

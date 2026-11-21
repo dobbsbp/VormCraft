@@ -60,8 +60,8 @@ section in CHANGELOG.md, tag `v0.6.0-beta.1`) is built the same way but publishe
 - The web app is not changed.
 - The About page's "Download for Windows" button (the latest stable release) does not lead to it.
 
-Linux builds are in beta until they have been tried on a few computers; then the next stable
-release carries them, and from then on Linux copies update themselves.
+Use betas to try risky changes (Linux came out this way in 0.6.0-beta.1 and beta.2 before 0.6.0).
+Beta testers are not offered the next beta, but they are offered the next stable release.
 
 ## The update signing key
 
