@@ -6,7 +6,7 @@ import type { FileCommands } from '../fileCommands';
 import { isTauri } from '../files';
 import type { Settings } from '../settings';
 import { DriveAutosaveScheduler } from './driveAutosave';
-import { showDriveOpenDialog } from './driveDialog';
+import { showDriveBrowser, type DriveBrowserMode, type DriveBrowserSource } from './driveDialog';
 import { DriveClash, DriveSession, readSettingsFile, writeSettingsFile, type KeyValueStore } from './driveSession';
 import { showLoadSettingsDialog } from './settingsDialog';
 import { applyPreferences, collectPreferences, deviceIdentity, guessDeviceName, renameDevice, type DeviceIdentity } from '../preferences';
@@ -148,16 +148,50 @@ export class DriveCommands {
     return this.connect();
   }
 
-  /** Save to Google Drive as a new file (asks for the name). */
+  /** What the Drive browser works on. */
+  private browserSource(): DriveBrowserSource {
+    const s = this.session;
+    return {
+      account: s.email,
+      rootId: s.folderId,
+      folders: (id) => s.folders(id),
+      designs: (id) => s.list(id),
+      everywhere: () => s.everywhere(),
+      pathTo: (id) => s.pathTo(id),
+      makeFolder: (name, parent) => s.makeFolder(name, parent),
+      rename: (item, name, folder) => s.rename(item, name, folder),
+      move: (item, to, folder) => s.move(item, to, folder),
+      contents: (id) => s.contents(id),
+      trash: (item) => s.trash(item),
+      link: (id) => s.folderLink(id),
+      designChanged: (file, trashed) => {
+        if (!trashed) this.files.driveFileChanged(file.id, file.name, file.parents?.[0]);
+      },
+    };
+  }
+
+  private browse(mode: DriveBrowserMode, start: string) {
+    return showDriveBrowser(this.browserSource(), mode, start);
+  }
+
+  /**
+   * Save to Google Drive as a new file: pick the folder and the name. It starts in the open
+   * design's folder, or for a new design in the folder last saved in on this device.
+   */
   async saveAs(): Promise<void> {
     if (!(await this.ready())) return;
-    const name = await promptDialog('Save to Google Drive', 'Name', this.files.name === 'Untitled' ? '' : this.files.name, 'Save');
-    if (!name) return;
+    const start = this.files.drive ? (this.files.drive.folderId ?? this.session.folderId) : this.session.lastFolderId;
+    const picked = await this.browse({ kind: 'save', name: this.files.name === 'Untitled' ? '' : this.files.name }, start);
+    if (picked?.kind !== 'save') return;
+    const name = picked.name;
     await this.files.guard(async () => {
       const progress = progressDialog('Saving to Google Drive', `Uploading ${name}…`);
       try {
         const text = this.files.textForSave();
-        const { file, location } = await this.session.create(`${name.replace(/\.vorm$/i, '')}.${FILE_EXTENSION}`, text);
+        const fileName = `${name}.${FILE_EXTENSION}`;
+        const { file, location } = picked.replace
+          ? await this.session.update({ fileId: picked.replace.id, revision: undefined, folderId: picked.folderId }, fileName, text, true)
+          : await this.session.create(fileName, text, picked.folderId);
         await this.files.savedElsewhere(file.name, location);
         this.afterSave(file.name);
       } finally {
@@ -204,7 +238,7 @@ export class DriveCommands {
     else if (choice === 'both') {
       await this.files.guard(async () => {
         const text = this.files.textForSave();
-        const { file, location } = await this.session.create(`${this.files.name}.${FILE_EXTENSION}`, text);
+        const { file, location } = await this.session.create(`${this.files.name}.${FILE_EXTENSION}`, text, this.files.drive?.folderId);
         await this.files.savedElsewhere(file.name, location);
         this.afterSave(file.name);
       });
@@ -214,22 +248,17 @@ export class DriveCommands {
   private afterSave(fileName: string): void {
     this.problem = null;
     this.scheduler.settled(this.controller.revision);
-    this.controller.notify(`Saved to Google Drive: VormCraft/${fileName}`);
+    this.controller.notify(`Saved to Google Drive: ${fileName.replace(/\.(vorm|benup)$/i, '')}`);
   }
 
   async open(): Promise<void> {
     if (!(await this.ready())) return;
     if (!(await this.files.confirmDiscard())) return;
     await this.files.guard(async () => {
-      const progress = progressDialog('Google Drive', 'Looking in the VormCraft folder…');
-      let list;
-      try {
-        list = await this.session.list();
-      } finally {
-        progress.close();
-      }
-      const picked = await showDriveOpenDialog(list, this.session.email, this.session.folderUrl);
-      if (!picked) return;
+      const start = this.files.drive?.folderId ?? this.session.lastFolderId;
+      const chosen = await this.browse({ kind: 'open' }, start);
+      if (chosen?.kind !== 'open') return;
+      const picked = chosen.file;
       const loading = progressDialog('Opening from Google Drive', `Downloading ${picked.name}…`);
       try {
         const { text, location } = await this.session.open(picked);

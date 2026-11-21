@@ -33,11 +33,12 @@ export class ContextMenu {
     return this.root !== null;
   }
 
-  open(entries: MenuEntry[], x: number, y: number): void {
+  /** `host`: where the menu goes (a modal dialog's own menus must go inside it to be usable). */
+  open(entries: MenuEntry[], x: number, y: number, host: HTMLElement = document.body): void {
     this.close();
     const root = this.list(entries, 'context-menu');
     root.setAttribute('role', 'menu');
-    document.body.append(root);
+    host.append(root);
     this.root = root;
     // Just right of and below the cursor (so a second right-click lands on the model, not the menu).
     place(root, x + 2, y + 2);

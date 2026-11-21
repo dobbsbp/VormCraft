@@ -10,7 +10,7 @@ TypeScript, Three.js, Manifold, Tauri and Vitest.
 `README.md` is the public feature list; keep it current when adding features.
 Unfinished work and known bugs live in `TODO.md`.
 
-## Current state (0.6.0, November 2026)
+## Current state (0.7.0, November 2026)
 - Released for Windows (NSIS installer, auto-update) and the web (installable PWA, works offline).
   All are built by GitHub Actions from a version tag.
 - Linux (since 0.6.0): AppImages for x86_64 and ARM64 with auto-update, on WebKitGTK. About shows
@@ -45,8 +45,11 @@ Unfinished work and known bugs live in `TODO.md`.
   - autosave and recovery;
   - Google Drive save, open and autosave, and each device's settings saved/loaded by hand
     (`VormCraft settings.json`; Google-verified; `drive.file` scope only);
+  - Drive folders inside VormCraft's (any depth): a browser for Open, Save and Move to…, with
+    Rename, Move and Delete (to the bin; non-empty folders ask twice) and All designs with search
+    (`driveDialog.ts`). Folders made on the Drive website are invisible (`drive.file`);
   - import SKP/OBJ/STL; export STL/OBJ.
-- About 700 Vitest tests; `npm test`, `npm run typecheck` and the build must stay clean, with no
+- About 720 Vitest tests; `npm test`, `npm run typecheck` and the build must stay clean, with no
   warnings.
 
 ## Rules

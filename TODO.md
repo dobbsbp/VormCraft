@@ -42,6 +42,11 @@ CHANGELOG.md when it ships.
     `src-tauri/src/lib.rs` before the window opens, like the Nvidia DMA-BUF workaround there.
   - Try the ARM64 AppImage on a real computer (a Raspberry Pi 5 or an ARM laptop): x86_64 was
     tried on Pop!_OS (0.6.0-beta.2, with the right graphics chip in About), ARM64 only built.
+- **Google Drive folders:**
+  - Folders made on the Google Drive website are invisible to VormCraft (`drive.file`). Google
+    Picker could let people choose one to grant access; left out for now (more Google code and a
+    look from verification).
+  - Dragging a design onto a folder to move it (today: ⋯ → Move to…).
 - **Library:**
   - My Library: save a selection as your own item with tags, stored locally and optionally on
     Drive. Wanted only after seeing how the Library works.

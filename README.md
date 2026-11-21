@@ -130,6 +130,8 @@ Right-click anything to select it and get a menu for it:
 
 ### Google Drive (optional)
 - Save and open designs in your own Google Drive (the cloud button), from the web version and the desktop app, and optionally keep an autosaved copy there.
+- **Folders:** keep designs in folders inside the VormCraft folder, as deep as you like. Open and Save show a folder browser with a path at the top (VormCraft › Kitchen › Cabinets): double-click a folder to go in, click the path or press Backspace to go back. **New folder** makes one. Each design and folder has a ⋯ button (or right-click) for **Rename**, **Move to…** and **Delete** (to the Google Drive bin; a folder with designs in it asks twice). Save As starts in the open design's folder; a name already in the folder asks whether to replace it or keep both.
+- **All designs** (in Open): every design in your Drive that VormCraft saved, newest first, with the folder each is in, and a search box. It finds designs moved elsewhere on the Google Drive website too. Folders made on the Google Drive website don't show in VormCraft (it can only see what it made), so make folders with New folder.
 - Save each device's settings (sky and ground, tools, units, autosave and so on) to Drive under a name, and load them back, or onto a new computer. Each device keeps its own.
 - VormCraft asks only for access to the files it creates or that you open with it, never the rest of your Drive. Saving checks first whether the file was changed elsewhere (Replace or Keep both).
 - Works with any Google account: VormCraft is verified by Google.

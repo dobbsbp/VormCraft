@@ -1,6 +1,6 @@
 /**
  * The few Google Drive calls VormCraft needs (REST, v3), with the `drive.file` permission: it only
- * ever sees files and folders it created itself. No Google library: plain `fetch`, so it can be
+ * ever sees files and folders it created itself (folders made on the Drive website stay hidden). No Google library: plain `fetch`, so it can be
  * tested against a stand-in.
  */
 
@@ -9,7 +9,7 @@ const API = 'https://www.googleapis.com/drive/v3';
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3';
 const FOLDER = 'application/vnd.google-apps.folder';
 const FILE_TYPE = 'application/json';
-const FIELDS = 'id,name,modifiedTime,size,headRevisionId';
+const FIELDS = 'id,name,modifiedTime,size,headRevisionId,parents';
 /** Larger files upload in pieces (resumable), so a dropped connection does not start over. */
 const RESUMABLE_ABOVE = 5 * 1024 * 1024;
 /** Piece size: a multiple of 256 KiB, as Drive requires. */
@@ -24,6 +24,8 @@ export interface DriveFile {
   size?: string;
   /** Changes on every upload: used to notice edits made elsewhere. */
   headRevisionId?: string;
+  /** The folder it is in (Drive gives one). */
+  parents?: string[];
 }
 
 export class DriveError extends Error {
@@ -114,19 +116,69 @@ export class DriveApi {
     return made.id;
   }
 
+  /** A new folder (always a new one, even if the name is taken: see `folder` to find one). */
+  async makeFolder(name: string, parent: string): Promise<DriveFile> {
+    return this.json<DriveFile>(`${API}/files?fields=${FIELDS}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, mimeType: FOLDER, parents: [parent] }),
+    });
+  }
+
   /** Files (not folders) in a folder, newest first. */
   async list(folderId: string): Promise<DriveFile[]> {
-    const q = `${quote(folderId)} in parents and trashed=false and mimeType!='${FOLDER}'`;
+    return this.query(`${quote(folderId)} in parents and trashed=false and mimeType!='${FOLDER}'`, 'modifiedTime desc');
+  }
+
+  /** The folders in a folder, by name. */
+  async folders(folderId: string): Promise<DriveFile[]> {
+    return this.query(`${quote(folderId)} in parents and trashed=false and mimeType='${FOLDER}'`, 'name');
+  }
+
+  /** Every folder VormCraft can see (the ones it made), wherever they are. */
+  async allFolders(): Promise<DriveFile[]> {
+    return this.query(`trashed=false and mimeType='${FOLDER}'`, 'name');
+  }
+
+  /** Every design file VormCraft can see, wherever it is (even moved out of its folders), newest first. */
+  async allFiles(): Promise<DriveFile[]> {
+    return this.query(`trashed=false and mimeType='${FILE_TYPE}'`, 'modifiedTime desc');
+  }
+
+  private async query(q: string, orderBy: string): Promise<DriveFile[]> {
     const out: DriveFile[] = [];
     let page = '';
     do {
       const r = await this.json<{ files: DriveFile[]; nextPageToken?: string }>(
-        `${API}/files?q=${encodeURIComponent(q)}&orderBy=modifiedTime desc&pageSize=200&fields=nextPageToken,files(${FIELDS})${page ? `&pageToken=${page}` : ''}`,
+        `${API}/files?q=${encodeURIComponent(q)}&orderBy=${encodeURIComponent(orderBy)}&pageSize=200&fields=nextPageToken,files(${FIELDS})${page ? `&pageToken=${page}` : ''}`,
       );
       out.push(...r.files);
       page = r.nextPageToken ?? '';
     } while (page);
     return out;
+  }
+
+  /** Change a file's or folder's details (name, folder, bin). */
+  private async patch(id: string, body: object, params = ''): Promise<DriveFile> {
+    return this.json<DriveFile>(`${API}/files/${id}?fields=${FIELDS}${params}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  }
+
+  async rename(id: string, name: string): Promise<DriveFile> {
+    return this.patch(id, { name });
+  }
+
+  /** Move a file or folder from one folder to another. */
+  async move(id: string, from: string, to: string): Promise<DriveFile> {
+    return this.patch(id, {}, `&addParents=${encodeURIComponent(to)}&removeParents=${encodeURIComponent(from)}`);
+  }
+
+  /** Into Drive's bin (a folder takes what is in it along), where it can be restored for 30 days. */
+  async trash(id: string): Promise<void> {
+    await this.patch(id, { trashed: true });
   }
 
   /** A file's details, or null if it is gone (deleted or in the bin). */

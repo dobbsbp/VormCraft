@@ -4,6 +4,13 @@ What changed in each version of VormCraft. The section for a version is also sho
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
+## 0.7.0
+
+- Folders in Google Drive: keep your designs in folders inside the VormCraft folder, and folders inside those. Open and Save show the folders, with the path at the top to go back up, and a New folder button.
+- Rename, move and delete designs and folders in Google Drive: use the ⋯ button next to each one, or right-click it. Deleting moves them to the Google Drive bin, and a folder with designs in it asks twice.
+- Save to Google Drive starts in the folder the open design is in. If the name is already used there, choose Replace or Keep both.
+- All designs, in Open from Google Drive: every design VormCraft saved, newest first, with its folder and a search box. It also finds designs that were moved to another place on the Google Drive website.
+
 ## 0.6.0
 
 - VormCraft for Linux: AppImages for ordinary PCs (x86_64) and for ARM computers such as a Raspberry Pi 5 (ARM64), on the Releases page. They update themselves like the Windows app, as long as the AppImage is in a folder you can change, such as your home folder.

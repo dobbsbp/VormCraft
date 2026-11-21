@@ -164,6 +164,14 @@ export class FileCommands {
     this.onTitleChange();
   }
 
+  /** The design's Google Drive file was renamed or moved (in the Drive browser): follow it. */
+  driveFileChanged(fileId: string, fileName: string, folderId: string | undefined): void {
+    if (this.drive?.fileId !== fileId) return;
+    this.drive = { ...this.drive, folderId: folderId ?? this.drive.folderId };
+    this.name = fileName.replace(EXTENSION, '');
+    this.onTitleChange();
+  }
+
   async save(saveAs = false): Promise<void> {
     if (!saveAs && this.drive && this.saveToDrive) return this.saveToDrive();
     this.controller.endPreview();

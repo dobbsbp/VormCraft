@@ -1532,6 +1532,143 @@ kbd {
   white-space: nowrap;
 }
 
+/* The Google Drive browser (Open, Save, Move to…): folders, a breadcrumb, All designs. */
+.modal.drive-browser {
+  width: min(600px, calc(100vw - 32px));
+}
+
+.modal.drive-browser.busy {
+  cursor: progress;
+}
+
+.modal.drive-browser .drive-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.modal.drive-browser .drive-views {
+  display: inline-flex;
+  border: 1px solid var(--chrome-border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.modal.drive-browser .drive-views[hidden],
+.modal.drive-browser .drive-search[hidden],
+.modal.drive-browser .drive-new[hidden],
+.modal.drive-browser .drive-crumbs[hidden] {
+  display: none;
+}
+
+.modal.drive-browser .drive-views button {
+  border: 0;
+  border-radius: 0;
+  padding: 4px 10px;
+  background: transparent;
+}
+
+.modal.drive-browser .drive-views button.on {
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+
+.modal.drive-browser .drive-search {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  padding: 4px 8px;
+}
+
+.modal.drive-browser .drive-new {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.modal.drive-browser .drive-new svg,
+.modal.drive-browser .drive-files .icon svg,
+.modal.drive-browser .drive-files .more svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.modal.drive-browser .drive-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  margin-top: 8px;
+  color: var(--text-muted);
+}
+
+.modal.drive-browser .drive-crumbs .crumb {
+  border: 0;
+  padding: 2px 4px;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.modal.drive-browser .drive-crumbs .crumb:disabled {
+  color: var(--text);
+  font-weight: 600;
+  cursor: default;
+}
+
+.modal.drive-browser .drive-files li {
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.modal.drive-browser .drive-files .icon {
+  display: inline-flex;
+  color: var(--text-muted);
+}
+
+.modal.drive-browser .drive-files li.folder .icon {
+  color: var(--accent);
+}
+
+.modal.drive-browser .drive-files .name {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.modal.drive-browser .drive-files .where {
+  display: block;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.modal.drive-browser .drive-files li.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.modal.drive-browser .drive-files .more {
+  border: 0;
+  padding: 2px 4px;
+  background: none;
+  opacity: 0.55;
+  cursor: pointer;
+}
+
+.modal.drive-browser .drive-files li:hover .more,
+.modal.drive-browser .drive-files li.picked .more,
+.modal.drive-browser .drive-files .more:focus-visible {
+  opacity: 1;
+}
+
+.modal.drive-browser .drive-error {
+  color: var(--danger);
+  margin: 4px 0;
+}
+
 /* Load settings: each saved device has its own Load and Delete buttons. */
 .modal.drive-open .drive-files .actions {
   display: flex;

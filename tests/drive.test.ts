@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DriveApi, DriveError, type DriveFile } from '../src/app/drive/driveApi';
 import { DriveAutosaveScheduler, type Clock } from '../src/app/drive/driveAutosave';
 import { DriveClash, DriveSession, uniqueName } from '../src/app/drive/driveSession';
+import { contentsText, folderLabel, searchDesigns } from '../src/app/drive/driveDialog';
 
 /** A small in-memory stand-in for the Drive REST API (only what VormCraft uses). */
 class FakeDrive {
@@ -30,21 +31,33 @@ class FakeDrive {
     if (path.endsWith('/about')) return json({ user: { emailAddress: 'ben@example.com', displayName: 'Ben' } });
     if (path === '/drive/v3/files' && method === 'GET') {
       const q = url.searchParams.get('q')!;
-      const parent = /'([^']+)' in parents/.exec(q)![1];
+      const parent = /'([^']+)' in parents/.exec(q)?.[1];
       const wantFolder = q.includes("mimeType='application/vnd.google-apps.folder'");
       const name = /name='([^']+)'/.exec(q)?.[1];
-      const list = [...this.files.values()].filter((f) => !f.trashed && f.parents.includes(parent) && f.folder === wantFolder && (name === undefined || f.name === name));
+      const list = [...this.files.values()].filter((f) => !this.binned(f) && (parent === undefined || f.parents.includes(parent)) && f.folder === wantFolder && (name === undefined || f.name === name));
+      if (url.searchParams.get('orderBy') === 'name') list.sort((a, b) => a.name.localeCompare(b.name));
       return json({ files: list });
     }
     if (path === '/drive/v3/files' && method === 'POST') {
       const m = JSON.parse(String(init.body)) as { name: string; parents?: string[] };
-      return json({ id: this.add(m.name, m.parents?.[0] ?? 'root', true) });
+      return json(this.files.get(this.add(m.name, m.parents?.[0] ?? 'root', true)));
     }
-    const one = /\/drive\/v3\/files\/([^/]+)$/.exec(path);
+    const one = /^\/drive\/v3\/files\/([^/]+)$/.exec(path);
     if (one && method === 'GET') {
       const f = this.files.get(one[1]);
       if (!f) return json({ error: { message: 'not found' } }, 404);
-      return url.searchParams.get('alt') === 'media' ? new Response(f.text) : json(f);
+      return url.searchParams.get('alt') === 'media' ? new Response(f.text) : json({ ...f, trashed: this.binned(f) });
+    }
+    if (one && method === 'PATCH') {
+      const f = this.files.get(one[1]);
+      if (!f) return json({ error: { message: 'not found' } }, 404);
+      const body = JSON.parse(String(init.body ?? '{}')) as { name?: string; trashed?: boolean };
+      const add = url.searchParams.get('addParents');
+      const remove = url.searchParams.get('removeParents');
+      if (add && remove) f.parents = [...f.parents.filter((p) => p !== remove), add];
+      if (body.name !== undefined) f.name = body.name;
+      if (body.trashed) f.trashed = true;
+      return json(f);
     }
     if (path.startsWith('/upload/drive/v3/files')) {
       const fileId = /files\/([^/]+)$/.exec(path)?.[1];
@@ -72,6 +85,16 @@ class FakeDrive {
     }
     return json({ error: { message: `unexpected ${method} ${path}` } }, 400);
   };
+
+  /** In the bin, or in a folder that is (Drive bins what a folder holds along with it). */
+  binned(f: { trashed?: boolean; parents: string[] }): boolean {
+    for (let x: typeof f | undefined = f, n = 0; x && n < 50; x = this.files.get(x.parents[0]), n++) if (x.trashed) return true;
+    return false;
+  }
+
+  named(name: string) {
+    return [...this.files.values()].find((f) => f.name === name)!;
+  }
 
   private write(fileId: string | undefined, meta: { name?: string; parents?: string[] }, text: string): DriveFile {
     if (fileId) {
@@ -212,6 +235,121 @@ class FakeClock implements Clock {
     this.t = end;
   }
 }
+
+describe('Google Drive folders', () => {
+  const connected = async () => {
+    const t = setup();
+    await t.session.connect();
+    return t;
+  };
+
+  it('makes folders inside folders, gives a taken name a number, and hides the Autosave folder', async () => {
+    const { session } = await connected();
+    await session.autosave('k', 'Shelf (autosave).vorm', '{}');
+    const kitchen = await session.makeFolder('Kitchen', session.folderId);
+    const again = await session.makeFolder(' kitchen ', session.folderId);
+    expect(again.name).toBe('kitchen (2)');
+    const cabinets = await session.makeFolder('Cabinets', kitchen.id);
+    expect((await session.folders()).map((f) => f.name)).toEqual(['Kitchen', 'kitchen (2)']);
+    expect((await session.folders(kitchen.id)).map((f) => f.name)).toEqual(['Cabinets']);
+    expect((await session.pathTo(cabinets.id))!.map((f) => f.name)).toEqual(['Kitchen', 'Cabinets']);
+    expect(await session.pathTo(session.folderId)).toEqual([]);
+    await expect(session.makeFolder('  ', session.folderId)).rejects.toThrow(/name/);
+  });
+
+  it('saves into a folder: names are counted per folder, and the folder is where the next design starts', async () => {
+    const { session, store } = await connected();
+    const kitchen = await session.makeFolder('Kitchen', session.folderId);
+    await session.create('Shelf.vorm', '{}');
+    const { file, location } = await session.create('Shelf.vorm', '{"in":"kitchen"}', kitchen.id);
+    expect(file.name).toBe('Shelf.vorm');
+    expect(location.folderId).toBe(kitchen.id);
+    expect((await session.create('Shelf.vorm', '{}', kitchen.id)).file.name).toBe('Shelf (2).vorm');
+    expect((await session.list(kitchen.id)).map((f) => f.name).sort()).toEqual(['Shelf (2).vorm', 'Shelf.vorm']);
+    expect((await session.list()).map((f) => f.name)).toEqual(['Shelf.vorm']);
+    expect(session.lastFolderId).toBe(kitchen.id);
+    // Remembered on this device.
+    expect(new DriveSession(async () => 't', { getItem: (k) => store.get(k) ?? null, setItem: () => {}, removeItem: () => {} }).lastFolderId).toBe(kitchen.id);
+    // Opening tells which folder it is in.
+    expect((await session.open(file)).location.folderId).toBe(kitchen.id);
+  });
+
+  it('a deleted design is made again in its folder, or in VormCraft’s if that went too', async () => {
+    const { fake, session } = await connected();
+    const kitchen = await session.makeFolder('Kitchen', session.folderId);
+    const a = await session.create('A.vorm', '{}', kitchen.id);
+    fake.files.get(a.file.id)!.trashed = true;
+    expect((await session.update(a.location, 'A.vorm', '{"b":1}')).location.folderId).toBe(kitchen.id);
+    const b = await session.create('B.vorm', '{}', kitchen.id);
+    fake.files.get(kitchen.id)!.trashed = true;
+    const again = await session.update(b.location, 'B.vorm', '{}');
+    expect(again.location.folderId).toBe(session.folderId);
+    // A design opened by an older version has no folder: VormCraft's.
+    fake.files.get(again.file.id)!.trashed = true;
+    expect((await session.update({ fileId: again.file.id, revision: undefined }, 'B.vorm', '{}')).location.folderId).toBe(session.folderId);
+  });
+
+  it('renames designs (keeping .vorm) and folders, refusing a name taken in the same folder', async () => {
+    const { session } = await connected();
+    const a = (await session.create('A.vorm', '{}')).file;
+    await session.create('B.vorm', '{}');
+    expect((await session.rename(a, 'Table', false)).name).toBe('Table.vorm');
+    await expect(session.rename({ ...a, name: 'Table.vorm' }, 'b', false)).rejects.toThrow(/already a design called “b”/);
+    const f = await session.makeFolder('Kitchen', session.folderId);
+    expect((await session.rename(f, 'Bathroom', true)).name).toBe('Bathroom');
+  });
+
+  it('moves designs and folders, numbering a name taken there; a folder cannot go inside itself', async () => {
+    const { session } = await connected();
+    const kitchen = await session.makeFolder('Kitchen', session.folderId);
+    const cabinets = await session.makeFolder('Cabinets', kitchen.id);
+    await session.create('Shelf.vorm', '{}', kitchen.id);
+    const shelf = (await session.create('Shelf.vorm', '{}')).file;
+    const moved = await session.move(shelf, kitchen.id, false);
+    expect(moved.name).toBe('Shelf (2).vorm');
+    expect(moved.parents).toEqual([kitchen.id]);
+    await expect(session.move(kitchen, cabinets.id, true)).rejects.toThrow(/inside itself/);
+    await expect(session.move(kitchen, kitchen.id, true)).rejects.toThrow(/inside itself/);
+    const top = await session.move(cabinets, session.folderId, true);
+    expect(top.parents).toEqual([session.folderId]);
+  });
+
+  it('counts what a folder holds, all the way down, and puts it in the bin', async () => {
+    const { fake, session } = await connected();
+    const kitchen = await session.makeFolder('Kitchen', session.folderId);
+    expect(await session.contents(kitchen.id)).toEqual({ designs: 0, folders: 0 });
+    const cabinets = await session.makeFolder('Cabinets', kitchen.id);
+    await session.create('A.vorm', '{}', kitchen.id);
+    await session.create('B.vorm', '{}', cabinets.id);
+    await session.create('C.vorm', '{}', cabinets.id);
+    const inside = await session.contents(kitchen.id);
+    expect(inside).toEqual({ designs: 3, folders: 1 });
+    expect(contentsText(inside)).toBe('3 designs and 1 folder');
+    expect(contentsText({ designs: 1, folders: 0 })).toBe('1 design');
+    await session.trash(kitchen);
+    expect(await session.folders()).toEqual([]);
+    expect(fake.binned(fake.named('B.vorm'))).toBe(true);
+    await expect(session.trash({ id: session.folderId, name: 'VormCraft', modifiedTime: '' })).rejects.toThrow(/needs this folder/);
+  });
+
+  it('All designs: every design VormCraft can see, with its folders, but no autosaved copies', async () => {
+    const { fake, session } = await connected();
+    const kitchen = await session.makeFolder('Kitchen', session.folderId);
+    const cabinets = await session.makeFolder('Cabinets', kitchen.id);
+    await session.create('Top.vorm', '{}');
+    await session.create('Door.vorm', '{}', cabinets.id);
+    const lost = (await session.create('Lost.vorm', '{}')).file;
+    // Moved on the Drive website into a folder VormCraft cannot see.
+    fake.files.get(lost.id)!.parents = ['someone-elses-folder'];
+    await session.autosave('k', 'Top (autosave).vorm', '{}');
+    const all = await session.everywhere();
+    const where = Object.fromEntries(all.map((d) => [d.file.name, folderLabel(d.path)]));
+    expect(where).toEqual({ 'Top.vorm': 'VormCraft', 'Door.vorm': 'VormCraft › Kitchen › Cabinets', 'Lost.vorm': 'outside the VormCraft folder' });
+    expect(searchDesigns(all, 'do').map((d) => d.file.name)).toEqual(['Door.vorm']);
+    expect(searchDesigns(all, '  ')).toHaveLength(3);
+    expect(searchDesigns(all, 'lost VORM').map((d) => d.file.name)).toEqual(['Lost.vorm']);
+  });
+});
 
 describe('Drive autosave timing', () => {
   const make = () => {
