@@ -11,6 +11,7 @@ import { showSettingsDialog } from './settingsDialog';
 import { APP_VERSION, checkForUpdates, type UpdateHooks } from './updater';
 import { graphicsChoice, setGraphicsChoice } from './graphics';
 import { maybeShowGraphicsTip, onLinux } from './graphicsTip';
+import { describeLinuxGraphics, linuxGraphics } from './linuxGraphics';
 import { installedWebApp, startOffline } from './webApp';
 
 /**
@@ -74,7 +75,7 @@ export class Lifecycle {
       version: APP_VERSION,
       checkForUpdates: () => void this.checkForUpdates(),
       graphics,
-      graphicsInUse: this.viewer.graphicsInfo().renderer,
+      graphicsInUse: (await this.graphicsNow()).renderer,
     });
     if (!result) return;
     this.settings = result.settings;
@@ -91,15 +92,25 @@ export class Lifecycle {
     }
   }
 
+  /**
+   * The graphics the view runs on, for showing. The Linux app asks the shell, because WebKitGTK
+   * hides the real name from WebGL (it says "Apple GPU"); `linux` is then true.
+   */
+  private async graphicsNow(): Promise<{ renderer: string; software: boolean; linux: boolean }> {
+    const linux = await linuxGraphics();
+    if (linux) return { renderer: describeLinuxGraphics(linux), software: linux.checked && linux.software, linux: true };
+    return { ...this.viewer.graphicsInfo(), linux: false };
+  }
+
   async about(): Promise<void> {
-    const gpu = this.viewer.graphicsInfo();
+    const gpu = await this.graphicsNow();
     await messageDialog(
       'About VormCraft',
       [
         `VormCraft ${APP_VERSION}`,
         'A free, open-source push/pull 3D modeler.',
         '',
-        `Graphics: ${gpu.renderer}${gpu.software ? ' (software: no hardware acceleration)' : ''}`,
+        `Graphics: ${gpu.renderer}${gpu.software && !gpu.linux ? ' (software: no hardware acceleration)' : ''}`,
         `Running as: ${isTauri() ? 'desktop app' : installedWebApp() ? 'installed web app (works offline)' : 'web page'}`,
         '',
         'https://github.com/dobbsbp/VormCraft',
@@ -116,11 +127,13 @@ export class Lifecycle {
    * recover unsaved work from last time), start autosave, then look for updates.
    */
   async start(): Promise<void> {
-    const gpu = this.viewer.graphicsInfo();
+    // On Linux, let the view draw once first, so WebKit has opened its graphics device.
+    if (onLinux() && isTauri()) await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+    const gpu = await this.graphicsNow();
     if (gpu.software) {
       await messageDialog(
         'Graphics acceleration is off',
-        `VormCraft is drawing without the graphics card (${gpu.renderer}), so it will be slow.\n\n${
+        `VormCraft is drawing without the graphics card${gpu.linux ? '' : ` (${gpu.renderer})`}, so it will be slow.\n\n${
           onLinux()
             ? 'Installing or updating the graphics drivers usually fixes this (Mesa, or the driver from the graphics card’s maker).'
             : 'Updating your graphics drivers usually fixes this. On a laptop with two graphics chips, you can also set VormCraft to "High performance" in Windows Settings → System → Display → Graphics.'

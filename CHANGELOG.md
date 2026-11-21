@@ -4,6 +4,11 @@ What changed in each version of VormCraft. The section for a version is also sho
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
+## 0.6.0-beta.2
+
+- Linux: About and Settings show the real graphics chip VormCraft draws with, and any other chip in the computer, such as "NVIDIA GeForce RTX 3050 Laptop GPU (in use) · Intel Iris Xe Graphics (also in this computer)". Before, they said "Apple GPU", a made-up name the system's web engine gives instead of the real one.
+- Linux: VormCraft now warns when it is drawing without a graphics card (in software), as on Windows.
+
 ## 0.6.0-beta.1
 
 - VormCraft for Linux (beta): AppImages for ordinary PCs (x86_64) and for ARM computers such as a Raspberry Pi 5 (ARM64), on the Releases page. They update themselves like the Windows app. Linux builds come out as pre-releases until they have been tried on more computers.

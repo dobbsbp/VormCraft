@@ -31,7 +31,7 @@ chmod +x VormCraft_*.AppImage
 - If it does not start on Ubuntu 24.04 or newer, install FUSE 2 (`sudo apt install libfuse2t64`), or run it with `--appimage-extract-and-run`.
 - To have `.vorm` files open with a double-click and VormCraft in your applications menu, add the AppImage with [Gear Lever](https://flathub.org/apps/it.mijorus.gearlever) or AppImageLauncher.
 - Google Drive's sign-in is kept in your keyring (GNOME Keyring or KWallet). Without one, you sign in again each time VormCraft starts.
-- The system chooses the graphics card; the Windows app's Graphics card setting is not on Linux yet.
+- The system chooses the graphics card; the Windows app's Graphics card setting is not on Linux yet. **About VormCraft** shows which chip is drawing (and any other in the computer). On Pop!_OS, for example, that follows the graphics mode you choose in the system menu.
 
 **Everywhere else (Android tablets and folding phones, Chromebooks, Mac):** open **https://vormcraft.app** in Chrome or Edge and choose **Install** (Chrome menu → *Add to home screen* / *Install app*). It then opens in its own window like any app, works fully offline, and updates itself, asking before it restarts into a new version. Your models stay on your device (or in your own Google Drive, if you connect it). A keyboard and mouse are recommended for modeling; on a phone or tablet, tap **Viewer** (the eye) to look around a model with touch. In the web version, Save downloads the `.vorm` file (instead of saving over it), and autosave copies are kept in the app's own storage.
 

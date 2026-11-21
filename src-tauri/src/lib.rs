@@ -4,6 +4,7 @@
 // only for now), and Google Drive sign-in (google.rs). On Linux it runs as an AppImage on WebKitGTK.
 
 mod google;
+mod gpu;
 
 #[cfg(windows)]
 use tauri::Manager;
@@ -125,6 +126,7 @@ pub fn run() {
       launch_file,
       graphics_preference,
       set_graphics_preference,
+      gpu::linux_graphics,
       google::google_client,
       google::google_authorize,
       google::google_saved_token,

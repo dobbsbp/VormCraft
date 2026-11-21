@@ -89,7 +89,7 @@ export function showSettingsDialog(current: Settings, ctx: SettingsContext): Pro
     graphicsBox.querySelectorAll('label').forEach((l) => l.remove());
     const note = graphicsBox.querySelector<HTMLElement>('.note')!;
     const kind = classifyGpu(ctx.graphicsInUse);
-    note.textContent = `In use now: ${ctx.graphicsInUse}${kind === 'integrated' ? ' (built-in graphics)' : kind === 'dedicated' ? ' (graphics card)' : ''}. ${desktop ? 'The system chooses the graphics card for VormCraft.' : `In the web version the browser chooses the graphics card${onWindows() ? '; Windows decides which one the browser gets.' : '.'}`}`;
+    note.textContent = `In use now: ${ctx.graphicsInUse}${desktop ? '' : kind === 'integrated' ? ' (built-in graphics)' : kind === 'dedicated' ? ' (graphics card)' : ''}. ${desktop ? 'The system chooses the graphics card for VormCraft.' : `In the web version the browser chooses the graphics card${onWindows() ? '; Windows decides which one the browser gets.' : '.'}`}`;
     if (onWindows() && !desktop) {
       const intro = document.createElement('p');
       intro.className = 'note';

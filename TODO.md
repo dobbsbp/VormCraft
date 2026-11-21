@@ -43,6 +43,9 @@ CHANGELOG.md when it ships.
   - Try the AppImages on real computers (x86_64 under WSL2 or a Linux PC; ARM64 on a Raspberry Pi
     5 or an ARM laptop): opening and saving, a .vorm passed on the command line, Google sign-in
     with and without a keyring, booleans, speed on a large model, and an update.
+  - Check About's graphics line on a laptop with two chips (0.6.0-beta.2): in Pop!_OS's
+    Integrated, Hybrid and NVIDIA modes it should name the chip that draws (compare with
+    `nvidia-smi`). If WebKit's processes have both chips open, it lists both as in use.
   - Betas are pre-releases, so a beta is not offered the next beta (the updater reads the latest
     stable release); beta users download each one. The first stable release with Linux updates
     them all. Leave beta once it has worked on a few computers.
