@@ -811,7 +811,7 @@ function commandList(viewer: Viewer, controller: ToolController, files: FileComm
     { id: 'help:support', name: 'Support VormCraft ♥', keywords: ['donate', 'donation', 'sponsor', 'tip', 'coffee', 'qris', 'help'], run: showSupport },
     { id: 'help:issue', name: 'Report a Problem or Idea', keywords: ['bug', 'feedback', 'issue', 'help'], run: () => void openLink(LINKS.newIssue) },
     { id: 'app:about', name: 'About VormCraft', keywords: ['version', 'graphics', 'gpu', 'help'], run: keep.about },
-    { id: 'file:import', name: 'Import SketchUp, OBJ or STL…', keywords: ['file', 'open', 'skp', 'sketchup', 'mesh', '3d print', 'load'], shortcut: 'Ctrl+I', run: () => void files.importModel() },
+    { id: 'file:import', name: 'Import SketchUp, OBJ, STL or DXF…', keywords: ['file', 'open', 'skp', 'sketchup', 'mesh', '3d print', 'load', 'dxf', 'cad', 'autocad', 'drawing'], shortcut: 'Ctrl+I', run: () => void files.importModel() },
     { id: 'file:stl', name: 'Export STL…', keywords: ['export', '3d print', 'mesh'], run: () => void files.exportStl() },
     { id: 'file:obj', name: 'Export OBJ…', keywords: ['export', 'mesh'], run: () => void files.exportObj() },
     { id: 'edit:undo', name: 'Undo', keywords: ['edit'], shortcut: 'Ctrl+Z', run: () => controller.undo() },
@@ -1181,7 +1181,7 @@ function buildToolbar(viewer: Viewer, controller: ToolController, files: FileCom
   if (!keep.drive) driveButton.style.display = 'none';
   bar.append(driveButton);
   bar.append(
-    textButton(ICONS.importFile, 'Import', 'Import a SketchUp (.skp), OBJ or STL file (Ctrl+I)', () => void files.importModel()),
+    textButton(ICONS.importFile, 'Import', 'Import a SketchUp (.skp), OBJ, STL or DXF file (Ctrl+I)', () => void files.importModel()),
   );
   const libraryButton = textButton(ICONS.library, 'Library', 'Library: furniture, kitchen, bathroom and more, at real sizes, to place in the model', view.toggleLibrary);
   bar.append(libraryButton);

@@ -65,6 +65,13 @@ CHANGELOG.md when it ships.
 - **Export:**
   - STEP (true curves, through OpenCascade).
   - OBJ with materials.
+- **DXF import:**
+  - Keep splines as true curves in the file (a new curve type, `.vorm` format 9), so their detail
+    can be changed after import and exports divide them again, as circles are.
+  - Small gaps (Rhino Make2D leaves ends up to about 0.05 mm apart) stop outlines closing into
+    faces: an option to join ends closer than a set gap.
+  - Hatches, MLEADERs, ACIS solids (3DSOLID/BODY/REGION) and attribute values are left out.
+  - STEP/IGES import (OpenCascade compiled for the web) for real 3D CAD models, to look at later.
 - **SketchUp import gaps:**
   - Some pre-2018 files cannot be read (OpenSKP).
   - Layers/tags, texts, dimensions, section planes and positioned texture mapping are not

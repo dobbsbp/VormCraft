@@ -567,6 +567,14 @@ body {
   gap: 8px;
 }
 
+.dxf-import .layer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
 .modal input[type='number'] {
   width: 90px;
   font: inherit;

@@ -21,6 +21,7 @@ export const PREFERENCES: readonly Preference[] = [
   { key: 'vormcraft.export.resolution', synced: true },
   { key: 'vormcraft.import', synced: true },
   { key: 'vormcraft.import.skp', synced: true },
+  { key: 'vormcraft.import.dxf', synced: true },
   { key: 'vormcraft.text3d', synced: true },
   { key: 'vormcraft.palette.hidden', synced: false },
   { key: 'vormcraft.materials.position', synced: false },

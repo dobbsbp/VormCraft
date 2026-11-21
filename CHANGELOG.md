@@ -4,6 +4,14 @@ What changed in each version of VormCraft. The section for a version is also sho
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
+## 0.8.0
+
+- Import DXF drawings from CAD programs (AutoCAD, Rhino, Fusion, LibreCAD and others). Choose how finely curves are divided: circles and arcs become true circles with the number of segments you pick, and other curves follow the drawing as closely as you ask. A live count shows how many edges that makes.
+- Arcs and circles that CAD programs save as splines (Rhino's Make2D does this) are found and come in as true circles.
+- Each layer comes in as its own group, and you choose which layers to bring in. Hidden-line layers start unticked.
+- Closed outlines become faces you can push and pull, with holes where shapes sit inside others, and 3D wireframes that close up become solids.
+- Blocks are placed as drawn, texts come in as labels and dimensions as dimensions.
+
 ## 0.7.0
 
 - Folders in Google Drive: keep your designs in folders inside the VormCraft folder, and folders inside those. Open and Save show the folders, with the path at the top to go back up, and a New folder button.

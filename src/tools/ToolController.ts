@@ -9,6 +9,7 @@ import type { Group, GroupId } from '../doc/Groups';
 import type { VersionKind } from '../doc/Versions';
 import { openVersion, recordVersion } from '../io/versions';
 import type { SkpImport, SkpPart } from '../io/skpImport';
+import type { DrawingLabel, DrawingPart } from '../io/dxfImport';
 import { ALL_PARTS, applyScene, captureScene, type SceneId, type SceneParts, type SceneView } from '../doc/Scenes';
 import { extractGeometry, mergeGeometry, modelBounds } from '../core/ops/group';
 import { mergeFlatFaces, shapesOf, unifySolids } from '../core/ops/mergeShapes';
@@ -1113,6 +1114,36 @@ export class ToolController {
           for (const s of r.scenes) this.doc.scenes.add(s);
           for (const l of r.guides.lines) this.doc.guides.addLine(l.point, l.dir);
           for (const p of r.guides.points) this.doc.guides.addPoint(p);
+        },
+        undefined,
+        null,
+        label,
+        false,
+      ),
+    );
+    if (top !== null) {
+      this.selection.set([], [], [], [top]);
+      this.zoomSelection();
+    }
+    return top;
+  }
+
+  /**
+   * Add an imported drawing (DXF) as one undo step: a group for the file with a group per layer
+   * inside, and its texts and dimensions as labels. Selects the new group and zooms to it.
+   */
+  importDrawing(root: DrawingPart, labels: readonly DrawingLabel[], label: string): GroupId | null {
+    let top: GroupId | null = null;
+    this.run(() =>
+      this.apply(
+        () => {
+          const place = (part: DrawingPart, parent: GroupId | null): GroupId => {
+            const g = this.doc.groups.add(part.model, parent, { name: part.name });
+            for (const c of part.children) place(c, g);
+            return g;
+          };
+          if (root.children.length || root.model.halfEdges.size) top = place(root, this.doc.editing);
+          for (const l of labels) this.doc.labels.add(l.anchor, l.position, l.text, l.end);
         },
         undefined,
         null,

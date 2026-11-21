@@ -23,7 +23,7 @@ const OPEN_FILTER: FileFilter = { name: 'VormCraft model', extensions: [FILE_EXT
 const EXTENSION = new RegExp(`\\.(${[FILE_EXTENSION, ...OLD_FILE_EXTENSIONS].join('|')})$`, 'i');
 const STL_FILTER: FileFilter = { name: 'STL (binary)', extensions: ['stl'] };
 const OBJ_FILTER: FileFilter = { name: 'Wavefront OBJ', extensions: ['obj'] };
-const IMPORT_FILTER: FileFilter = { name: '3D models (SketchUp, OBJ, STL)', extensions: ['skp', 'obj', 'stl'] };
+const IMPORT_FILTER: FileFilter = { name: '3D models and drawings (SketchUp, OBJ, STL, DXF)', extensions: ['skp', 'obj', 'stl', 'dxf'] };
 /** Above this many polygons an import asks first (it can take a while). */
 const LARGE_IMPORT = 300_000;
 
@@ -216,6 +216,7 @@ export class FileCommands {
       const file = await this.host.openBinary(IMPORT_FILTER);
       if (!file) return;
       if (file.name.toLowerCase().endsWith('.skp')) return this.importSketchUp(file.name, file.bytes);
+      if (file.name.toLowerCase().endsWith('.dxf')) return this.importDrawing(file.name, file.bytes);
       const objects = parseMeshFile(file.name, file.bytes);
       const polygons = objects.reduce((n, o) => n + o.polygons.length, 0);
       if (polygons > LARGE_IMPORT && !(await confirmDialog('Large model', `${file.name} has ${polygons.toLocaleString()} polygons. Importing it may take a while and make VormCraft slower.`, 'Import anyway'))) return;
@@ -272,6 +273,39 @@ export class FileCommands {
       const f = result.faces;
       const notes = [f.turned ? `${n(f.turned)} turned round to fit` : '', f.detached ? `${n(f.detached)} kept on edges of their own` : '', f.skipped ? `${n(f.skipped)} broken faces left out` : ''].filter(Boolean);
       this.controller.notify(`Imported ${name}.skp: ${n(f.total - f.skipped)} faces${notes.length ? ` (${notes.join(', ')})` : ''}${result.scenes.length ? `, ${result.scenes.length} scenes` : ''}.`);
+    } finally {
+      progress.close();
+    }
+  }
+
+  /**
+   * A DXF drawing: read, then asked about (units, curve detail, faces, layers), then brought in as
+   * one group with a group per layer, and its texts and dimensions as labels.
+   */
+  private async importDrawing(fileName: string, bytes: Uint8Array): Promise<void> {
+    const short = fileName.split(/[\\/]/).pop()!;
+    // The DXF code loads the first time it is needed (its own small chunks).
+    const [{ decodeDxf, DxfError, parseDxf }, { convertDxf }, { showDxfDialog }] = await Promise.all([import('../io/dxfFile'), import('../io/dxfImport'), import('./dxfDialog')]);
+    let drawing;
+    try {
+      drawing = parseDxf(decodeDxf(bytes));
+    } catch (e) {
+      if (e instanceof DxfError) return this.controller.notify(e.message);
+      throw e;
+    }
+    if (!drawing.curves.length && !drawing.faces.length && !drawing.texts.length && !drawing.dimensions.length) {
+      this.controller.notify(`${short} has nothing VormCraft can bring in (no lines, curves, texts or 3D faces).`);
+      return;
+    }
+    const choice = await showDxfDialog(short, drawing);
+    if (!choice) return;
+    const progress = progressDialog('Importing', `Building ${short}…`);
+    try {
+      await new Promise((r) => setTimeout(r, 30));
+      const result = convertDxf(drawing, choice, short.replace(/\.dxf$/i, ''));
+      this.controller.importDrawing(result.root, result.labels, `Import ${short}`);
+      const parts = [`${n(result.edges)} edges`, `${n(result.faces)} faces`, `${n(result.circles)} true arcs and circles`, ...(result.labels.length ? [`${n(result.labels.length)} texts and dimensions`] : [])];
+      this.controller.notify(`Imported ${short}: ${parts.join(', ')}.`);
     } finally {
       progress.close();
     }

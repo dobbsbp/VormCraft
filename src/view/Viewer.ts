@@ -923,7 +923,9 @@ export class Viewer implements SceneView {
       // The text sits at the label position, on the side away from the anchor.
       const left = p[0] < a[0];
       el.style.transform = `translate(${p[0]}px, ${p[1]}px) translate(${left ? '-100%' : '0'}, -50%)`;
-      leaders.push(`<path d="M${a[0]} ${a[1]}L${p[0]} ${p[1]}" class="leader"/><circle cx="${a[0]}" cy="${a[1]}" r="2.5" class="leader-dot"/>`);
+      // A label with its text on the point itself (an imported drawing's text) has no leader.
+      if (label.anchor.some((x, i) => x !== label.position[i]))
+        leaders.push(`<path d="M${a[0]} ${a[1]}L${p[0]} ${p[1]}" class="leader"/><circle cx="${a[0]}" cy="${a[1]}" r="2.5" class="leader-dot"/>`);
     }
     return leaders;
   }
