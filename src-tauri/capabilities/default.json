@@ -28,6 +28,9 @@
         },
         {
           "url": "https://vormcraft.app/*"
+        },
+        {
+          "url": "mailto:info@vormcraft.app"
         }
       ]
     },

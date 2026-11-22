@@ -15,6 +15,7 @@ export const LINKS = {
   about: 'https://vormcraft.app/about/',
   privacy: 'https://vormcraft.app/privacy/',
   terms: 'https://vormcraft.app/terms/',
+  contact: 'mailto:info@vormcraft.app',
 };
 
 /** Open a web page in the user's browser (the desktop app hands it to the system). */
@@ -23,6 +24,26 @@ export async function openLink(url: string): Promise<void> {
     const { openUrl } = await import('@tauri-apps/plugin-opener');
     await openUrl(url);
   } else window.open(url, '_blank', 'noopener');
+}
+
+/**
+ * A link to show in a window (About): web pages open in a new tab, an e-mail address in the mail
+ * program; the desktop app hands both to the system, as `openLink` does.
+ */
+export function linkTo(url: string, text = url.replace(/^(https:\/\/|mailto:)/, '').replace(/\/$/, '')): HTMLAnchorElement {
+  const a = document.createElement('a');
+  a.href = url;
+  a.textContent = text;
+  if (url.startsWith('https:')) {
+    a.target = '_blank';
+    a.rel = 'noopener';
+  }
+  if (isTauri())
+    a.addEventListener('click', (e) => {
+      e.preventDefault();
+      void openLink(url);
+    });
+  return a;
 }
 
 /** Shortcuts that are not in the key map (Ctrl combinations and fixed keys). */

@@ -1121,6 +1121,10 @@ body {
   white-space: pre-line;
 }
 
+.modal p.pre a {
+  color: var(--accent);
+}
+
 /* Settings dialog. */
 .modal.settings {
   width: min(560px, calc(100vw - 32px));

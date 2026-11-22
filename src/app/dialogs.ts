@@ -143,7 +143,8 @@ export function confirmDialog(title: string, message: string, confirmLabel: stri
 }
 
 /** A message with a single OK button. `body` may hold a few lines (shown as written); `extra` goes under it. */
-export function messageDialog(title: string, body: string, extra: Node[] = []): Promise<void> {
+/** `body`: plain text, or nodes (text with links, for example) shown the same way. */
+export function messageDialog(title: string, body: string | Node[], extra: Node[] = []): Promise<void> {
   const dlg = document.createElement('dialog');
   dlg.className = 'modal';
   dlg.innerHTML = `
@@ -153,7 +154,8 @@ export function messageDialog(title: string, body: string, extra: Node[] = []): 
       <div class="buttons"><button type="submit" class="primary" autofocus>OK</button></div>
     </form>`;
   dlg.querySelector('h2')!.textContent = title;
-  dlg.querySelector('p')!.textContent = body;
+  if (typeof body === 'string') dlg.querySelector('p')!.textContent = body;
+  else dlg.querySelector('p')!.append(...body);
   dlg.querySelector('p')!.after(...extra);
   document.body.append(dlg);
   return new Promise((resolve) => {

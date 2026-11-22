@@ -4,6 +4,10 @@ What changed in each version of VormCraft. The section for a version is also sho
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
+## Unreleased
+
+- The web addresses and the e-mail address in About VormCraft can be clicked.
+
 ## 0.9.1
 
 - Large designs, such as big imported models, can be opened after saving. Before, they could be reported as damaged. Zoom Selection and Flip work on large selections too.

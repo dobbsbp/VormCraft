@@ -10,6 +10,7 @@ import { loadSettings, saveSettings, type Settings } from './settings';
 import { showSettingsDialog } from './settingsDialog';
 import { APP_VERSION, checkForUpdates, type UpdateHooks } from './updater';
 import { graphicsChoice, setGraphicsChoice } from './graphics';
+import { LINKS, linkTo } from './help';
 import { maybeShowGraphicsTip, onLinux } from './graphicsTip';
 import { describeLinuxGraphics, linuxGraphics } from './linuxGraphics';
 import { installedWebApp, startOffline } from './webApp';
@@ -107,18 +108,24 @@ export class Lifecycle {
     await messageDialog(
       'About VormCraft',
       [
-        `VormCraft ${APP_VERSION}`,
-        'A free, open-source push/pull 3D modeler.',
-        '',
-        `Graphics: ${gpu.renderer}${gpu.software && !gpu.linux ? ' (software: no hardware acceleration)' : ''}`,
-        `Running as: ${isTauri() ? 'desktop app' : installedWebApp() ? 'installed web app (works offline)' : 'web page'}`,
-        '',
-        'https://github.com/dobbsbp/VormCraft',
-        'MIT licence. Privacy Policy and Terms of Use: Help menu, or vormcraft.app/privacy and vormcraft.app/terms.',
-        'Contact: info@vormcraft.app',
-        '',
-        'VormCraft is free and always will be. If it is useful to you, a small donation helps pay for the website and upkeep: Help → Support VormCraft ♥.',
-      ].join('\n'),
+        [
+          `VormCraft ${APP_VERSION}`,
+          'A free, open-source push/pull 3D modeler.',
+          '',
+          `Graphics: ${gpu.renderer}${gpu.software && !gpu.linux ? ' (software: no hardware acceleration)' : ''}`,
+          `Running as: ${isTauri() ? 'desktop app' : installedWebApp() ? 'installed web app (works offline)' : 'web page'}`,
+          '',
+          '',
+        ].join('\n'),
+        linkTo(LINKS.project, LINKS.project),
+        '\nMIT licence. Privacy Policy and Terms of Use: Help menu, or ',
+        linkTo(LINKS.privacy),
+        ' and ',
+        linkTo(LINKS.terms),
+        '.\nContact: ',
+        linkTo(LINKS.contact),
+        '\n\nVormCraft is free and always will be. If it is useful to you, a small donation helps pay for the website and upkeep: Help → Support VormCraft ♥.',
+      ].map((part) => (typeof part === 'string' ? document.createTextNode(part) : part)),
     );
   }
 
