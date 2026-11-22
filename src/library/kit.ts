@@ -41,11 +41,29 @@ export const PAINTS = {
 
 export type Paint = keyof typeof PAINTS;
 
-/** One piece of an item: a closed solid (or several apart) with one paint. */
+/** A paint as placed: its name, colour and opacity (1 is solid). */
+export interface PaintFields {
+  name: string;
+  color: string;
+  opacity: number;
+}
+
+/**
+ * One piece of an item: a closed solid (or several apart) with one paint, one of `PAINTS`, or a
+ * colour of its own (`colour`, from an AI design).
+ */
 export interface LibraryPart {
   name: string;
   paint: Paint;
+  colour?: PaintFields;
   model: Model;
+}
+
+/** The paint a part is placed with. */
+export function paintFields(p: Pick<LibraryPart, 'paint' | 'colour'>): PaintFields {
+  if (p.colour) return p.colour;
+  const paint = PAINTS[p.paint];
+  return { name: paint.name, color: paint.color, opacity: 'opacity' in paint ? paint.opacity : 1 };
 }
 
 export type Axis = 'x' | 'y' | 'z';
@@ -81,6 +99,33 @@ function prismModel(ring: readonly Vec3[], along: Vec3): Model {
     const j = (i + 1) % pts.length;
     const side = cross(sub3(pts[j], pts[i]), along);
     m.addFace([bottom[i], bottom[j], top[j], top[i]], [], { normal: scale(side, 1 / Math.hypot(...side)) });
+  }
+  return m;
+}
+
+/**
+ * A tapered box standing on `base` (the middle of its bottom): `bottom` and `top` are half-sizes
+ * along X and Y, `height` up Z. The sides stay flat because the top is the bottom scaled about the
+ * centre line on each axis.
+ */
+function frustumModel(base: Vec3, bottom: readonly [number, number], top: readonly [number, number], height: number): Model {
+  const ring = (h: readonly [number, number], z: number): Vec3[] => [
+    [base[0] - h[0], base[1] - h[1], z],
+    [base[0] + h[0], base[1] - h[1], z],
+    [base[0] + h[0], base[1] + h[1], z],
+    [base[0] - h[0], base[1] + h[1], z],
+  ];
+  const lo = ring(bottom, base[2]);
+  const hi = ring(top, base[2] + height);
+  const m = new Model();
+  const b = lo.map((p) => m.addVertex(p));
+  const t = hi.map((p) => m.addVertex(p));
+  m.addFace([...b].reverse(), [], { normal: [0, 0, -1] });
+  m.addFace(t, [], { normal: [0, 0, 1] });
+  for (let i = 0; i < 4; i++) {
+    const j = (i + 1) % 4;
+    const n = newellNormal([lo[i], lo[j], hi[j], hi[i]]);
+    m.addFace([b[i], b[j], t[j], t[i]], [], { normal: scale(n, 1 / Math.hypot(...n)) });
   }
   return m;
 }
@@ -129,7 +174,14 @@ export class Part {
   constructor(
     readonly name: string,
     readonly paint: Paint,
+    readonly colour?: PaintFields,
   ) {}
+
+  /** A shape made elsewhere (see `shapeModels`), joined like the others; `cut` takes it away instead. */
+  add(model: Model, cut = false): this {
+    (cut ? this.cuts : this.shapes).push(model);
+    return this;
+  }
 
   box(a: Vec3, b: Vec3): this {
     this.shapes.push(boxModel(a, b));
@@ -151,6 +203,17 @@ export class Part {
     return this;
   }
 
+  /** A tapered box (see `frustumModel`); equal half-sizes make a plain box. */
+  frustum(base: Vec3, bottom: readonly [number, number], top: readonly [number, number], height: number): this {
+    this.shapes.push(frustumModel(base, bottom, top, height));
+    return this;
+  }
+
+  cutFrustum(base: Vec3, bottom: readonly [number, number], top: readonly [number, number], height: number): this {
+    this.cuts.push(frustumModel(base, bottom, top, height));
+    return this;
+  }
+
   cutBox(a: Vec3, b: Vec3): this {
     this.cuts.push(boxModel(a, b));
     return this;
@@ -158,6 +221,11 @@ export class Part {
 
   cutCylinder(axis: Axis, base: Vec3, r: number, length: number, sides = 24): this {
     this.cuts.push(cylinderModel(axis, base, r, length, sides));
+    return this;
+  }
+
+  cutPrism(ring: readonly Vec3[], along: Vec3): this {
+    this.cuts.push(prismModel(ring, along));
     return this;
   }
 
@@ -181,9 +249,12 @@ export class Part {
     mergeCoplanarFaces(model, [...model.faces.keys()], touched);
     removeCollinearVertices(model, touched);
     retagCurves(model, new Set(model.faces.keys()), curves);
-    return { name: this.name, paint: this.paint, model };
+    return { name: this.name, paint: this.paint, ...(this.colour ? { colour: this.colour } : {}), model };
   }
 }
 
 /** A new part. */
 export const part = (name: string, paint: Paint): Part => new Part(name, paint);
+
+/** The kit's shapes as models of their own, to be turned or moved before they join a part. */
+export const shapeModels = { box: boxModel, prism: prismModel, cylinder: cylinderModel, lathe: latheModel, frustum: frustumModel };

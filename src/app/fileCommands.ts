@@ -93,6 +93,11 @@ export class FileCommands {
     });
   }
 
+  /** Pick a saved AI design (a VormCraft build file) and read it; null if cancelled. */
+  openDesignFile(): Promise<OpenedFile | null> {
+    return this.host.open({ name: 'AI design', extensions: ['json', 'txt'] });
+  }
+
   /** Open a file by path (desktop: a .vorm file double-clicked in Explorer). */
   async openPath(path: string): Promise<void> {
     if (!this.host.readPath) return;

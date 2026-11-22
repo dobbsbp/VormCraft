@@ -1,6 +1,7 @@
-import type { LibraryItem, LibraryOpening, LibraryVariant } from './catalog';
+import type { LibraryItem, LibraryOpening, LibraryParam, LibraryVariant } from './catalog';
 import { ROOMS } from './catalog';
 import { part, type LibraryPart, type Part } from './kit';
+import { customisable, need, paramValues } from './params';
 
 /**
  * Building items: doors and windows. Each stands on z = 0 centred on the origin, its outside face
@@ -21,9 +22,7 @@ const SIDE = 50;
 
 const ALL_ROOMS = [...ROOMS];
 
-function item(def: Omit<LibraryItem, 'category'>): LibraryItem {
-  return { category: 'Building', ...def };
-}
+const custom = (def: Omit<Parameters<typeof customisable>[0], 'category'>): LibraryItem => customisable({ category: 'Building', ...def });
 
 /** "900" → 900 × 2100 for doors; "1200x1200" → width × height. */
 function sizeOf(id: string | undefined, variants: readonly LibraryVariant[], height: number): { w: number; h: number } {
@@ -52,17 +51,41 @@ function windowSill(h: number, w: number): number {
 
 const opening = (w: number, h: number, sill: number): LibraryOpening => ({ width: w, height: h, sill });
 
+/** The settings of doors and windows, shared by `build` and `opening`. */
+const DOOR: { params: LibraryParam[]; preset(v?: string): Record<string, number> } = {
+  params: [
+    { id: 'width', name: 'Width (outside the frame)', kind: 'length', value: 800, min: 500, max: 2400, note: 'Two doors from 1400 mm.' },
+    { id: 'height', name: 'Height', kind: 'length', value: 2100, min: 1500, max: 3000 },
+  ],
+  preset: (v) => ({ width: sizeOf(v, DOORS, 2100).w }),
+};
+
+const WINDOW: typeof DOOR = {
+  params: [
+    { id: 'width', name: 'Width (outside the frame)', kind: 'length', value: 600, min: 300, max: 4000, note: 'Two panes from 1600 mm.' },
+    { id: 'height', name: 'Height', kind: 'length', value: 600, min: 300, max: 3000 },
+    { id: 'sill', name: 'Bottom above the floor', kind: 'length', value: 1400, min: 0, max: 2500 },
+  ],
+  preset: (v) => {
+    const { w, h } = sizeOf(v, WINDOWS, 1200);
+    return { width: w, height: h, sill: windowSill(h, w) };
+  },
+};
+
 export const BUILDING: LibraryItem[] = [
-  item({
+  custom({
     id: 'door',
     name: 'Door',
     subcategory: 'Doors and windows',
     rooms: ALL_ROOMS,
     tags: ['door', 'doorway', 'entrance', 'opening', 'internal door', 'double door', 'leaf'],
     variants: DOORS,
-    opening: (v) => opening(sizeOf(v, DOORS, 2100).w, 2100, 0),
-    build: (v) => {
-      const { w, h } = sizeOf(v, DOORS, 2100);
+    ...DOOR,
+    opening(v, given) {
+      const { width, height } = paramValues(DOOR, v, given);
+      return opening(width, height, 0);
+    },
+    make: ({ width: w, height: h }) => {
       const frame = part('Frame', 'white');
       box(frame, sym(w / 2), sym(FRAME / 2), [0, h]);
       cut(frame, sym(w / 2 - SIDE), sym(FRAME), [-10, h - SIDE]);
@@ -81,19 +104,20 @@ export const BUILDING: LibraryItem[] = [
       return done(frame, leaf, handle);
     },
   }),
-  item({
+  custom({
     id: 'window',
     name: 'Window',
     subcategory: 'Doors and windows',
     rooms: ALL_ROOMS,
     tags: ['window', 'glazing', 'glass', 'pane', 'casement', 'opening', 'light'],
     variants: WINDOWS,
-    opening: (v) => {
-      const { w, h } = sizeOf(v, WINDOWS, 1200);
-      return opening(w, h, windowSill(h, w));
+    ...WINDOW,
+    opening(v, given) {
+      const { width, height, sill } = paramValues(WINDOW, v, given);
+      return opening(width, height, sill);
     },
-    build: (v) => {
-      const { w, h } = sizeOf(v, WINDOWS, 1200);
+    make: ({ width: w, height: h }) => {
+      need(w > 2 * SIDE + 50 && h > 2 * SIDE + 50, 'Too small for its frame: make it bigger');
       const frame = part('Frame', 'white');
       box(frame, sym(w / 2), sym(FRAME / 2 - 15), [0, h]);
       cut(frame, sym(w / 2 - SIDE), sym(FRAME), [SIDE, h - SIDE]);

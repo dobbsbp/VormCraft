@@ -1951,6 +1951,176 @@ body.viewer-mode .scene-tab {
   color: var(--text);
 }
 
+.library-customise {
+  width: 100%;
+  font: inherit;
+  font-size: 11px;
+  padding: 2px 4px;
+  border: 1px solid var(--chrome-border);
+  border-radius: 4px;
+  background: #fff;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.library-customise:hover,
+.library-customise:focus-visible {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* Design with AI (Library). */
+.library-ai {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.modal.ai-design {
+  width: min(600px, calc(100vw - 32px));
+}
+
+.ai-design textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  padding: 6px 8px;
+  border: 1px solid var(--chrome-border);
+  border-radius: 4px;
+  resize: vertical;
+}
+
+.ai-design .ai-template {
+  margin-top: 6px;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.ai-design .field.stacked {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ai-steps {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ai-result {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.ai-result .customise-picture {
+  flex: none;
+  width: 160px;
+  height: 160px;
+}
+
+.ai-result .customise-picture[hidden],
+.ai-problem-box[hidden],
+.ai-design button[hidden] {
+  display: none;
+}
+
+.ai-problems {
+  margin: 4px 0 8px;
+  padding-left: 18px;
+  max-height: 180px;
+  overflow-y: auto;
+  font-size: 12px;
+  color: #b3261e;
+}
+
+/* Customise a Library item: a picture and the size beside the settings. */
+.modal.customise {
+  width: min(620px, calc(100vw - 32px));
+}
+
+.customise-body {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.customise-preview {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 200px;
+  position: sticky;
+  top: 0;
+}
+
+.customise-picture {
+  width: 200px;
+  height: 200px;
+  border: 1px solid var(--chrome-border);
+  border-radius: 6px;
+  object-fit: contain;
+}
+
+.customise-size {
+  text-align: center;
+}
+
+.customise-fields {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.customise-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.customise-field[hidden] {
+  display: none;
+}
+
+.customise-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.customise-row.toggle {
+  justify-content: flex-start;
+}
+
+.customise-row input[type='text'],
+.customise-row select {
+  font: inherit;
+  padding: 2px 6px;
+  width: 9em;
+}
+
+@media (max-width: 560px) {
+  .customise-body {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .customise-preview {
+    position: static;
+    width: auto;
+  }
+}
+
 /* Toolbar buttons that open a menu (standard views, face style): a small arrow after the icon. */
 .icon-button.has-menu {
   width: auto;

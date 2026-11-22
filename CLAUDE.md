@@ -10,7 +10,7 @@ TypeScript, Three.js, Manifold, Tauri and Vitest.
 `README.md` is the public feature list; keep it current when adding features.
 Unfinished work and known bugs live in `TODO.md`.
 
-## Current state (0.8.0, November 2026)
+## Current state (0.9.0, November 2026)
 - Released for Windows (NSIS installer, auto-update) and the web (installable PWA, works offline).
   All are built by GitHub Actions from a version tag.
 - Linux (since 0.6.0): AppImages for x86_64 and ARM64 with auto-update, on WebKitGTK. About shows
@@ -33,11 +33,17 @@ Unfinished work and known bugs live in `TODO.md`.
 - **View and workspace:**
   - scenes and a slideshow; face styles; perspective or parallel projection;
   - Viewer mode for touch screens;
-  - the Library (51 objects, placed as components; doors and windows cut their own opening in the
-    wall clicked);
+  - the Library (57 objects, placed as components; doors and windows cut their own opening in the
+    wall clicked; some can be customised: `params`, `src/library/params.ts`, `customiseDialog.ts`);
   - a movable, customisable tool palette (tools can be left out, under ⋯) and a hideable top bar;
   - a Views button that cycles the standard views;
   - sky and ground behind the model (per device; scenes can keep their own).
+- **Customise and AI designs (0.9.0):** 41 Library items have settings (Customise…; doors and
+  windows cut openings to match). Design with AI copies instructions for any AI chat; Import AI
+  design checks, previews and places the `vormcraft-build` JSON it writes (tested with Claude,
+  ChatGPT, Grok and Gemini). VormCraft never contacts an AI itself.
+- **Until 1.0.0 (1 January 2027):** bug fixes and adjustments only; releases are held unless the
+  maintainer asks.
 - **Checks:** Entity Info shows volumes and whether shapes are proper solids; tests refuse changes
   that break solids.
 - **Files:**
@@ -109,6 +115,11 @@ Unfinished work and known bugs live in `TODO.md`.
   - `catalog.ts`: item type, rooms, `LIBRARY_VERSION`.
   - `household.ts`: the items.
   - `search.ts`: search with typos and synonyms.
+  - `params.ts`: customisable items' settings (Customise…).
+  - `buildFormat.ts`: AI build files (`vormcraft-build` JSON, version 1), read as data with
+    formulas worked out by our own evaluator (never `eval`), checked with problems that say
+    where; `buildTemplate.ts`: the instructions and examples copied to an AI (the tests build
+    every example). Keep the template, the format and SPEC in step.
   - Tested in `tests/library.test.ts`.
 - `src/io`:
   - `fileFormat.ts`: the versioned `.vorm` JSON format.
@@ -126,6 +137,7 @@ Unfinished work and known bugs live in `TODO.md`.
   - `drive/`: Google Drive.
   - `materialLibrary.ts`: colours and textures drawn in code.
   - `text3dDialog.ts`: draws the text on a canvas, then calls the core tracer.
+  - `customiseDialog.ts` (Customise…), `aiDesignDialog.ts` (Design with AI, Import AI design).
   - `toolOrder.ts`: palette order.
 - `src-tauri`: the desktop shell (Windows and Linux; platform code behind `#[cfg(windows)]` /
   `#[cfg(target_os = "linux")]`).

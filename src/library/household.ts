@@ -1,6 +1,7 @@
 import { scale, type Vec3 } from '../core/math/vec3';
-import type { LibraryItem, LibraryVariant, Room } from './catalog';
+import type { LibraryItem, LibraryParam, LibraryVariant, Room } from './catalog';
 import { part, type LibraryPart, type Paint, type Part } from './kit';
+import { customisable, need } from './params';
 
 /**
  * Household items: furniture, kitchen, bathroom, electronics, lighting and decor, at common
@@ -66,6 +67,23 @@ function item(def: Omit<LibraryItem, 'category'>): LibraryItem {
   return { category: 'Household', ...def };
 }
 
+/** A customisable household item (Library → Customise…). */
+const custom = (def: Omit<Parameters<typeof customisable>[0], 'category'>): LibraryItem => customisable({ category: 'Household', ...def });
+
+/** A length setting in mm, with its range. */
+const length = (id: string, name: string, value: number, min: number, max: number, note?: string): LibraryParam => ({ id, name, kind: 'length', value, min, max, ...(note ? { note } : {}) });
+
+/** A whole-number setting (shelves, drawers, doors). */
+const count = (id: string, name: string, value: number, min: number, max: number, note?: string): LibraryParam => ({ id, name, kind: 'count', value, min, max, ...(note ? { note } : {}) });
+
+/** The usual sizes of cabinet-like furniture: width, depth and height. */
+const whd = (w: [number, number, number], d: [number, number, number], h: [number, number, number]): LibraryParam[] => [length('width', 'Width', ...w), length('depth', 'Depth', ...d), length('height', 'Height', ...h)];
+
+/** Drawers or doors fit: each at least `min` mm in both directions. */
+function fitFronts(span: number, n: number, min: number, what: string): void {
+  need((span - 3 * (n + 1)) / n >= min, `Too many ${what} for this size: use fewer, or make it bigger`);
+}
+
 /** Variants from widths: "800 mm" names unless given. */
 const widths = (...ws: (number | [number, string])[]): LibraryVariant[] =>
   ws.map((w) => (Array.isArray(w) ? { id: String(w[0]), name: w[1] } : { id: String(w), name: `${w} mm wide` }));
@@ -76,8 +94,8 @@ const pick = (variants: readonly LibraryVariant[], id: string | undefined): numb
 
 const SOFAS = widths([1600, '2-seat (1600 mm)'], [2100, '3-seat (2100 mm)'], [2600, '4-seat (2600 mm)']);
 
-function upholstered(w: number, seats: number, cover: Paint): LibraryPart[] {
-  const d = 880;
+function upholstered(w: number, seats: number, cover: Paint, d = 880): LibraryPart[] {
+  need((w - 260 - (seats - 1) * 10) / seats >= 250, 'Too many seats for this width: use fewer, or make it wider');
   const body = part('Upholstery', cover);
   box(body, sym(w / 2), sym(d / 2), [140, 420]);
   box(body, sym(w / 2), [d / 2 - 180, d / 2], [140, 800]);
@@ -103,47 +121,55 @@ const BEDS: LibraryVariant[] = [
 ];
 
 const furniture: LibraryItem[] = [
-  item({
+  custom({
     id: 'dining-chair',
     name: 'Dining chair',
     subcategory: 'Furniture',
     rooms: ['Dining room', 'Kitchen'],
     tags: ['chair', 'seat', 'wooden chair', 'kitchen chair', 'seating'],
-    build: () => {
-      const w = 440;
-      const d = 460;
+    params: [
+      length('width', 'Width', 440, 300, 800),
+      length('depth', 'Depth', 460, 300, 800),
+      length('seat', 'Seat height', 450, 250, 800),
+      length('height', 'Height (top of the back)', 900, 500, 1400),
+    ],
+    make: ({ width: w, depth: d, seat, height: h }) => {
+      need(h >= seat + 250, 'The back is too low: make the chair taller or the seat lower');
       const frame = part('Frame', 'oak');
-      box(frame, sym(w / 2), sym(d / 2), [420, 450]);
+      box(frame, sym(w / 2), sym(d / 2), [seat - 30, seat]);
       for (const sx of [-1, 1]) {
         const x: Range = [sx * (w / 2) - (sx > 0 ? 35 : 0), sx * (w / 2) + (sx < 0 ? 35 : 0)];
-        box(frame, x, [-d / 2, -d / 2 + 35], [0, 435]);
-        box(frame, x, [d / 2 - 35, d / 2], [0, 900]);
+        box(frame, x, [-d / 2, -d / 2 + 35], [0, seat - 15]);
+        box(frame, x, [d / 2 - 35, d / 2], [0, h]);
       }
-      box(frame, sym(w / 2 - 10), [d / 2 - 30, d / 2 - 10], [620, 880]);
+      box(frame, sym(w / 2 - 10), [d / 2 - 30, d / 2 - 10], [seat + 170, h - 20]);
       return done(frame);
     },
   }),
-  item({
+  custom({
     id: 'armchair',
     name: 'Armchair',
     subcategory: 'Furniture',
     rooms: ['Living room', 'Bedroom'],
     tags: ['chair', 'easy chair', 'lounge chair', 'seat', 'upholstered', 'seating'],
-    build: () => upholstered(860, 1, 'fabric'),
+    params: [length('width', 'Width', 860, 600, 1400), length('depth', 'Depth', 880, 600, 1200)],
+    make: ({ width, depth }) => upholstered(width, 1, 'fabric', depth),
   }),
-  item({
+  custom({
     id: 'sofa',
     name: 'Sofa',
     subcategory: 'Furniture',
     rooms: ['Living room'],
     tags: ['couch', 'settee', 'lounge', 'seating', 'upholstered'],
     variants: SOFAS,
-    build: (v) => {
+    params: [length('width', 'Width', 1600, 1000, 4000), length('depth', 'Depth', 880, 600, 1200), count('seats', 'Seats', 2, 1, 8)],
+    preset: (v) => {
       const w = pick(SOFAS, v);
-      return upholstered(w, w <= 1600 ? 2 : w <= 2100 ? 3 : 4, 'fabricBlue');
+      return { width: w, seats: w <= 1600 ? 2 : w <= 2100 ? 3 : 4 };
     },
+    make: ({ width, depth, seats }) => upholstered(width, seats, 'fabricBlue', depth),
   }),
-  item({
+  custom({
     id: 'bar-stool',
     name: 'Bar stool',
     subcategory: 'Furniture',
@@ -153,8 +179,9 @@ const furniture: LibraryItem[] = [
       { id: '750', name: 'Bar height (seat 750 mm)' },
       { id: '650', name: 'Counter height (seat 650 mm)' },
     ],
-    build: (v) => {
-      const h = Number(v ?? 750);
+    params: [length('height', 'Seat height', 750, 450, 900, 'About 300 mm below the counter or bar top.')],
+    preset: (v) => ({ height: Number(v ?? 750) }),
+    make: ({ height: h }) => {
       const seat = part('Seat', 'oak').cylinder('z', [0, 0, h - 40], 180, 40);
       const frame = part('Frame', 'black');
       for (const [x, y] of [
@@ -171,23 +198,35 @@ const furniture: LibraryItem[] = [
       return done(seat, frame);
     },
   }),
-  item({
+  custom({
     id: 'dining-table',
     name: 'Dining table',
     subcategory: 'Furniture',
     rooms: ['Dining room', 'Kitchen'],
     tags: ['table', 'kitchen table', 'rectangular table', 'wooden table'],
     variants: TABLES,
-    build: (v) => {
+    params: [
+      length('width', 'Width', 1200, 300, 4000),
+      length('depth', 'Depth', 800, 300, 2000),
+      length('height', 'Height', 750, 200, 1200),
+      length('top', 'Top thickness', 30, 10, 100),
+      length('leg', 'Leg thickness', 70, 20, 200),
+      length('inset', 'Legs in from the edge', 50, 0, 500),
+    ],
+    preset: (v) => {
       const w = pick(TABLES, v);
-      const d = w <= 1200 ? 800 : w <= 1800 ? 900 : 1000;
+      return { width: w, depth: w <= 1200 ? 800 : w <= 1800 ? 900 : 1000 };
+    },
+    make: ({ width: w, depth: d, height: h, top, leg, inset }) => {
+      need(top <= h - 50, 'The top is too thick for this height');
+      need(2 * (inset + leg) < Math.min(w, d), 'The legs do not fit: make them thinner or move them out towards the edge');
       const t = part('Table', 'oak');
-      box(t, sym(w / 2), sym(d / 2), [720, 750]);
-      squareLegs(t, w, d, 70, 735, 50);
+      box(t, sym(w / 2), sym(d / 2), [h - top, h]);
+      squareLegs(t, w, d, leg, h - top / 2, inset);
       return done(t);
     },
   }),
-  item({
+  custom({
     id: 'round-table',
     name: 'Round table',
     subcategory: 'Furniture',
@@ -197,55 +236,64 @@ const furniture: LibraryItem[] = [
       { id: '900', name: 'Ø 900 mm (2–4 people)' },
       { id: '1200', name: 'Ø 1200 mm (4–6 people)' },
     ],
-    build: (v) => {
-      const r = Number(v ?? 900) / 2;
-      const top = part('Top', 'oak').cylinder('z', [0, 0, 720], r, 30, 32);
-      const base = part('Base', 'black').cylinder('z', [0, 0, 0], 60, 730, 16).cylinder('z', [0, 0, 0], r * 0.5, 25, 24);
+    params: [length('diameter', 'Diameter', 900, 300, 2400), length('height', 'Height', 750, 300, 1200)],
+    preset: (v) => ({ diameter: Number(v ?? 900) }),
+    make: ({ diameter, height: h }) => {
+      const r = diameter / 2;
+      const top = part('Top', 'oak').cylinder('z', [0, 0, h - 30], r, 30, 32);
+      const base = part('Base', 'black').cylinder('z', [0, 0, 0], 60, h - 20, 16).cylinder('z', [0, 0, 0], r * 0.5, 25, 24);
       return done(top, base);
     },
   }),
-  item({
+  custom({
     id: 'coffee-table',
     name: 'Coffee table',
     subcategory: 'Furniture',
     rooms: ['Living room'],
     tags: ['table', 'low table', 'cocktail table', 'centre table'],
-    build: () => {
-      const w = 1100;
-      const d = 600;
+    params: [
+      length('width', 'Width', 1100, 300, 2400),
+      length('depth', 'Depth', 600, 300, 1500),
+      length('height', 'Height', 420, 200, 800),
+      { id: 'shelf', name: 'Shelf underneath', kind: 'toggle', value: 1 },
+    ],
+    make: ({ width: w, depth: d, height: h, shelf }) => {
+      need(!shelf || h >= 250, 'Too low for a shelf underneath: make it taller or leave the shelf out');
       const t = part('Table', 'walnut');
-      box(t, sym(w / 2), sym(d / 2), [390, 420]);
-      box(t, sym(w / 2 - 30), sym(d / 2 - 30), [110, 130]);
-      squareLegs(t, w, d, 40, 400, 20);
+      box(t, sym(w / 2), sym(d / 2), [h - 30, h]);
+      if (shelf) box(t, sym(w / 2 - 30), sym(d / 2 - 30), [110, 130]);
+      squareLegs(t, w, d, 40, h - 20, 20);
       return done(t);
     },
   }),
-  item({
+  custom({
     id: 'side-table',
     name: 'Side table',
     subcategory: 'Furniture',
     rooms: ['Living room', 'Bedroom'],
     tags: ['table', 'end table', 'lamp table', 'small table'],
-    build: () => {
+    params: whd([500, 250, 1200], [500, 250, 1200], [550, 250, 1000]),
+    make: ({ width: w, depth: d, height: h }) => {
       const t = part('Table', 'oak');
-      box(t, sym(250), sym(250), [520, 550]);
-      squareLegs(t, 500, 500, 35, 530, 15);
+      box(t, sym(w / 2), sym(d / 2), [h - 30, h]);
+      squareLegs(t, w, d, 35, h - 20, 15);
       return done(t);
     },
   }),
-  item({
+  custom({
     id: 'desk',
     name: 'Desk',
     subcategory: 'Furniture',
     rooms: ['Office', 'Bedroom'],
     tags: ['table', 'writing desk', 'computer desk', 'work desk', 'study', 'workstation'],
     variants: widths(1200, 1400, 1600),
-    build: (v) => {
-      const w = Number(v ?? 1200);
+    params: [length('width', 'Width', 1200, 400, 3000), length('depth', 'Depth', 700, 300, 1200), length('height', 'Height', 750, 400, 1300, 'Standing desks are about 1050 mm.')],
+    preset: (v) => ({ width: Number(v ?? 1200) }),
+    make: ({ width: w, depth: d, height: h }) => {
       const top = part('Top', 'oak');
-      box(top, sym(w / 2), sym(350), [725, 750]);
-      const frame = squareLegs(part('Frame', 'black'), w, 700, 40, 730, 30);
-      box(frame, sym(w / 2 - 50), [300, 320], [600, 730]);
+      box(top, sym(w / 2), sym(d / 2), [h - 25, h]);
+      const frame = squareLegs(part('Frame', 'black'), w, d, 40, h - 20, 30);
+      box(frame, sym(w / 2 - 50), [d / 2 - 50, d / 2 - 30], [h - 150, h - 20]);
       return done(top, frame);
     },
   }),
@@ -261,12 +309,12 @@ const furniture: LibraryItem[] = [
       box(seat, sym(230), [200, 240], [480, 1020]);
       const frame = part('Frame', 'darkGrey');
       frame.cylinder('z', [0, 0, 60], 25, 350, 16);
-      box(frame, sym(20), [-20, 230], [380, 410]);
-      box(frame, sym(20), [200, 235], [380, 560]);
+      box(frame, sym(20), [-20, 225], [380, 410]);
+      box(frame, sym(20), [205, 235], [380, 560]);
       for (const s of [-1, 1]) {
         box(frame, s < 0 ? [-270, -240] : [240, 270], [-150, 120], [640, 670]);
         box(frame, s < 0 ? [-265, -245] : [245, 265], [0, 60], [420, 650]);
-        box(frame, s < 0 ? [-265, -200] : [200, 265], [0, 60], [400, 430]);
+        box(frame, s < 0 ? [-265, -200] : [200, 265], [0, 60], [405, 430]);
       }
       // A five-point base on castors.
       for (let i = 0; i < 5; i++) {
@@ -280,19 +328,23 @@ const furniture: LibraryItem[] = [
       return done(seat, frame);
     },
   }),
-  item({
+  custom({
     id: 'bed',
     name: 'Bed',
     subcategory: 'Furniture',
     rooms: ['Bedroom'],
     tags: ['bed frame', 'mattress', 'double bed', 'single bed', 'queen bed', 'king bed', 'headboard', 'sleep'],
     variants: BEDS,
-    build: (v) => {
-      const w = pick(BEDS, v);
-      const L = 2000;
+    params: [
+      length('width', 'Mattress width', 900, 700, 2400),
+      length('length', 'Mattress length', 2000, 1600, 2400),
+      length('headboard', 'Headboard height', 1050, 500, 1800, 'Leave it at 500 mm for almost no headboard.'),
+    ],
+    preset: (v) => ({ width: pick(BEDS, v) }),
+    make: ({ width: w, length: L, headboard }) => {
       const frame = part('Frame', 'walnut');
       box(frame, sym(w / 2 + 25), sym(L / 2 + 25), [120, 300]);
-      box(frame, sym(w / 2 + 25), [L / 2 + 5, L / 2 + 60], [0, 1050]);
+      box(frame, sym(w / 2 + 25), [L / 2 + 5, L / 2 + 60], [0, headboard]);
       squareLegs(frame, w + 50, L + 50, 60, 130);
       const mattress = part('Mattress', 'white');
       box(mattress, sym(w / 2), sym(L / 2), [300, 500]);
@@ -308,56 +360,66 @@ const furniture: LibraryItem[] = [
       return done(frame, mattress, bedding, pillows);
     },
   }),
-  item({
+  custom({
     id: 'nightstand',
     name: 'Bedside table',
     subcategory: 'Furniture',
     rooms: ['Bedroom'],
     tags: ['nightstand', 'night table', 'bedside cabinet', 'drawers'],
-    build: () => {
+    params: [...whd([450, 250, 900], [400, 250, 700], [560, 300, 1000]), count('drawers', 'Drawers', 2, 1, 6)],
+    make: ({ width: w, depth: d, height: h, drawers }) => {
+      fitFronts(h - 130, drawers, 60, 'drawers');
       const body = part('Body', 'oak');
-      box(body, sym(225), [-182, 200], [130, 560]);
-      roundLegs(body, 450, 382, 15, 140, 20);
+      box(body, sym(w / 2), [-d / 2 + 18, d / 2], [130, h]);
+      roundLegs(body, w, d - 18, 15, 140, 20);
       const fr = part('Drawers', 'oak');
       const handles = part('Handles', 'steel');
-      fronts(fr, handles, sym(225), [130, 560], -182, 1, 2, false);
+      fronts(fr, handles, sym(w / 2), [130, h], -d / 2 + 18, 1, drawers, false);
       return done(body, fr, handles);
     },
   }),
-  item({
+  custom({
     id: 'wardrobe',
     name: 'Wardrobe',
     subcategory: 'Furniture',
     rooms: ['Bedroom', 'Hallway'],
     tags: ['closet', 'armoire', 'cupboard', 'clothes', 'storage'],
     variants: widths([1000, '2 doors (1000 mm)'], [1500, '3 doors (1500 mm)']),
-    build: (v) => {
+    params: [...whd([1000, 400, 4000], [600, 300, 800], [2000, 1000, 2700]), count('doors', 'Doors', 2, 1, 8)],
+    preset: (v) => {
       const w = Number(v ?? 1000);
+      return { width: w, doors: w <= 1000 ? 2 : 3 };
+    },
+    make: ({ width: w, depth: d, height: h, doors: n }) => {
+      fitFronts(w, n, 250, 'doors');
       const body = part('Body', 'white');
-      box(body, sym(w / 2), [-282, 300], [0, 2000]);
+      box(body, sym(w / 2), [-d / 2 + 18, d / 2], [0, h]);
       const doors = part('Doors', 'offWhite');
       const handles = part('Handles', 'steel');
-      fronts(doors, handles, sym(w / 2), [60, 2000], -282, w <= 1000 ? 2 : 3, 1, true);
+      fronts(doors, handles, sym(w / 2), [60, h], -d / 2 + 18, n, 1, true);
       return done(body, doors, handles);
     },
   }),
-  item({
+  custom({
     id: 'chest-of-drawers',
     name: 'Chest of drawers',
     subcategory: 'Furniture',
     rooms: ['Bedroom', 'Hallway'],
     tags: ['dresser', 'drawers', 'bureau', 'storage', 'cabinet'],
-    build: () => {
+    params: [...whd([800, 300, 2400], [450, 300, 700], [850, 300, 1600]), count('drawers', 'Drawers (top to bottom)', 4, 1, 10), count('columns', 'Drawers side by side', 1, 1, 4)],
+    make: ({ width: w, depth: d, height: h, drawers, columns }) => {
+      fitFronts(h - 80, drawers, 60, 'drawers');
+      fitFronts(w, columns, 200, 'drawers side by side');
       const body = part('Body', 'oak');
-      box(body, sym(400), [-207, 225], [80, 850]);
-      squareLegs(body, 800, 432, 40, 90, 20);
+      box(body, sym(w / 2), [-d / 2 + 18, d / 2], [80, h]);
+      squareLegs(body, w, d - 18, 40, 90, 20);
       const fr = part('Drawers', 'oak');
       const handles = part('Handles', 'steel');
-      fronts(fr, handles, sym(400), [80, 850], -207, 1, 4, false);
+      fronts(fr, handles, sym(w / 2), [80, h], -d / 2 + 18, columns, drawers, false);
       return done(body, fr, handles);
     },
   }),
-  item({
+  custom({
     id: 'bookshelf',
     name: 'Bookshelf',
     subcategory: 'Furniture',
@@ -367,46 +429,63 @@ const furniture: LibraryItem[] = [
       { id: '1800', name: '1800 mm tall, 5 shelves' },
       { id: '1000', name: '1000 mm tall, 3 shelves' },
     ],
-    build: (v) => {
+    params: [
+      length('width', 'Width', 800, 200, 2400),
+      length('depth', 'Depth', 300, 150, 600),
+      length('height', 'Height', 1800, 300, 2700),
+      { id: 'shelves', name: 'Spaces between shelves', kind: 'count', value: 5, min: 1, max: 12 },
+    ],
+    preset: (v) => {
       const h = Number(v ?? 1800);
-      const n = h >= 1800 ? 5 : 3;
-      const shelf = part('Shelf', 'oak');
-      box(shelf, sym(400), sym(150), [0, h]);
+      return { height: h, shelves: h >= 1800 ? 5 : 3 };
+    },
+    make: ({ width: w, depth: d, height: h, shelves: n }) => {
       const inner = (h - 60 - 20 - (n - 1) * 20) / n;
+      need(inner >= 80, 'Too many shelves for this height: use fewer, or make it taller');
+      const shelf = part('Shelf', 'oak');
+      box(shelf, sym(w / 2), sym(d / 2), [0, h]);
       for (let i = 0; i < n; i++) {
         const z0 = 60 + i * (inner + 20);
-        cut(shelf, sym(382), [-160, 140], [z0, z0 + inner]);
+        cut(shelf, sym(w / 2 - 18), [-d / 2 - 10, d / 2 - 10], [z0, z0 + inner]);
       }
       return done(shelf);
     },
   }),
-  item({
+  custom({
     id: 'tv-stand',
     name: 'TV stand',
     subcategory: 'Furniture',
     rooms: ['Living room', 'Bedroom'],
     tags: ['media unit', 'tv unit', 'tv bench', 'entertainment unit', 'low cabinet', 'console'],
-    build: () => {
+    params: [...whd([1600, 600, 3000], [400, 250, 600], [500, 300, 900]), count('spaces', 'Open spaces', 3, 1, 6)],
+    make: ({ width: w, depth: d, height: h, spaces: n }) => {
+      const each = (w - 20 * (n + 1)) / n;
+      need(each >= 150, 'Too many open spaces for this width: use fewer, or make it wider');
       const body = part('Body', 'walnut');
-      box(body, sym(800), sym(200), [150, 500]);
-      for (const x of [-780, -250, 270]) cut(body, [x, x + 510], [-210, 182], [168, 482]);
-      const legs = squareLegs(part('Legs', 'black'), 1600, 400, 30, 160, 40);
+      box(body, sym(w / 2), sym(d / 2), [150, h]);
+      for (let i = 0; i < n; i++) {
+        const x = -w / 2 + 20 + i * (each + 20);
+        cut(body, [x, x + each], [-d / 2 - 10, d / 2 - 18], [168, h - 18]);
+      }
+      const legs = squareLegs(part('Legs', 'black'), w, d, 30, 160, 40);
       return done(body, legs);
     },
   }),
-  item({
+  custom({
     id: 'sideboard',
     name: 'Sideboard',
     subcategory: 'Furniture',
     rooms: ['Dining room', 'Living room'],
     tags: ['buffet', 'credenza', 'cabinet', 'cupboard', 'storage'],
-    build: () => {
+    params: [...whd([1600, 600, 3000], [450, 300, 700], [800, 400, 1400]), count('doors', 'Doors', 4, 1, 8)],
+    make: ({ width: w, depth: d, height: h, doors: n }) => {
+      fitFronts(w, n, 200, 'doors');
       const body = part('Body', 'walnut');
-      box(body, sym(800), [-207, 225], [150, 800]);
+      box(body, sym(w / 2), [-d / 2 + 18, d / 2], [150, h]);
       const doors = part('Doors', 'walnut');
       const handles = part('Handles', 'steel');
-      fronts(doors, handles, sym(800), [150, 800], -207, 4, 1, true);
-      const legs = roundLegs(part('Legs', 'black'), 1600, 432, 15, 160, 40);
+      fronts(doors, handles, sym(w / 2), [150, h], -d / 2 + 18, n, 1, true);
+      const legs = roundLegs(part('Legs', 'black'), w, d - 18, 15, 160, 40);
       return done(body, doors, handles, legs);
     },
   }),
@@ -415,52 +494,58 @@ const furniture: LibraryItem[] = [
 // ——— Kitchen ———
 
 /** A kitchen base unit: carcass on a plinth, worktop, doors (or drawers) and handles. */
-function baseUnit(w: number, opts: { drawers?: boolean; worktopBack?: number } = {}): { parts: Part[]; worktop: Part } {
+function baseUnit(w: number, opts: { drawers?: number; worktopBack?: number } = {}): { parts: Part[]; worktop: Part } {
+  if (opts.drawers) fitFronts(770, opts.drawers, 60, 'drawers');
   const carcass = part('Carcass', 'white');
   box(carcass, sym(w / 2), [-282, 300], [100, 870]);
   box(carcass, sym(w / 2), [-232, 300], [0, 110]);
   const doors = part(opts.drawers ? 'Drawers' : 'Doors', 'white');
   const handles = part('Handles', 'steel');
-  fronts(doors, handles, sym(w / 2), [100, 870], -282, opts.drawers ? 1 : w > 600 ? 2 : 1, opts.drawers ? 3 : 1, !opts.drawers);
+  fronts(doors, handles, sym(w / 2), [100, 870], -282, opts.drawers ? 1 : w > 600 ? 2 : 1, opts.drawers ?? 1, !opts.drawers);
   const worktop = part('Worktop', 'worktop');
   box(worktop, sym(w / 2), [-320, opts.worktopBack ?? 300], [870, 900]);
   return { parts: [carcass, doors, handles], worktop };
 }
 
 const kitchen: LibraryItem[] = [
-  item({
+  custom({
     id: 'base-cabinet',
     name: 'Kitchen base cabinet',
     subcategory: 'Kitchen',
     rooms: ['Kitchen'],
     tags: ['cabinet', 'base unit', 'cupboard', 'counter', 'worktop', 'countertop'],
     variants: widths(300, 400, 600, 800, 900),
-    build: (v) => {
-      const u = baseUnit(Number(v ?? 300));
+    params: [length('width', 'Width', 300, 150, 1200, 'Two doors when wider than 600 mm.')],
+    preset: (v) => ({ width: Number(v ?? 300) }),
+    make: ({ width }) => {
+      const u = baseUnit(width);
       return done(...u.parts, u.worktop);
     },
   }),
-  item({
+  custom({
     id: 'drawer-cabinet',
     name: 'Kitchen drawer unit',
     subcategory: 'Kitchen',
     rooms: ['Kitchen'],
     tags: ['cabinet', 'drawers', 'base unit', 'pan drawers', 'counter', 'worktop'],
     variants: widths(400, 600, 800),
-    build: (v) => {
-      const u = baseUnit(Number(v ?? 400), { drawers: true });
+    params: [length('width', 'Width', 400, 150, 1200), count('drawers', 'Drawers', 3, 1, 8)],
+    preset: (v) => ({ width: Number(v ?? 400) }),
+    make: ({ width, drawers }) => {
+      const u = baseUnit(width, { drawers });
       return done(...u.parts, u.worktop);
     },
   }),
-  item({
+  custom({
     id: 'sink-cabinet',
     name: 'Sink unit',
     subcategory: 'Kitchen',
     rooms: ['Kitchen', 'Laundry'],
     tags: ['sink', 'kitchen sink', 'basin', 'tap', 'faucet', 'cabinet', 'base unit'],
     variants: widths(800, 1000),
-    build: (v) => {
-      const w = Number(v ?? 800);
+    params: [length('width', 'Width', 800, 500, 1500, 'The bowl grows with it, up to 700 mm.')],
+    preset: (v) => ({ width: Number(v ?? 800) }),
+    make: ({ width: w }) => {
       const u = baseUnit(w);
       const bw = Math.min(w - 260, 700) / 2;
       cut(u.worktop, sym(bw + 10), [-240, 200], [860, 910]);
@@ -474,75 +559,91 @@ const kitchen: LibraryItem[] = [
       return done(...u.parts, u.worktop, sink, tap);
     },
   }),
-  item({
+  custom({
     id: 'wall-cabinet',
     name: 'Kitchen wall cabinet',
     subcategory: 'Kitchen',
     rooms: ['Kitchen', 'Laundry'],
     tags: ['cabinet', 'wall unit', 'upper cabinet', 'cupboard', 'overhead'],
     variants: widths(300, 600, 800),
-    build: (v) => {
-      const w = Number(v ?? 300);
-      // Hung at the usual height: 500 mm above a 900 mm worktop.
+    params: [
+      length('width', 'Width', 300, 150, 1200, 'Two doors when wider than 600 mm.'),
+      length('height', 'Height', 720, 200, 1200),
+      length('bottom', 'Bottom above the floor', 1400, 0, 2400, 'Usually 500 mm above the worktop.'),
+    ],
+    preset: (v) => ({ width: Number(v ?? 300) }),
+    make: ({ width: w, height: h, bottom }) => {
       const carcass = part('Carcass', 'white');
-      box(carcass, sym(w / 2), [-157, 175], [1400, 2120]);
+      box(carcass, sym(w / 2), [-157, 175], [bottom, bottom + h]);
       const doors = part('Doors', 'white');
       const handles = part('Handles', 'steel');
-      fronts(doors, handles, sym(w / 2), [1400, 2120], -157, w > 600 ? 2 : 1, 1, true);
+      fronts(doors, handles, sym(w / 2), [bottom, bottom + h], -157, w > 600 ? 2 : 1, 1, true);
       return done(carcass, doors, handles);
     },
   }),
-  item({
+  custom({
     id: 'tall-cabinet',
     name: 'Tall kitchen cabinet',
     subcategory: 'Kitchen',
     rooms: ['Kitchen'],
     tags: ['pantry', 'larder', 'tall unit', 'broom cupboard', 'cupboard', 'storage'],
-    build: () => {
+    params: [length('width', 'Width', 600, 300, 1200), length('height', 'Height', 2100, 1200, 2700), count('doors', 'Doors (top to bottom)', 2, 1, 4)],
+    make: ({ width: w, height: h, doors: n }) => {
+      fitFronts(h - 100, n, 200, 'doors');
       const carcass = part('Carcass', 'white');
-      box(carcass, sym(300), [-282, 300], [100, 2100]);
-      box(carcass, sym(300), [-232, 300], [0, 110]);
+      box(carcass, sym(w / 2), [-282, 300], [100, h]);
+      box(carcass, sym(w / 2), [-232, 300], [0, 110]);
       const doors = part('Doors', 'white');
       const handles = part('Handles', 'steel');
-      fronts(doors, handles, sym(300), [100, 2100], -282, 1, 2, true);
+      fronts(doors, handles, sym(w / 2), [100, h], -282, 1, n, true);
       return done(carcass, doors, handles);
     },
   }),
-  item({
+  custom({
     id: 'kitchen-island',
     name: 'Kitchen island',
     subcategory: 'Kitchen',
     rooms: ['Kitchen'],
     tags: ['island', 'breakfast bar', 'counter', 'worktop', 'cabinet'],
     variants: widths(1800, 2400),
-    build: (v) => {
-      const w = Number(v ?? 1800);
+    params: [length('width', 'Width', 1800, 600, 4000), length('overhang', 'Worktop overhang at the back', 300, 0, 600, 'Room for knees at a breakfast bar: 250–300 mm.')],
+    preset: (v) => ({ width: Number(v ?? 1800) }),
+    make: ({ width: w, overhang }) => {
       const carcass = part('Carcass', 'white');
       box(carcass, sym(w / 2), [-282, 300], [100, 870]);
       box(carcass, sym(w / 2), [-232, 250], [0, 110]);
       const doors = part('Doors', 'white');
       const handles = part('Handles', 'steel');
-      fronts(doors, handles, sym(w / 2), [100, 870], -282, Math.round(w / 600), 1, true);
+      fronts(doors, handles, sym(w / 2), [100, 870], -282, Math.max(1, Math.round(w / 600)), 1, true);
       const worktop = part('Worktop', 'worktop');
-      box(worktop, sym(w / 2 + 20), [-320, 600], [870, 910]);
+      box(worktop, sym(w / 2 + 20), [-320, 300 + overhang], [870, 910]);
       return done(carcass, doors, handles, worktop);
     },
   }),
-  item({
+  custom({
     id: 'refrigerator',
     name: 'Fridge freezer',
     subcategory: 'Kitchen',
     rooms: ['Kitchen'],
     tags: ['fridge', 'refrigerator', 'freezer', 'appliance', 'cooler'],
-    build: () => {
+    params: [length('width', 'Width', 700, 450, 1000), length('height', 'Height', 1850, 800, 2100, 'Under-counter fridges are about 850 mm.')],
+    make: ({ width: w, height: h }) => {
       const body = part('Body', 'steel');
-      box(body, sym(350), [-322, 350], [0, 1850]);
+      box(body, sym(w / 2), [-322, 350], [0, h]);
       const doors = part('Doors', 'steel');
-      box(doors, sym(350), [-345, -320], [20, 640]);
-      box(doors, sym(350), [-345, -320], [646, 1845]);
       const handles = part('Handles', 'black');
-      box(handles, [290, 310], [-385, -340], [420, 620]);
-      box(handles, [290, 310], [-385, -340], [680, 1080]);
+      const hx: Range = [w / 2 - 60, w / 2 - 40];
+      if (h >= 1300) {
+        // A freezer below a third of the height, the fridge above.
+        const split = Math.round(h * 0.346);
+        box(doors, sym(w / 2), [-345, -322], [20, split]);
+        box(doors, sym(w / 2), [-345, -322], [split + 6, h - 5]);
+        box(handles, hx, [-385, -340], [split - 220, split - 20]);
+        box(handles, hx, [-385, -340], [split + 40, split + 440]);
+      } else {
+        box(doors, sym(w / 2), [-345, -322], [20, h - 5]);
+        box(handles, hx, [-385, -340], [h - 260, h - 60]);
+      }
       return done(body, doors, handles);
     },
   }),
@@ -554,7 +655,7 @@ const kitchen: LibraryItem[] = [
     tags: ['stove', 'range', 'oven', 'hob', 'cooktop', 'burners', 'appliance'],
     build: () => {
       const body = part('Body', 'steel');
-      box(body, sym(300), [-280, 300], [0, 880]);
+      box(body, sym(300), [-280, 300], [0, 875]);
       const top = part('Hob', 'black');
       box(top, sym(300), [-300, 300], [875, 900]);
       for (const [x, y, r] of [
@@ -565,7 +666,7 @@ const kitchen: LibraryItem[] = [
       ])
         top.cylinder('z', [x, y, 895], r, 15, 16);
       const door = part('Oven door', 'black');
-      box(door, sym(290), [-300, -278], [110, 700]);
+      box(door, sym(290), [-300, -280], [110, 700]);
       const handles = part('Controls', 'steel');
       box(handles, sym(240), [-335, -295], [650, 670]);
       for (const x of [-200, -100, 0, 100, 200]) handles.cylinder('y', [x, -320, 790], 18, 45, 12);
@@ -582,9 +683,9 @@ const kitchen: LibraryItem[] = [
       const body = part('Body', 'white');
       box(body, sym(300), [-280, 300], [0, 850]);
       const door = part('Door', 'white');
-      box(door, sym(298), [-300, -278], [80, 760]);
+      box(door, sym(298), [-300, -280], [80, 760]);
       const panel = part('Panel', 'darkGrey');
-      box(panel, sym(298), [-300, -278], [765, 848]);
+      box(panel, sym(298), [-300, -280], [765, 848]);
       const handle = part('Handle', 'steel');
       box(handle, sym(150), [-335, -295], [700, 715]);
       return done(body, door, panel, handle);
@@ -606,19 +707,19 @@ const kitchen: LibraryItem[] = [
       return done(body, door, handle);
     },
   }),
-  item({
+  custom({
     id: 'range-hood',
     name: 'Cooker hood',
     subcategory: 'Kitchen',
     rooms: ['Kitchen'],
     tags: ['extractor', 'range hood', 'vent', 'chimney hood', 'appliance'],
     variants: widths(600, 900),
-    build: (v) => {
-      const w = Number(v ?? 600);
-      // Hung 650 mm above a 900 mm hob, up to a 2400 mm ceiling.
+    params: [length('width', 'Width', 600, 400, 1500), length('ceiling', 'Ceiling height', 2400, 1800, 4000, 'The chimney goes up to it; the hood is 650 mm above the hob.')],
+    preset: (v) => ({ width: Number(v ?? 600) }),
+    make: ({ width: w, ceiling }) => {
       const hood = part('Hood', 'steel');
       box(hood, sym(w / 2), [-200, 300], [1550, 1620]);
-      box(hood, sym(150), [50, 300], [1610, 2400]);
+      box(hood, sym(150), [50, 300], [1610, ceiling]);
       return done(hood);
     },
   }),
@@ -645,16 +746,19 @@ const bathroom: LibraryItem[] = [
       return done(bowl, seat);
     },
   }),
-  item({
+  custom({
     id: 'bathtub',
     name: 'Bathtub',
     subcategory: 'Bathroom',
     rooms: ['Bathroom'],
     tags: ['bath', 'tub', 'bath tub', 'sanitary'],
     variants: widths([1700, '1700 × 750 mm'], [1500, '1500 × 700 mm']),
-    build: (v) => {
+    params: [length('width', 'Length', 1700, 1000, 2200), length('depth', 'Width', 750, 550, 1200)],
+    preset: (v) => {
       const w = Number(v ?? 1700);
-      const d = w >= 1700 ? 750 : 700;
+      return { width: w, depth: w >= 1700 ? 750 : 700 };
+    },
+    make: ({ width: w, depth: d }) => {
       const tub = part('Bath', 'ceramic');
       box(tub, sym(w / 2), sym(d / 2), [0, 560]);
       cut(tub, sym(w / 2 - 60), sym(d / 2 - 60), [80, 600]);
@@ -663,7 +767,7 @@ const bathroom: LibraryItem[] = [
       return done(tub, tap);
     },
   }),
-  item({
+  custom({
     id: 'shower',
     name: 'Shower',
     subcategory: 'Bathroom',
@@ -674,30 +778,33 @@ const bathroom: LibraryItem[] = [
       { id: '800', name: '800 × 800 mm' },
       { id: '1000', name: '1000 × 1000 mm' },
     ],
-    build: (v) => {
-      const s = Number(v ?? 900) / 2;
+    params: [length('width', 'Width', 900, 600, 2000), length('depth', 'Depth', 900, 600, 2000)],
+    preset: (v) => ({ width: Number(v ?? 900), depth: Number(v ?? 900) }),
+    make: ({ width, depth }) => {
+      const [sx, sy] = [width / 2, depth / 2];
       const tray = part('Tray', 'ceramic');
-      box(tray, sym(s), sym(s), [0, 40]);
-      cut(tray, sym(s - 40), sym(s - 40), [30, 50]);
+      box(tray, sym(sx), sym(sy), [0, 40]);
+      cut(tray, sym(sx - 40), sym(sy - 40), [30, 50]);
       const glass = part('Glass', 'glass');
-      box(glass, sym(s), [-s, -s + 8], [40, 2000]);
-      box(glass, [-s, -s + 8], [-s + 4, s], [40, 2000]);
+      box(glass, sym(sx), [-sy, -sy + 8], [40, 2000]);
+      box(glass, [-sx, -sx + 8], [-sy + 4, sy], [40, 2000]);
       const fittings = part('Shower', 'steel');
-      fittings.cylinder('z', [0, s - 30, 900], 12, 1100, 12);
-      box(fittings, sym(12), [s - 250, s - 18], [1980, 2000]);
-      fittings.cylinder('z', [0, s - 230, 1965], 100, 20, 24);
+      fittings.cylinder('z', [0, sy - 30, 900], 12, 1100, 12);
+      box(fittings, sym(12), [sy - 250, sy - 18], [1980, 2000]);
+      fittings.cylinder('z', [0, sy - 230, 1965], 100, 20, 24);
       return done(tray, glass, fittings);
     },
   }),
-  item({
+  custom({
     id: 'vanity',
     name: 'Basin and vanity unit',
     subcategory: 'Bathroom',
     rooms: ['Bathroom'],
     tags: ['sink', 'washbasin', 'basin', 'vanity', 'wash stand', 'tap', 'faucet', 'cabinet'],
     variants: widths(600, 800),
-    build: (v) => {
-      const w = Number(v ?? 600);
+    params: [length('width', 'Width', 600, 400, 1500, 'Two doors when wider than 600 mm.')],
+    preset: (v) => ({ width: Number(v ?? 600) }),
+    make: ({ width: w }) => {
       const unit = part('Cabinet', 'white');
       box(unit, sym(w / 2), [-212, 230], [150, 700]);
       squareLegs(unit, w, 442, 30, 160, 20);
@@ -712,7 +819,7 @@ const bathroom: LibraryItem[] = [
       return done(unit, doors, handles, top, tap);
     },
   }),
-  item({
+  custom({
     id: 'bathroom-mirror',
     name: 'Mirror',
     subcategory: 'Bathroom',
@@ -722,11 +829,14 @@ const bathroom: LibraryItem[] = [
       { id: '600', name: '600 × 800 mm' },
       { id: '800', name: '800 × 1000 mm' },
     ],
-    build: (v) => {
+    params: [length('width', 'Width', 600, 150, 3000), length('height', 'Height', 800, 150, 2400), length('middle', 'Middle above the floor', 1500, 100, 2500)],
+    preset: (v) => {
       const w = Number(v ?? 600);
-      const h = w === 600 ? 800 : 1000;
-      // Hung with its middle at 1500 mm.
-      const z: Range = [1500 - h / 2, 1500 + h / 2];
+      return { width: w, height: w === 600 ? 800 : 1000 };
+    },
+    make: ({ width: w, height: h, middle }) => {
+      need(middle >= h / 2, 'It would go through the floor: hang it higher, or make it shorter');
+      const z: Range = [middle - h / 2, middle + h / 2];
       const frame = part('Frame', 'black');
       box(frame, sym(w / 2), sym(12), z);
       cut(frame, sym(w / 2 - 30), [-20, 6], [z[0] + 30, z[1] - 30]);
@@ -747,7 +857,7 @@ const bathroom: LibraryItem[] = [
       const door = part('Door', 'lightGrey').cylinder('y', [0, -300, 420], 210, 25, 32);
       const glass = part('Glass', 'black').cylinder('y', [0, -310, 420], 160, 20, 32);
       const panel = part('Panel', 'lightGrey');
-      box(panel, sym(298), [-290, -278], [720, 840]);
+      box(panel, sym(298), [-290, -280], [720, 840]);
       panel.cylinder('y', [200, -310, 780], 30, 25, 16);
       return done(body, door, glass, panel);
     },
@@ -756,44 +866,67 @@ const bathroom: LibraryItem[] = [
 
 // ——— Electronics ———
 
-/** A flat screen of diagonal `inches` (16:9), bottom edge at `z0`, with the panel facing -Y. */
+/**
+ * A flat screen of diagonal `inches` (16:9), bottom edge at `z0`, with the panel facing -Y. The
+ * panel fills a deep pocket, level with the front. (Parts must touch or overlap deeply: a panel a
+ * millimetre or two proud, or sunk that little way into the body, flickers through it or shows
+ * its edges through it when seen from further away.)
+ */
 function screen(inches: number, z0: number, depth: number): { w: number; h: number; body: Part; glass: Part } {
   const w = Math.round(inches * 25.4 * 0.8716) + 20;
   const h = Math.round(inches * 25.4 * 0.4903) + 20;
   const body = part('Body', 'black');
   box(body, sym(w / 2), [-depth / 2, depth / 2], [z0, z0 + h]);
+  cut(body, sym(w / 2 - 10), [-depth / 2 - 1, depth / 2 - 8], [z0 + 10, z0 + h - 10]);
   const glass = part('Screen', 'screen');
-  box(glass, sym(w / 2 - 10), [-depth / 2 - 2, -depth / 2 + 1], [z0 + 10, z0 + h - 10]);
+  box(glass, sym(w / 2 - 10), [-depth / 2, depth / 2 - 8], [z0 + 10, z0 + h - 10]);
   return { w, h, body, glass };
+}
+
+/**
+ * A phone or tablet lying face up: a slim body with its screen `bezel` in from the edges, level
+ * with the top and filling the top half of the body (see `screen`).
+ */
+function flatDevice(w: number, d: number, t: number, bezel: number): Part[] {
+  const body = part('Body', 'darkGrey');
+  box(body, sym(w / 2), sym(d / 2), [0, t]);
+  cut(body, sym(w / 2 - bezel), sym(d / 2 - bezel), [t / 2, t + 1]);
+  const glass = part('Screen', 'screen');
+  box(glass, sym(w / 2 - bezel), sym(d / 2 - bezel), [t / 2, t]);
+  return [body, glass];
 }
 
 const TV_SIZES: LibraryVariant[] = [43, 50, 55, 65, 75].map((n) => ({ id: String(n), name: `${n}"` }));
 
 const electronics: LibraryItem[] = [
-  item({
+  custom({
     id: 'tv',
     name: 'Television',
     subcategory: 'Electronics',
     rooms: ['Living room', 'Bedroom'],
     tags: ['tv', 'telly', 'television', 'flat screen', 'smart tv', 'screen', 'display'],
     variants: TV_SIZES,
-    build: (v) => {
-      const s = screen(Number(v ?? TV_SIZES[2].id), 70, 50);
+    params: [count('size', 'Screen size (inches, corner to corner)', 55, 19, 100)],
+    preset: (v) => ({ size: Number(v ?? TV_SIZES[2].id) }),
+    make: ({ size }) => {
+      const s = screen(size, 70, 50);
       const stand = part('Stand', 'darkGrey');
       box(stand, sym(160), sym(110), [0, 12]);
       box(stand, sym(40), [-10, 20], [5, 200]);
       return done(s.body, s.glass, stand);
     },
   }),
-  item({
+  custom({
     id: 'monitor',
     name: 'Computer monitor',
     subcategory: 'Electronics',
     rooms: ['Office', 'Bedroom'],
     tags: ['monitor', 'screen', 'display', 'computer', 'pc'],
     variants: [24, 27, 32].map((n) => ({ id: String(n), name: `${n}"` })),
-    build: (v) => {
-      const s = screen(Number(v ?? 24), 110, 40);
+    params: [count('size', 'Screen size (inches, corner to corner)', 24, 15, 57)],
+    preset: (v) => ({ size: Number(v ?? 24) }),
+    make: ({ size }) => {
+      const s = screen(size, 110, 40);
       const stand = part('Stand', 'darkGrey');
       box(stand, sym(120), [-60, 120], [0, 15]);
       box(stand, sym(35), [20, 50], [5, 300]);
@@ -815,10 +948,13 @@ const electronics: LibraryItem[] = [
       const back: Vec3 = [0, Math.cos(tilt), -Math.sin(tilt)];
       const at = (x: number, along: number, out: number): Vec3 => [x, 104 + up[1] * along + back[1] * out, 12 + up[2] * along + back[2] * out];
       base.prism([at(-160, 0, 0), at(160, 0, 0), at(160, 225, 0), at(-160, 225, 0)], scale(back, 7));
+      // The screen and keys fill deep pockets, level with the lid and the base (see `screen`).
+      base.cutPrism([at(-148, 14, -1), at(148, 14, -1), at(148, 212, -1), at(-148, 212, -1)], scale(back, 4.5));
+      cut(base, sym(135), [-20, 90], [6, 17]);
       const display = part('Screen', 'screen');
-      display.prism([at(-148, 14, -1), at(148, 14, -1), at(148, 212, -1), at(-148, 212, -1)], scale(back, 2));
+      display.prism([at(-148, 14, 0), at(148, 14, 0), at(148, 212, 0), at(-148, 212, 0)], scale(back, 3.5));
       const keys = part('Keyboard', 'black');
-      box(keys, sym(135), [-20, 90], [15, 17]);
+      box(keys, sym(135), [-20, 90], [6, 16]);
       return done(base, display, keys);
     },
   }),
@@ -851,7 +987,7 @@ const electronics: LibraryItem[] = [
       const bar = part('Soundbar', 'black');
       box(bar, sym(450), sym(50), [0, 70]);
       const grille = part('Grille', 'darkGrey');
-      box(grille, sym(440), [-53, -48], [8, 62]);
+      box(grille, sym(440), [-53, -50], [8, 62]);
       return done(bar, grille);
     },
   }),
@@ -870,6 +1006,126 @@ const electronics: LibraryItem[] = [
       return done(tower, front);
     },
   }),
+  custom({
+    id: 'keyboard',
+    name: 'Keyboard',
+    subcategory: 'Electronics',
+    rooms: ['Office', 'Bedroom'],
+    tags: ['computer keyboard', 'keys', 'typing', 'pc', 'desk', 'tenkeyless'],
+    params: [
+      { id: 'layout', name: 'Layout', kind: 'choice', value: 0, choices: ['Full size, with number pad', 'Compact, no number pad'] },
+      { id: 'colour', name: 'Colour', kind: 'choice', value: 0, choices: ['Black', 'White'] },
+    ],
+    make: ({ layout, colour }) => {
+      const w = layout === 0 ? 450 : 370;
+      const d = 135;
+      // Sloping up towards the back, keys standing 4 mm proud of the top.
+      const top = (y: number) => 14 + (8 * (y + d / 2)) / d;
+      const across = (x: number, pts: [number, number][]): Vec3[] => pts.map(([y, z]) => [x, y, z]);
+      const body = part('Keyboard', colour === 0 ? 'darkGrey' : 'lightGrey');
+      body.prism(across(-w / 2, [[-d / 2, 0], [d / 2, 0], [d / 2, top(d / 2)], [-d / 2, top(-d / 2)]]), [w, 0, 0]);
+      const keys = part('Keys', colour === 0 ? 'black' : 'white');
+      const [y0, y1] = [-d / 2 + 12, d / 2 - 22];
+      const block = (x0: number, x1: number) =>
+        keys.prism(across(x0, [[y0, top(y0)], [y1, top(y1)], [y1, top(y1) + 4], [y0, top(y0) + 4]]), [x1 - x0, 0, 0]);
+      const left = -w / 2 + 15;
+      block(left, left + 290);
+      block(left + 300, left + 340);
+      if (layout === 0) block(left + 350, left + 420);
+      return done(body, keys);
+    },
+  }),
+  item({
+    id: 'mouse',
+    name: 'Mouse',
+    subcategory: 'Electronics',
+    rooms: ['Office', 'Bedroom'],
+    tags: ['computer mouse', 'pc', 'desk', 'pointer'],
+    build: () => {
+      // Side view: low at the front, highest two thirds of the way back.
+      const side: Vec3[] = [
+        [-31, -57, 0],
+        [-31, 57, 0],
+        [-31, 57, 16],
+        [-31, 45, 29],
+        [-31, 20, 37],
+        [-31, -15, 35],
+        [-31, -42, 24],
+        [-31, -57, 11],
+      ];
+      const mouse = part('Mouse', 'darkGrey').prism(side, [62, 0, 0]);
+      // The gap between the two buttons.
+      cut(mouse, sym(0.75), [-60, -5], [15, 40]);
+      return done(mouse);
+    },
+  }),
+  custom({
+    id: 'tablet',
+    name: 'Tablet',
+    subcategory: 'Electronics',
+    rooms: ['Office', 'Bedroom', 'Living room', 'Kitchen'],
+    tags: ['ipad', 'tablet computer', 'e-reader', 'device', 'screen'],
+    params: [length('width', 'Width', 250, 100, 400), length('depth', 'Height', 175, 80, 300), length('thickness', 'Thickness', 7, 3, 20)],
+    make: ({ width: w, depth: d, thickness: t }) => done(...flatDevice(w, d, t, 9)),
+  }),
+  custom({
+    id: 'smartphone',
+    name: 'Smartphone',
+    subcategory: 'Electronics',
+    rooms: ['Office', 'Bedroom', 'Living room', 'Kitchen'],
+    tags: ['phone', 'mobile', 'cell phone', 'mobile phone', 'iphone', 'android', 'device'],
+    params: [length('width', 'Width', 72, 40, 120), length('depth', 'Height', 150, 80, 200), length('thickness', 'Thickness', 8, 4, 20)],
+    make: ({ width: w, depth: d, thickness: t }) => done(...flatDevice(w, d, t, 3)),
+  }),
+  custom({
+    id: 'phone-stand',
+    name: 'Phone stand',
+    subcategory: 'Electronics',
+    rooms: ['Office', 'Bedroom', 'Kitchen', 'Living room'],
+    tags: ['phone holder', 'mobile stand', 'cell phone', 'smartphone', 'cradle', 'tablet stand', 'dock', 'desk stand', '3d print'],
+    params: [
+      length('thickness', 'Phone thickness', 10, 4, 40, 'Measure it in its case.'),
+      length('phoneHeight', 'Phone height', 150, 60, 350, 'Sets how deep the base is, so it does not tip over.'),
+      length('width', 'Stand width', 70, 30, 300),
+      { id: 'angle', name: 'Angle', kind: 'angle', value: 70, min: 45, max: 85, note: 'Up from the desk: 90° would stand the phone upright.' },
+      length('back', 'Back support', 90, 30, 300, 'How far up the back of the phone it reaches.'),
+      length('ledge', 'Ledge above the desk', 30, 3, 100, 'Room under the phone for the charging plug.'),
+      length('lip', 'Lip in front', 12, 3, 40),
+      length('wall', 'Wall thickness', 5, 2, 20),
+      length('gap', 'Fit gap', 0.5, 0, 5, 'Extra room round the phone, for 3D printing.'),
+      { id: 'cable', name: 'Slot for the charging cable', kind: 'toggle', value: 1 },
+      { ...length('cableWidth', 'Slot width', 14, 6, 40), shown: (v) => v.cable === 1 },
+    ],
+    make: ({ thickness, phoneHeight, width: w, angle, back, ledge, lip, wall: t, gap, cable, cableWidth }) => {
+      // Side view (y, z): the phone's back leans on the back support, whose front face rises from
+      // (0, ledge) along u = (cos, sin); its bottom edge stands on the ledge in a slot that is
+      // wide enough at the ledge for the phone, tilted, plus the fit gap.
+      const a = (angle * Math.PI) / 180;
+      const c = Math.cos(a);
+      const s = Math.sin(a);
+      const slot = (thickness + gap) / s;
+      const front = -slot - t;
+      /** A point `d` up the support's front face and `out` behind it. */
+      const at = (d: number, out: number): [number, number] => [d * c + out * s, ledge + d * s - out * c];
+      // The base reaches back past the support and past the phone's middle, so it does not tip.
+      const middle = (phoneHeight / 2) * c - (thickness / 2) * s;
+      const rear = Math.max(back * c + t * s, middle + 20, t / s + t);
+      // The support reaches down into the block under the ledge (to the desk at most), staying
+      // behind the block's front.
+      const below = Math.min(ledge / s + 1, (slot + t) / c - 0.5);
+      need(!cable || w - cableWidth >= 16, 'The stand is too narrow for a cable slot this wide');
+      const stand = part('Stand', 'darkGrey');
+      const y0 = -(front + rear) / 2;
+      const side = (pts: [number, number][]): Vec3[] => pts.map(([y, z]) => [-w / 2, y + y0, z]);
+      box(stand, sym(w / 2), [front + y0, rear + y0], [0, ledge]);
+      box(stand, sym(w / 2), [front + y0, -slot + y0], [0, ledge + lip]);
+      stand.prism(side([at(-below, 0), at(back, 0), at(back, t), at(-below, t)]), [w, 0, 0]);
+      // A foot reaching below the desk is taken off.
+      if (at(-below, t)[1] < 0) cut(stand, sym(w / 2 + 1), [front + y0 - 1, rear + y0 + 1], [-(ledge + back + t), 0]);
+      if (cable) cut(stand, sym(cableWidth / 2), [front + y0 - 1, y0 - 0.5], [-1, ledge + lip + 1]);
+      return done(stand);
+    },
+  }),
 ];
 
 // ——— Lighting ———
@@ -881,17 +1137,29 @@ const arc = (cr: number, cz: number, r: number, from: number, to: number, steps:
     return [cr + r * Math.cos(a), cz + r * Math.sin(a)];
   });
 
+/** The light fixture's shapes (its `shape` setting is the index). */
+const SHADE_SHAPES = ['Box', 'Tapered box', 'Cylinder', 'Cone', 'Dome'];
+const SHADE_COLOURS: [string, Paint][] = [
+  ['Lampshade', 'shade'],
+  ['White', 'white'],
+  ['Black', 'black'],
+  ['Oak', 'oak'],
+  ['Steel', 'steel'],
+  ['Terracotta', 'terracotta'],
+];
+
 const lighting: LibraryItem[] = [
-  item({
+  custom({
     id: 'floor-lamp',
     name: 'Floor lamp',
     subcategory: 'Lighting',
     rooms: ['Living room', 'Bedroom', 'Office'],
     tags: ['lamp', 'standard lamp', 'standing lamp', 'light', 'lampshade'],
-    build: () => {
-      const stand = part('Stand', 'black').cylinder('z', [0, 0, 0], 140, 20, 24).cylinder('z', [0, 0, 10], 12, 1380, 12);
+    params: [length('height', 'Height', 1600, 900, 2200)],
+    make: ({ height: h }) => {
+      const stand = part('Stand', 'black').cylinder('z', [0, 0, 0], 140, 20, 24).cylinder('z', [0, 0, 10], 12, h - 220, 12);
       const shade = part('Shade', 'shade').lathe(
-        [0, 0, 1300],
+        [0, 0, h - 300],
         [
           [212, 0],
           [220, 0],
@@ -960,12 +1228,72 @@ const lighting: LibraryItem[] = [
       return done(base, diffuser);
     },
   }),
+  custom({
+    id: 'light-fixture',
+    name: 'Light fixture',
+    subcategory: 'Lighting',
+    rooms: ['Dining room', 'Kitchen', 'Living room', 'Bedroom', 'Hallway', 'Office'],
+    tags: ['lampshade', 'shade', 'pendant', 'lantern', 'light box', 'hanging light', 'ceiling light', 'lamp', 'trapezoid', 'cone'],
+    hangs: true,
+    params: [
+      { id: 'shape', name: 'Shape', kind: 'choice', value: 1, choices: SHADE_SHAPES },
+      length('width', 'Width at the bottom', 300, 60, 1500, 'For a dome, its width.'),
+      { ...length('topWidth', 'Width at the top', 150, 20, 1500), shown: (v) => v.shape === 1 || v.shape === 3 },
+      { ...length('height', 'Height', 250, 30, 1200), shown: (v) => v.shape !== 4 },
+      length('wall', 'Wall thickness', 4, 1, 30),
+      length('drop', 'Cord length', 600, 0, 3000, '0 fixes it to the ceiling.'),
+      { id: 'colour', name: 'Colour', kind: 'choice', value: 0, choices: SHADE_COLOURS.map(([name]) => name) },
+    ],
+    make: ({ shape, width, topWidth, height, wall, drop, colour }) => {
+      const hole = 8;
+      const tooThin = 'The walls are too thick for this size: make them thinner or the shade bigger';
+      const narrow = 'The top is too narrow for the cord to go through: make it wider';
+      const shade = part('Shade', SHADE_COLOURS[colour][1]);
+      const b = width / 2;
+      const t = shape === 1 || shape === 3 ? topWidth / 2 : b;
+      /** How far the inside is from the middle at height z. */
+      const inside = (z: number) => b + ((t - b) * z) / height - wall;
+      let top = height;
+      if (shape <= 1) {
+        need(wall < height / 2 && inside(-1) > 2 && inside(height) > 2, tooThin);
+        need(inside(height - wall) > hole + 2, narrow);
+        shade.frustum([0, 0, 0], [b, b], [t, t], height);
+        shade.cutFrustum([0, 0, -1], [inside(-1), inside(-1)], [inside(height - wall), inside(height - wall)], height - wall + 1);
+        shade.cutCylinder('z', [0, 0, height - wall - 1], hole, wall + 2, 16);
+      } else if (shape <= 3) {
+        need(wall < height / 2 && inside(0) > 2, tooThin);
+        need(inside(height - wall) > hole + 2, narrow);
+        shade.lathe(
+          [0, 0, 0],
+          [
+            [inside(0), 0],
+            [b, 0],
+            [t, height],
+            [hole, height],
+            [hole, height - wall],
+            [inside(height - wall), height - wall],
+          ],
+          32,
+        );
+      } else {
+        need(b - wall > hole + 4, tooThin);
+        const outer = Math.acos(hole / b);
+        const inner = Math.acos(hole / (b - wall));
+        const deg = 180 / Math.PI;
+        shade.lathe([0, 0, 0], [...arc(0, 0, b, 0, outer * deg, 8), ...arc(0, 0, b - wall, inner * deg, 0, 8)], 24);
+        top = b * Math.sin(outer);
+      }
+      if (!drop) return done(shade);
+      const cord = part('Cord', 'black').cylinder('z', [0, 0, top - wall], 4, drop + wall, 8).cylinder('z', [0, 0, top + drop - 20], 60, 20, 16);
+      return done(shade, cord);
+    },
+  }),
 ];
 
 // ——— Decor ———
 
 const decor: LibraryItem[] = [
-  item({
+  custom({
     id: 'rug',
     name: 'Rug',
     subcategory: 'Decor',
@@ -976,10 +1304,14 @@ const decor: LibraryItem[] = [
       { id: '2000', name: '200 × 300 cm' },
       { id: '1200', name: '120 × 170 cm' },
     ],
-    build: (v) => {
+    params: [length('length', 'Length', 2300, 300, 6000), length('width', 'Width', 1600, 300, 4000), { id: 'round', name: 'Round (the length is its width)', kind: 'toggle', value: 0 }],
+    preset: (v) => {
       const w = Number(v ?? 1600);
-      const l = w === 1600 ? 2300 : w === 2000 ? 3000 : 1700;
-      return done(box(part('Rug', 'rug'), sym(l / 2), sym(w / 2), [0, 10]));
+      return { width: w, length: w === 1600 ? 2300 : w === 2000 ? 3000 : 1700 };
+    },
+    make: ({ length: l, width: w, round }) => {
+      const rug = part('Rug', 'rug');
+      return done(round ? rug.cylinder('z', [0, 0, 0], l / 2, 10, 48) : box(rug, sym(l / 2), sym(w / 2), [0, 10]));
     },
   }),
   item({
@@ -1010,7 +1342,7 @@ const decor: LibraryItem[] = [
       return done(pot, stem, foliage);
     },
   }),
-  item({
+  custom({
     id: 'picture-frame',
     name: 'Picture frame',
     subcategory: 'Decor',
@@ -1021,11 +1353,14 @@ const decor: LibraryItem[] = [
       { id: '1000', name: '1000 × 700 mm (landscape)' },
       { id: '300', name: '300 × 400 mm (portrait)' },
     ],
-    build: (v) => {
+    params: [length('width', 'Width', 500, 100, 3000), length('height', 'Height', 700, 100, 2400), length('middle', 'Middle above the floor', 1500, 100, 2500)],
+    preset: (v) => {
       const w = Number(v ?? 500);
-      const h = w === 500 ? 700 : w === 1000 ? 700 : 400;
-      // Hung with its middle at 1500 mm.
-      const z: Range = [1500 - h / 2, 1500 + h / 2];
+      return { width: w, height: w === 500 ? 700 : w === 1000 ? 700 : 400 };
+    },
+    make: ({ width: w, height: h, middle }) => {
+      need(middle >= h / 2, 'It would go through the floor: hang it higher, or make it shorter');
+      const z: Range = [middle - h / 2, middle + h / 2];
       const frame = part('Frame', 'black');
       box(frame, sym(w / 2), sym(15), z);
       cut(frame, sym(w / 2 - 25), [-25, 5], [z[0] + 25, z[1] - 25]);
@@ -1061,20 +1396,24 @@ const decor: LibraryItem[] = [
       return done(vase);
     },
   }),
-  item({
+  custom({
     id: 'wall-clock',
     name: 'Wall clock',
     subcategory: 'Decor',
     rooms: ['Kitchen', 'Living room', 'Office', 'Dining room'],
     tags: ['clock', 'time', 'watch'],
-    build: () => {
-      // Hung with its middle at 1800 mm.
-      const rim = part('Rim', 'black').cylinder('y', [0, -20, 1800], 160, 40, 32);
-      rim.cutCylinder('y', [0, -30, 1800], 145, 20, 32);
-      const face = part('Face', 'white').cylinder('y', [0, -12, 1800], 146, 6, 32);
+    params: [length('diameter', 'Diameter', 320, 150, 1200), length('middle', 'Middle above the floor', 1800, 200, 2800)],
+    make: ({ diameter, middle: m }) => {
+      need(m >= diameter / 2, 'It would go through the floor: hang it higher, or make it smaller');
+      const r = diameter / 2;
+      const k = r / 160;
+      // A ring, with the face filling it 4 mm back from its front.
+      const rim = part('Rim', 'black').cylinder('y', [0, -20, m], r, 40, 32);
+      rim.cutCylinder('y', [0, -30, m], r - 15, 60, 32);
+      const face = part('Face', 'white').cylinder('y', [0, -16, m], r - 15, 36, 32);
       const hands = part('Hands', 'black');
-      box(hands, [-4, 4], [-18, -11], [1795, 1910]);
-      box(hands, [-4, 70], [-18, -11], [1796, 1804]);
+      box(hands, [-4, 4], [-22, -16], [m - 5, m + 110 * k]);
+      box(hands, [-4, 70 * k], [-22, -16], [m - 4, m + 4]);
       return done(rim, face, hands);
     },
   }),

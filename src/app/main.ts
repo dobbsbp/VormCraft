@@ -110,7 +110,7 @@ async function start(): Promise<void> {
   const scenes = new ScenesPanel(document.getElementById('scenes-panel')!, controller, player);
   player.onChange = () => update();
   const info = new EntityInfoPanel(document.getElementById('info-panel')!, controller);
-  const library = new LibraryPanel(document.getElementById('library-panel')!, controller);
+  const library = new LibraryPanel(document.getElementById('library-panel')!, controller, () => files.openDesignFile());
   const history = new HistoryPanel(
     document.getElementById('history-panel')!,
     controller,
@@ -361,6 +361,8 @@ async function start(): Promise<void> {
   const showEntityInfo = () => togglePanel('info', true);
   const keep: KeepActions = {
     designProperties: () => void designProperties(),
+    designWithAi: () => void library.designWithAi(),
+    importAiDesign: () => void library.importAiDesign(),
     toggleHistory: () => togglePanel('history'),
     settings: () => void lifecycle.openSettings().then(() => syncDrive()),
     checkUpdates: () => void lifecycle.checkForUpdates(),
@@ -756,6 +758,10 @@ const FACE_STYLES: [FaceStyle, string, string][] = [
 interface KeepActions {
   /** Design Properties: the design's units and precision. */
   designProperties(): void;
+  /** Describe something and copy the instructions for an AI (Library). */
+  designWithAi(): void;
+  /** Paste or open a design an AI wrote, and place it (Library). */
+  importAiDesign(): void;
   toggleHistory(): void;
   settings(): void;
   checkUpdates(): void;
@@ -843,6 +849,8 @@ function commandList(viewer: Viewer, controller: ToolController, files: FileComm
     { id: 'view:tools-customise', name: 'Customise Tools…', keywords: ['palette', 'toolset', 'remove', 'add', 'essentials', 'minimal', 'layout'], run: view.customiseTools },
     { id: 'view:tools-reset', name: 'Reset Tool Order', keywords: ['palette', 'order', 'layout', 'arrange', 'default'], run: view.resetToolOrder },
     { id: 'view:tools', name: 'Show / Hide Tools', keywords: ['palette', 'toolbar', 'icons', 'collapse', 'tab', 'hide', 'room'], run: view.toggleTools },
+    { id: 'ai:design', name: 'Design with AI…', keywords: ['ai', 'chatgpt', 'claude', 'gemini', 'copilot', 'generate', 'describe', 'prompt', 'template', 'make', 'create', 'library'], run: keep.designWithAi },
+    { id: 'ai:import', name: 'Import AI Design…', keywords: ['ai', 'paste', 'json', 'design file', 'build file', 'generate', 'library', 'place'], run: keep.importAiDesign },
     { id: 'library:panel', name: 'Library', keywords: ['objects', 'furniture', 'components', 'models', 'catalogue', 'catalog', 'place', 'insert', 'kitchen', 'bathroom', 'sofa', 'bed', 'table', 'chair'], run: view.toggleLibrary },
     { id: 'scenes:panel', name: 'Scenes', keywords: ['scene', 'view', 'pages', 'tabs'], run: view.toggleScenes },
     { id: 'scenes:add', name: 'Add Scene', keywords: ['scene', 'save view'], run: () => controller.addScene() },

@@ -75,8 +75,10 @@ All versions have the same version number and open the same `.vorm` files.
 - Curves keep their true radius, so circles and arcs export smoothly at any resolution.
 
 ### Library
-- **Library** (toolbar): 51 objects made for VormCraft at real-world sizes: furniture, kitchen units and appliances, bathroom fittings, electronics, lighting, decor, and doors and windows.
+- **Library** (toolbar): 57 objects made for VormCraft at real-world sizes: furniture, kitchen units and appliances, bathroom fittings, electronics, lighting, decor, and doors and windows.
 - Search by name or other words ("couch", "fridge", "telly"; typos are fine), narrow by room or kind, and pick a size (beds from Single to King, TVs from 43" to 75", kitchen units 300 to 900 mm wide).
+- **Customise…** makes an item to your own sizes: most furniture (with the number of drawers, doors, shelves or seats), kitchen units, bathroom fittings, TVs and monitors by screen size, rugs, frames, doors and windows (the opening in the wall follows), a phone stand made to fit your phone (thickness, height, angle, a slot for the cable), and a light fixture as a box, tapered box, cylinder, cone or dome. A picture and the size follow what you type.
+- **Design with AI** (Library, Search): describe what you want and copy the instructions into any AI chat; paste its answer into **Import AI design** and VormCraft checks it, shows it and places it. Problems are listed with where they are, ready to copy back to the AI. Designs can have settings to change with Customise…. VormCraft itself sends nothing anywhere.
 - Click an object, then click in the model to place it; arrow keys turn it first. Each object comes in as a component (linked copies) with a group for each paint, so parts are easy to recolour. Wall items come in at their usual height, and pendant lights hang from the point you click.
 - **Doors and windows**: point at a wall and click. The door or window faces out of the wall, sits in the middle of it, and cuts its own opening right through.
 

@@ -19,6 +19,12 @@ CHANGELOG.md when it ships.
   reported (Entity Info), not fixed automatically. Push/Pull and Merge Shapes do not join them.
 
 ## Rough edges (UX)
+- AI designs: a design file cannot be dropped on the window yet (paste or Open file…); a JSON
+  Schema of the build format could be offered for AIs with structured output; the template has
+  not yet been tried on many different AIs.
+- Customised Library items cannot be customised again once placed: Entity Info could offer
+  Customise… for a component whose `source` has settings, rebuilding every copy. The settings
+  chosen are kept only while the app is open.
 - Dimensions keep their own ends: moving the geometry on its own leaves them behind (move them
   together, or redraw). Zoom Extents does not count dimensions and labels.
 - After Ctrl+H the line under the cursor stays highlighted until the mouse moves.

@@ -3,6 +3,8 @@ import type { LibraryItem, LibraryPart, Room } from '../library';
 import type { ToolController } from '../tools/ToolController';
 import { formatLengths } from '../tools/units';
 import { renderThumbnail } from '../view/thumbnails';
+import { showCustomiseDialog } from './customiseDialog';
+import { showAiImportDialog, showAiTemplateDialog } from './aiDesignDialog';
 
 type LibraryModule = typeof import('../library');
 
@@ -28,6 +30,8 @@ export class LibraryPanel {
   private room: Room | '' = '';
   private kind = '';
   private readonly variant = new Map<string, string>();
+  /** The settings last chosen with Customise… for each item (while the app is open). */
+  private readonly custom = new Map<string, { variant: string | undefined; values: Record<string, number> }>();
   private readonly parts = new Map<string, LibraryPart[]>();
   private readonly thumbs = new Map<string, string>();
   private results: HTMLElement | null = null;
@@ -39,7 +43,29 @@ export class LibraryPanel {
   constructor(
     private readonly root: HTMLElement,
     private readonly controller: ToolController,
+    /** Pick a saved AI design file to import (absent: paste only). */
+    private readonly openDesignFile?: () => Promise<{ name: string; text: string } | null>,
   ) {}
+
+  /** Design with AI: describe it and copy the instructions for an AI; then, if asked, import the answer. */
+  async designWithAi(): Promise<void> {
+    await this.loadLibrary();
+    if (await showAiTemplateDialog(this.lib!)) await this.importAiDesign();
+  }
+
+  /** Import AI design: paste (or open) an AI's design, then place it, or customise it first. */
+  async importAiDesign(): Promise<void> {
+    await this.loadLibrary();
+    const chosen = await showAiImportDialog(this.lib!, this.openDesignFile);
+    if (!chosen) return;
+    if (chosen.customise) await this.customise(chosen.item);
+    else this.place(chosen.item);
+  }
+
+  /** The library's code, without opening the panel. */
+  private async loadLibrary(): Promise<void> {
+    this.lib ??= await import('../library');
+  }
 
   get isOpen(): boolean {
     return !this.root.hidden;
@@ -56,7 +82,7 @@ export class LibraryPanel {
   private load(): Promise<void> {
     this.loading ??= (async () => {
       this.root.replaceChildren(el('p', { className: 'panel-note' }, 'Loading the library…'));
-      this.lib = await import('../library');
+      await this.loadLibrary();
       this.build();
     })();
     return this.loading;
@@ -102,11 +128,19 @@ export class LibraryPanel {
     };
     chips.append(chip('', 'All'), ...kinds.map((k) => chip(k, k)));
 
+    const ai = el('div', { className: 'library-ai' });
+    const design = el('button', { type: 'button', className: 'library-customise', title: 'Describe something, copy the instructions into your own AI chat, and import the design it writes' }, 'Design with AI…');
+    design.addEventListener('click', () => void this.designWithAi());
+    const importAi = el('button', { type: 'button', className: 'library-customise', title: 'Paste a design an AI wrote for VormCraft, and place it' }, 'Import AI design…');
+    importAi.addEventListener('click', () => void this.importAiDesign());
+    ai.append(design, importAi);
+
     this.count = el('p', { className: 'panel-note library-count' });
     this.results = el('div', { className: 'library-grid' });
     this.root.replaceChildren(
       el('div', { className: 'panel-head' }, el('h2', {}, 'Library'), close),
-      el('p', { className: 'panel-note' }, 'Objects at real sizes. Click one, then click in the model to place it (arrow keys turn it). Doors and windows go into the wall you click.'),
+      el('p', { className: 'panel-note' }, 'Objects at real sizes. Click one, then click in the model to place it (arrow keys turn it). Doors and windows go into the wall you click. Customise… makes an item to your own sizes.'),
+      ai,
       search,
       room,
       chips,
@@ -145,6 +179,11 @@ export class LibraryPanel {
     const pick = el('button', { type: 'button', className: 'library-pick', title: `Place ${item.name.toLowerCase()}: click here, then click in the model` }, img, el('span', { className: 'library-name' }, item.name), size);
     pick.addEventListener('click', () => this.place(item));
     const card = el('div', { className: 'library-card' }, pick);
+    if (item.params?.length) {
+      const customise = el('button', { type: 'button', className: 'library-customise', title: `Choose the ${item.name.toLowerCase()}'s sizes and settings, then place it` }, 'Customise…');
+      customise.addEventListener('click', () => void this.customise(item));
+      card.append(customise);
+    }
     if (item.variants?.length) {
       const select = el('select', { className: 'library-variant', ariaLabel: `${item.name} size` }, ...item.variants.map((v) => el('option', { value: v.id }, v.name)));
       select.value = this.variant.get(item.id) ?? item.variants[0].id;
@@ -218,7 +257,12 @@ export class LibraryPanel {
   private drawThumbnail(item: LibraryItem, img: HTMLImageElement): void {
     const lib = this.lib!;
     const parts = this.partsOf(item, item.variants?.[0].id);
-    const url = renderThumbnail(parts.map((p) => ({ model: p.model, color: lib.PAINTS[p.paint].color, opacity: 'opacity' in lib.PAINTS[p.paint] ? (lib.PAINTS[p.paint] as { opacity: number }).opacity : 1 })));
+    const url = renderThumbnail(
+      parts.map((p) => {
+        const f = lib.paintFields(p);
+        return { model: p.model, color: f.color, opacity: f.opacity };
+      }),
+    );
     if (!url) return;
     const key = THUMB_KEY(lib.LIBRARY_VERSION, item.id);
     this.thumbs.set(key, url);
@@ -235,25 +279,44 @@ export class LibraryPanel {
     }
   }
 
-  private place(item: LibraryItem): void {
+  /** Customise…: choose the settings, then place the item made from them. */
+  private async customise(item: LibraryItem): Promise<void> {
+    const lib = this.lib!;
+    const last = this.custom.get(item.id);
+    const chosen = await showCustomiseDialog(lib, item, last?.variant ?? this.variant.get(item.id) ?? item.variants?.[0].id, last?.values);
+    if (!chosen) return;
+    this.custom.set(item.id, { variant: chosen.variant, values: chosen.values });
+    if (chosen.variant !== undefined && item.variants?.length) {
+      this.variant.set(item.id, chosen.variant);
+      this.showResults();
+    }
+    if (!lib.isCustomised(item, chosen.variant, chosen.values)) {
+      this.place(item);
+      return;
+    }
+    const b = modelBounds(chosen.parts.map((p) => p.model));
+    const dims = b ? formatLengths([0, 1, 2].map((i) => Math.round((b.max[i] - b.min[i]) * 10) / 10), ' × ') : '';
+    this.place(item, { name: dims ? `${item.name}, ${dims}` : item.name, parts: chosen.parts, source: lib.itemSource(item, chosen.variant, chosen.values), values: chosen.values });
+  }
+
+  private place(item: LibraryItem, custom?: { name: string; parts: LibraryPart[]; source: string; values: Record<string, number> }): void {
     const lib = this.lib!;
     const variantId = this.variant.get(item.id) ?? item.variants?.[0].id;
     const variant = item.variants?.find((v) => v.id === variantId);
     let parts: LibraryPart[];
     try {
-      parts = this.partsOf(item, variantId);
+      parts = custom?.parts ?? this.partsOf(item, variantId);
     } catch (err) {
       this.controller.notify(`Could not make the ${item.name.toLowerCase()}: ${err instanceof Error ? err.message : String(err)}`);
       return;
     }
     this.controller.place({
-      name: variant ? `${item.name}, ${variant.name}` : item.name,
+      name: custom?.name ?? (variant ? `${item.name}, ${variant.name}` : item.name),
       hangs: item.hangs,
-      source: `library:${item.id}${variantId ? `:${variantId}` : ''}`,
-      opening: item.opening?.(variantId),
+      source: custom?.source ?? `library:${item.id}${variantId ? `:${variantId}` : ''}`,
+      opening: item.opening?.(variantId, custom?.values),
       parts: parts.map((p) => {
-        const paint = lib.PAINTS[p.paint];
-        return { name: p.name, model: p.model, paint: { name: paint.name, color: paint.color, opacity: 'opacity' in paint ? paint.opacity : 1 } };
+        return { name: p.name, model: p.model, paint: lib.paintFields(p) };
       }),
     });
     // On small screens the panel covers the view: get it out of the way.

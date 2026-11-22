@@ -32,6 +32,7 @@ export const PREFERENCES: readonly Preference[] = [
   { key: 'vormcraft.drive.autosave', synced: false },
   { key: 'vormcraft.drive.hidden', synced: false },
   { key: 'vormcraft.device', synced: false },
+  { key: 'vormcraft.ai.request', synced: false },
 ];
 
 /** The part of localStorage these helpers use (so tests can pass a plain object). */

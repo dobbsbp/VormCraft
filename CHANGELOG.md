@@ -4,6 +4,19 @@ What changed in each version of VormCraft. The section for a version is also sho
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
+## 0.9.0
+
+- Design with AI: describe what you want, copy the instructions VormCraft writes for you into any AI chat you use, and paste its answer back with Import AI design. VormCraft checks the design, shows a picture and its size, and places it like a Library item. Nothing is sent anywhere by VormCraft.
+- If the AI's design has a mistake, VormCraft lists each problem and where it is, with a button to copy them back to the AI to fix.
+- Designs from an AI can have settings, such as width or the size of a hole, that you change with Customise… before placing.
+- Customise Library items to your own sizes: click Customise… under an item, type the sizes, and place it. A picture and the overall size follow what you type, and anything that cannot be made says what to change.
+- Most Library items can be customised: tables, chairs, sofas, beds, wardrobes, chests of drawers and other furniture (with the number of drawers, doors, shelves or seats), kitchen units, the fridge, bath, shower, mirrors, TVs and monitors by screen size, the floor lamp, rugs (round too), picture frames and the clock. A table 1.2 m wide, 60 cm deep and 70 cm tall, for example, or a dresser with two columns of drawers.
+- Doors and windows can be any width and height, and windows any height above the floor. The opening they cut in the wall follows.
+- New in the Library: a keyboard (full size or compact), a mouse, a tablet and a smartphone, for the office desk.
+- Screens on the laptop, TVs and monitors, and some appliance doors no longer show doubled edges or flicker when seen from further away.
+- New in the Library: a phone stand made to fit your phone. Type its thickness and height and the angle you want, and the stand gets a slot that fits, a lip in front, room for the charging plug and a base deep enough not to tip over.
+- New in the Library: a light fixture as a box, tapered box, cylinder, cone or dome, at any size, with a cord of any length and a choice of colours.
+
 ## 0.8.0
 
 - Import DXF drawings from CAD programs (AutoCAD, Rhino, Fusion, LibreCAD and others). Choose how finely curves are divided: circles and arcs become true circles with the number of segments you pick, and other curves follow the drawing as closely as you ask. A live count shows how many edges that makes.
