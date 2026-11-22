@@ -97,10 +97,21 @@ export class AutoSaver {
 
   /** The design was saved or its changes discarded: its recovery copy is not needed. */
   async clear(): Promise<void> {
+    await this.discarding()();
+  }
+
+  /**
+   * The design's changes are about to be discarded: what removes its recovery copy, named as it
+   * is now. Called once another design has replaced it, so cancelling New or Open (or an Open
+   * that fails) keeps the copy.
+   */
+  discarding(): () => Promise<void> {
     const names = new Set([this.file, this.fileName()].filter((n): n is string => n !== null));
-    this.file = null;
-    this.lastRevision = this.controller.revision;
-    for (const n of names) await this.store.remove(n).catch(() => {});
+    return async () => {
+      if (this.file !== null && names.has(this.file)) this.file = null;
+      this.lastRevision = this.controller.revision;
+      for (const n of names) await this.store.remove(n).catch(() => {});
+    };
   }
 
   /**

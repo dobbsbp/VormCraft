@@ -25,12 +25,19 @@ export interface Material {
 
 export type MaterialFields = Omit<Material, 'id'>;
 
+/**
+ * A texture is a picture of the kinds VormCraft makes and imports, embedded in base64. Nothing
+ * else: the image goes into CSS `url("…")` for swatches, so a file must not be able to end that
+ * and fetch something from elsewhere.
+ */
+const TEXTURE_IMAGE = /^data:image\/(?:png|jpeg|gif|bmp|webp);base64,[A-Za-z0-9+/]*={0,2}$/;
+
 function check(m: MaterialFields): void {
   if (!/^#[0-9a-f]{6}$/i.test(m.color)) throw new Error(`Bad colour "${m.color}"`);
   if (!(m.opacity >= 0 && m.opacity <= 1)) throw new Error('Opacity must be between 0 and 1');
   if (!m.name.trim()) throw new Error('A material needs a name');
   if (m.texture && !(m.texture.width > 0 && m.texture.height > 0)) throw new Error('A texture needs a size');
-  if (m.texture && !m.texture.image.startsWith('data:image/')) throw new Error('A texture must be an image');
+  if (m.texture && !TEXTURE_IMAGE.test(m.texture.image)) throw new Error('A texture must be an image');
 }
 
 /** The materials defined in a document (saved and undoable, like guides and labels). */

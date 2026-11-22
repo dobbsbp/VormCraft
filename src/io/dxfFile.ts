@@ -304,9 +304,7 @@ function convertEntity(raw: Raw, g: Fields, xf: Affine, layer: string, out: DxfD
 
     case 'ARC': {
       const r = g.num(40, 0);
-      const a0 = g.num(50, 0) * RAD;
-      let a1 = g.num(51, 360) * RAD;
-      while (a1 <= a0 + 1e-12) a1 += 2 * Math.PI;
+      const [a0, a1] = turning(g.num(50, 0) * RAD, g.num(51, 360) * RAD);
       if (r > 0) conic(ocs(g.extrusion()), g.point(10), [r, 0, 0], [0, r, 0], a0, a1);
       return;
     }
@@ -315,9 +313,7 @@ function convertEntity(raw: Raw, g: Fields, xf: Affine, layer: string, out: DxfD
       const major = g.point(11);
       const ratio = g.num(40, 1);
       const minor = scale(cross(normalize(g.extrusion()), major), ratio);
-      const t0 = g.num(41, 0);
-      let t1 = g.num(42, 2 * Math.PI);
-      while (t1 <= t0 + 1e-12) t1 += 2 * Math.PI;
+      const [t0, t1] = turning(g.num(41, 0), g.num(42, 2 * Math.PI));
       conic(IDENTITY, g.point(10), major, minor, t0, t1);
       return;
     }
@@ -509,6 +505,19 @@ function convertEntity(raw: Raw, g: Fields, xf: Affine, layer: string, out: DxfD
     }
     flush();
   }
+}
+
+/**
+ * An arc's or ellipse's start and end angles, anticlockwise: the start within the first turn, and
+ * more than 0 but at most a whole turn on to the end (equal ends make a whole one). Worked out,
+ * not stepped a turn at a time, so a file with huge angles cannot keep the import busy for ever.
+ */
+function turning(start: number, end: number): [number, number] {
+  const turn = 2 * Math.PI;
+  const within = (a: number) => ((a % turn) + turn) % turn;
+  const from = within(start);
+  const d = within(end - start);
+  return [from, from + (d > 1e-12 && turn - d > 1e-12 ? d : turn)];
 }
 
 /** An arc in object coordinates as a conic; `mirrored` runs it clockwise (v points down). */

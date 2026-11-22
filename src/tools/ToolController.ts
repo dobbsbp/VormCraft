@@ -1272,8 +1272,14 @@ export class ToolController {
       if (l) pts.push(l.anchor, l.position, ...(l.end ? [l.end] : []));
     }
     if (!pts.length) return null;
-    const min: Vec3 = [Math.min(...pts.map((p) => p[0])), Math.min(...pts.map((p) => p[1])), Math.min(...pts.map((p) => p[2]))];
-    const max: Vec3 = [Math.max(...pts.map((p) => p[0])), Math.max(...pts.map((p) => p[1])), Math.max(...pts.map((p) => p[2]))];
+    // A loop, not Math.min(...): a large selection has more points than a call can take arguments.
+    const min: [number, number, number] = [Infinity, Infinity, Infinity];
+    const max: [number, number, number] = [-Infinity, -Infinity, -Infinity];
+    for (const p of pts)
+      for (let k = 0; k < 3; k++) {
+        if (p[k] < min[k]) min[k] = p[k];
+        if (p[k] > max[k]) max[k] = p[k];
+      }
     return { min, max };
   }
 

@@ -100,8 +100,11 @@ function clipToNear(a: THREE.Vector3, b: THREE.Vector3, near: number): boolean {
   return true;
 }
 
+/** Reused by `toScreen`: it runs twice per edge on every mouse move. */
+const projected = new THREE.Vector3();
+
 function toScreen(viewPoint: THREE.Vector3, camera: THREE.Camera, viewport: { width: number; height: number }, out: THREE.Vector2): void {
-  const p = viewPoint.clone().applyMatrix4(camera.projectionMatrix);
+  const p = projected.copy(viewPoint).applyMatrix4(camera.projectionMatrix);
   out.set(((p.x + 1) / 2) * viewport.width, ((1 - p.y) / 2) * viewport.height);
 }
 

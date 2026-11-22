@@ -305,7 +305,10 @@ const vec = (v: unknown, what: string): Vec3 => {
 function readGeometry(f: Partial<GeometryData>, materials: Materials): Model {
   const model = new Model();
   const ids = [...(f.vertices ?? []).map((v) => v[0]), ...(f.curves ?? []).map((c) => c.id), ...(f.faces ?? []).map((x) => x.id)];
-  model.reserveIdsUpTo(Math.max(0, ...ids));
+  // A loop, not Math.max(...ids): a large model has more ids than a call can take arguments.
+  let top = 0;
+  for (const id of ids) if (id > top) top = id;
+  model.reserveIdsUpTo(top);
   for (const v of f.vertices ?? []) model.addVertex(vec(v.slice(1), 'vertex'), v[0]);
   for (const c of f.curves ?? []) {
     if (c.kind !== 'circle' || !(c.radius > 0) || !(c.segments > 0)) throw new Error(`bad curve ${c.id}`);
@@ -437,7 +440,8 @@ export function parseDocument(text: string): Document {
   // Undo steps: left out if they do not belong to this exact design (or are damaged).
   const u = f.undo;
   if (u && typeof u.base === 'string' && Array.isArray(u.steps) && u.steps.every((s) => typeof s.data === 'string' && typeof s.label === 'string')) {
-    const { history: _history, undo: _undo, ...design } = f as FileV3;
+    // An autosaved copy says where it came from (`autosave`), added after the undo steps were.
+    const { history: _history, undo: _undo, autosave: _autosave, ...design } = f as FileV3 & { autosave?: unknown };
     const base = linedJson(design);
     if (hashText(base) === u.base) doc.savedUndo = decodeUndo(base, u);
   }

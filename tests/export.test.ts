@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { buildDemoModel } from '../src/app/demoModel';
+import { cleanResolution } from '../src/app/dialogs';
 import { drawCircle, drawPolygon, drawRectangle, findFaceAt, GROUND_PLANE, initBooleanKernel, makePlane, Model, pushPull } from '../src/core';
 import { exportObj, exportStl, NotWatertightError } from '../src/io/export';
 import { meshVolume, openMeshEdges, tessellate } from '../src/io/tessellate';
@@ -137,6 +138,18 @@ describe('STL export', () => {
 
   it('refuses an empty model', () => {
     expect(() => exportStl(new Model())).toThrow(/empty/);
+  });
+});
+
+describe('export dialog', () => {
+  it('only a preset or a custom size is remembered (settings from Drive cannot add HTML)', () => {
+    expect(cleanResolution('fine')).toBe('fine');
+    expect(cleanResolution('custom:0.002')).toBe('custom:0.002');
+    expect(cleanResolution('custom:1e-7')).toBe('custom:1e-7');
+    expect(cleanResolution(null)).toBe('normal');
+    expect(cleanResolution('custom:0')).toBe('normal');
+    expect(cleanResolution('custom:"><img src=x onerror=alert(1)>')).toBe('normal');
+    expect(cleanResolution('toString')).toBe('normal');
   });
 });
 

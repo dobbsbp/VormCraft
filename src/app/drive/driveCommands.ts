@@ -55,11 +55,25 @@ export class DriveCommands {
     this.auth = isTauri() ? new DesktopGoogleAuth(this.session.email || undefined) : new WebGoogleAuth(this.session.email || undefined);
     this.autosaveOn = store?.getItem(AUTOSAVE_KEY) === '1';
     this.scheduler = new DriveAutosaveScheduler((revision) => this.uploadCopy(revision));
-    files.saveToDrive = () => this.save();
-    // Leaving the page (closing the tab, switching away): send a waiting copy now.
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') this.scheduler.flush();
-    });
+    files.saveToDrive = this.saveToDrive;
+    document.addEventListener('visibilitychange', this.onVisibility);
+  }
+
+  private readonly saveToDrive = () => this.save();
+
+  /** Leaving the page (closing the tab, switching away): send a waiting copy now. */
+  private readonly onVisibility = () => {
+    if (document.visibilityState === 'hidden') this.scheduler.flush();
+  };
+
+  /**
+   * Google Drive was switched off in Settings: no copy waiting to upload is sent, and Save
+   * writes to this device again. The sign-in is kept for when it is switched on again.
+   */
+  dispose(): void {
+    this.scheduler.stop();
+    if (this.files.saveToDrive === this.saveToDrive) this.files.saveToDrive = null;
+    document.removeEventListener('visibilitychange', this.onVisibility);
   }
 
   /**
@@ -345,7 +359,7 @@ export class DriveCommands {
       applyPreferences(store, d.settings);
       this.controller.notify(`Settings from “${d.name}” loaded`);
       const restart = await confirmDialog('Settings loaded', `The settings from “${d.name}” are on this device now. Restart VormCraft to use them all?`, 'Restart now', 'Later');
-      if (restart && (await this.files.confirmDiscard())) location.reload();
+      if (restart && (await this.files.confirmLeave())) location.reload();
     });
   }
 

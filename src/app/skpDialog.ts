@@ -52,7 +52,7 @@ export function showSkpDialog(fileName: string, stats: SkpStats): Promise<SkpCho
   if (stats.placedFaces > LARGE_SKP) {
     const w = dlg.querySelector<HTMLElement>('.warning')!;
     w.hidden = false;
-    w.textContent = `This is a large model: VormCraft has no components yet, so every copy of a component becomes geometry of its own (${n(stats.definitionFaces)} faces drawn, ${n(stats.placedFaces)} once placed). Importing may take a while and make VormCraft slow.`;
+    w.textContent = `This is a large model: every copy of a SketchUp component is imported as geometry of its own (${n(stats.definitionFaces)} faces drawn, ${n(stats.placedFaces)} once placed). Importing may take a while and make VormCraft slow.`;
     form.querySelector('button[value="ok"]')!.textContent = 'Import anyway';
   }
   document.body.append(dlg);

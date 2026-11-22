@@ -42,3 +42,17 @@ describe('desktop links', () => {
     expect(Object.values(LINKS).filter((url) => !allowed(url))).toEqual([]);
   });
 });
+
+describe('web Content-Security-Policy', () => {
+  it('allows the Google addresses the web app uses for Drive, and nothing inline', async () => {
+    const { WEB_CSP } = await import('../scripts/csp');
+    const directive = (name: string) => WEB_CSP.split('; ').find((d) => d.startsWith(`${name} `))!.split(' ').slice(1);
+    const allows = (name: string, url: string) => directive(name).some((s) => s === url || (s.endsWith('/') && url.startsWith(s)) || url.startsWith(`${s}/`));
+    const read = (file: string, name: string) => new RegExp(`const ${name} = '([^']+)'`).exec(readFileSync(file, 'utf8'))![1];
+    expect(allows('script-src', read('src/app/drive/googleAuth.ts', 'GIS_SCRIPT'))).toBe(true);
+    expect(allows('connect-src', read('src/app/drive/driveApi.ts', 'API'))).toBe(true);
+    expect(allows('connect-src', read('src/app/drive/driveApi.ts', 'UPLOAD'))).toBe(true);
+    expect(directive('script-src')).not.toContain("'unsafe-inline'");
+    expect(directive('script-src')).not.toContain("'unsafe-eval'");
+  });
+});

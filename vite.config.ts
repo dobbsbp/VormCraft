@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 import { defineConfig } from 'vite';
+import { webCsp } from './scripts/csp.ts';
 import { offline } from './scripts/offline.ts';
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string };
@@ -11,7 +12,7 @@ export default defineConfig({
   // Relative paths, so the same build works at a site's root, under /VormCraft/ (GitHub Pages)
   // and inside the desktop app.
   base: './',
-  plugins: [offline(pkg.version)],
+  plugins: [offline(pkg.version), webCsp()],
   resolve: {
     // Manifold's loader imports node:module only under Node; the browser gets a stub.
     alias: { 'node:module': fileURLToPath(new URL('./src/shims/node-module.ts', import.meta.url)) },

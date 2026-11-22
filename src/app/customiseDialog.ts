@@ -120,14 +120,15 @@ export function showCustomiseDialog(lib: LibraryModule, item: LibraryItem, varia
   /** Read the fields, show and hide what applies, and build the item for the picture. */
   const update = () => {
     const values = lib.presetValues(item, current);
-    const problems: string[] = [];
+    const problems: { param: (typeof params)[number]; message: string }[] = [];
     for (const p of params) {
       const v = readField(p, inputs.get(p.id)!);
       if (typeof v === 'number') values[p.id] = v;
-      else problems.push(v);
+      else problems.push({ param: p, message: v });
     }
     for (const p of params) rows.get(p.id)!.hidden = !lib.paramShown(p, values);
-    const shownProblems = problems.filter((_, i) => lib.paramShown(params[i], values));
+    // A hidden field's problem does not count: it is not used.
+    const shownProblems = problems.filter((e) => lib.paramShown(e.param, values)).map((e) => e.message);
     built = null;
     if (!shownProblems.length) {
       try {

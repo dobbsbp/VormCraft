@@ -252,13 +252,13 @@ async function start(): Promise<void> {
     if (viewButtons) {
       const style = viewer.displayStyle();
       const current = FACE_STYLES.find(([f]) => f === style.faces) ?? FACE_STYLES[0];
-      viewButtons.style.innerHTML = current[2] + MENU_CARET;
+      setIcon(viewButtons.style, current[2] + MENU_CARET);
       viewButtons.style.title = `Style: ${current[1]} (click to change)`;
       const [, viewName, viewIcon] = view.currentView();
       const nextName = STANDARD_VIEWS[(STANDARD_VIEWS.findIndex(([, n]) => n === viewName) + 1) % STANDARD_VIEWS.length][1];
-      viewButtons.views.innerHTML = viewIcon;
+      setIcon(viewButtons.views, viewIcon);
       viewButtons.views.title = `View: ${viewName} (click for ${nextName}; right-click for all views)`;
-      viewButtons.projection.innerHTML = viewer.projection === 'parallel' ? ICONS.parallel : ICONS.perspective;
+      setIcon(viewButtons.projection, viewer.projection === 'parallel' ? ICONS.parallel : ICONS.perspective);
       viewButtons.projection.title = viewer.projection === 'parallel' ? 'Parallel projection (click for perspective)' : 'Perspective (click for parallel projection)';
       viewButtons.scenes.setAttribute('aria-pressed', String(scenes.isOpen));
       viewButtons.library.setAttribute('aria-pressed', String(library.isOpen));
@@ -510,7 +510,10 @@ Keep shapes: leave every solid as it is and put them together in one group.${
     const on = await DriveCommands.available();
     if (on && !drive) drive = newDrive();
     // Switched off: no more autosaved copies; the sign-in is kept for when it is switched on again.
-    if (!on) drive = null;
+    if (!on) {
+      drive?.dispose();
+      drive = null;
+    }
     driveButton!.style.display = drive ? '' : 'none';
     update();
   };
@@ -542,7 +545,9 @@ Keep shapes: leave every solid as it is and put them together in one group.${
   });
 
   window.addEventListener('keydown', (e) => {
-    if (e.target instanceof HTMLInputElement || document.querySelector('dialog[open]')) return;
+    // Typing or choosing in a field (a box, a list such as the Library's Room, a text area) is not a shortcut.
+    const t = e.target;
+    if (t instanceof HTMLInputElement || t instanceof HTMLSelectElement || t instanceof HTMLTextAreaElement || (t instanceof HTMLElement && t.isContentEditable) || document.querySelector('dialog[open]')) return;
     const key = e.key;
     // Viewer mode has no tools: Esc leaves it; Page Up / Page Down still step through scenes.
     if (viewerMode.active) {
@@ -667,8 +672,17 @@ async function guardUnsavedChanges(controller: ToolController, files: FileComman
   const { getCurrentWindow } = await import('@tauri-apps/api/window');
   const win = getCurrentWindow();
   await win.onCloseRequested(async (event) => {
-    if (!(await files.confirmDiscard())) event.preventDefault();
+    if (!(await files.confirmLeave())) event.preventDefault();
   });
+}
+
+/** The icon each button shows, so one that has not changed is not drawn again on every mouse move. */
+const shownIcons = new WeakMap<Element, string>();
+
+function setIcon(button: Element, svg: string): void {
+  if (shownIcons.get(button) === svg) return;
+  shownIcons.set(button, svg);
+  button.innerHTML = svg;
 }
 
 /** Open the selected group for editing (the same as double-clicking it). */

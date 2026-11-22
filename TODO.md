@@ -41,6 +41,27 @@ CHANGELOG.md when it ships.
   move them to IndexedDB if the library grows a lot.
 
 ## Unfinished / planned
+- **After 1.0, from the code review of 0.9.0 (November 2026):**
+  - Desktop file access is allowed everywhere (`"path": "**"` for every `fs:` permission in
+    `src-tauri/capabilities/default.json`). Narrow it: files picked in a dialog are allowed by
+    Tauri anyway; the backup folder, a double-clicked `.vorm` and the older-format backup beside
+    an opened file need their own handling (narrow Rust commands or runtime scopes). Test in the
+    installed app on Windows and Linux.
+  - Desktop Drive sign-in hands the client secret and the refresh token to the page
+    (`google.rs` → `desktopAuth.ts`). Move the code exchange and token refresh into
+    `google.rs`, so the page only ever holds short-lived access tokens.
+  - Every `viewer.refresh()` rebuilds the display data of every group, even untouched ones
+    (`Viewer.rebuildLayers`). Cache each group's display data and buffers, rebuilt only when that
+    group changes. Needs a change counter on `Model` that every change bumps (missing one would
+    show stale geometry), and the inherited material and faded state in the cache key.
+  - Smaller items from the review not done yet: GPU buffers not freed when `refresh()` replaces
+    attributes; Manifold objects not freed when a boolean throws; tessellated STL export not
+    checked for open edges after refining curves; binary STL and DXF coordinates not checked for
+    NaN; `booleanInPlace` rolls back only on `NonManifoldResult`; DXF block and SKP placement
+    totals have no cap; gzipped undo and history entries have no size cap; web Save cannot tell
+    a cancelled download; a recovered Drive design forgets its Drive file; Drive autosave can
+    write into a file in the bin; old Library preview pictures are never removed; Drive
+    `pageToken` not URL-encoded; preferences writes to localStorage not wrapped in try/catch.
 - **Linux:**
   - Follow up: let Linux users choose the graphics card (Settings → Graphics card is Windows-only
     for now). On laptops with two graphics chips this means starting WebKitGTK with `DRI_PRIME=1`

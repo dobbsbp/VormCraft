@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { AutoSaver } from '../src/app/autosave';
 import type { BackupEntry, BackupStore } from '../src/app/backups';
 import { FileCommands } from '../src/app/fileCommands';
@@ -11,6 +11,10 @@ import { harness } from './helpers/tools';
 beforeAll(async () => {
   await initBooleanKernel();
 });
+
+/** "Discard changes?" (no DOM in tests): answered with `discardAnswer`. */
+let discardAnswer = true;
+vi.mock('../src/app/dialogs', async (original) => ({ ...(await original<typeof import('../src/app/dialogs')>()), confirmDialog: async () => discardAnswer }));
 
 /** A backup folder in memory, with a clock for file times. */
 class MemoryStore implements BackupStore {
@@ -39,14 +43,15 @@ class MemoryHost implements FileHost {
   readPath = async (path: string) => ({ name: path.split('/').pop()!, path, text: this.files.get(path)! });
 }
 
-function setup(over: Partial<Settings> = {}) {
+function setup(over: Partial<Settings> = {}, chooseUnits?: () => Promise<null>) {
+  discardAnswer = true;
   const h = harness();
   const store = new MemoryStore();
   let settings: Settings = { ...DEFAULT_SETTINGS, ...over };
   const host = new MemoryHost();
   let files!: FileCommands;
   const saver: AutoSaver = new AutoSaver(h.controller, () => ({ name: files.name, path: files.path }), store, () => settings, () => store.clock);
-  files = new FileCommands(host, h.controller, { settings: () => settings, autosave: saver });
+  files = new FileCommands(host, h.controller, { settings: () => settings, autosave: saver, chooseUnits });
   const change = () => h.ctx.apply(() => drawRectangle(h.doc.model, GROUND_PLANE, [Math.random() * 1000, 0, 0], 10, 10), undefined, 'Rectangle');
   return { ...h, store, host, saver, files, change, set: (s: Partial<Settings>) => (settings = { ...settings, ...s }) };
 }
@@ -137,6 +142,68 @@ describe('autosave', () => {
     const r = found[0];
     h.files.recovered(parseDocument(r.text), r.name, r.path);
     expect(h.controller.dirty).toBe(true);
+  });
+});
+
+describe('discarding changes', () => {
+  it('cancelling New or Open after Discard changes keeps the recovery copy, and autosave goes on', async () => {
+    const h = setup({}, async () => null);
+    h.change();
+    await h.saver.tick();
+    const [copy] = h.store.files.keys();
+    await h.files.newDocument(); // Units dialog cancelled
+    expect(h.store.files.has(copy)).toBe(true);
+    h.host.next = null;
+    await h.files.open(); // file picker cancelled
+    expect(h.store.files.has(copy)).toBe(true);
+    h.host.next = { name: 'Bad.vorm', path: 'D:/Bad.vorm', text: 'not a design' };
+    await h.files.open(); // a file that fails to open
+    expect(h.controller.error).toBeTruthy();
+    expect(h.store.files.has(copy)).toBe(true);
+    expect(h.controller.dirty).toBe(true);
+    h.change();
+    expect(await h.saver.tick()).toBe(true);
+  });
+
+  it('the copy goes once another design has replaced the discarded one', async () => {
+    const h = setup();
+    h.change();
+    await h.saver.tick();
+    h.host.next = { name: 'Shed.vorm', path: 'D:/Shed.vorm', text: serializeDocument(harness().doc) };
+    await h.files.open();
+    expect(h.files.name).toBe('Shed');
+    expect(h.store.files.size).toBe(0);
+    h.change();
+    await h.saver.tick();
+    await h.files.newDocument();
+    expect(h.store.files.size).toBe(0);
+  });
+
+  it('keeping the changes keeps the copy; leaving the app after discarding removes it', async () => {
+    const h = setup();
+    h.change();
+    await h.saver.tick();
+    discardAnswer = false;
+    expect(await h.files.confirmLeave()).toBe(false);
+    expect(h.store.files.size).toBe(1);
+    discardAnswer = true;
+    expect(await h.files.confirmLeave()).toBe(true);
+    expect(h.store.files.size).toBe(0);
+  });
+
+  it('a recovered copy keeps its undo steps', async () => {
+    const h = setup();
+    h.change();
+    h.change();
+    await h.saver.tick();
+    const [r] = await h.saver.recoverable();
+    const doc = parseDocument(r.text);
+    const b = harness();
+    b.controller.replaceDocument(doc);
+    expect(b.doc.root.faces.size).toBe(2);
+    expect(b.controller.history.undoLabel).toBe('Rectangle');
+    b.controller.undo();
+    expect(b.doc.root.faces.size).toBe(1);
   });
 });
 

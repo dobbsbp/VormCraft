@@ -112,6 +112,13 @@ describe('undo / redo', () => {
 });
 
 describe('file format', () => {
+  it('opens a model with more ids than a function call can take as arguments', () => {
+    const file = JSON.parse(serializeDocument(new Document()));
+    file.vertices = Array.from({ length: 300_000 }, (_, i) => [i + 1, i, 0, 0]);
+    const back = parseDocument(JSON.stringify(file));
+    expect(back.model.vertices.size).toBe(300_000);
+  });
+
   it('round-trips a model with holes, curves and guides exactly', () => {
     const doc = new Document(buildDemoModel());
     doc.guides.addLine([0, 30, 40], [1, 0, 0]);

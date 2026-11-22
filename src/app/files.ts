@@ -49,8 +49,17 @@ async function tauriHost(): Promise<FileHost> {
     async save(data, suggestedName, filter, path) {
       const target = path ?? (await dialog.save({ defaultPath: suggestedName, filters: [filter] }));
       if (!target) return null;
-      if (typeof data === 'string') await fs.writeTextFile(target, data);
-      else await fs.writeFile(target, data);
+      // Write beside, then replace (as backups do): running out of disk space or a crash mid-write
+      // never leaves the saved file half-written.
+      const temp = `${target}.tmp`;
+      try {
+        if (typeof data === 'string') await fs.writeTextFile(temp, data);
+        else await fs.writeFile(temp, data);
+        await fs.rename(temp, target);
+      } catch (err) {
+        await fs.remove(temp).catch(() => {});
+        throw err;
+      }
       return { name: baseName(target), path: target };
     },
     async openBinary(filter) {

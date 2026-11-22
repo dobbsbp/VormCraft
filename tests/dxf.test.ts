@@ -288,6 +288,15 @@ describe('DXF files', () => {
     expect(b.max[0] - b.min[0]).toBeCloseTo(8);
   });
 
+  it('arcs and ellipses turn anticlockwise at most once, even with huge angles', () => {
+    const arc = (a0: number, a1: number) => [[0, 'ARC'], [8, '0'], [10, 0], [20, 0], [30, 0], [40, 5], [50, a0], [51, a1]];
+    const turned = (c: DrawingCurve) => (c.kind === 'conic' ? c.end - c.start : NaN);
+    const d = parseDxf(dxf([arc(0, 90), arc(270, 90), arc(30, 30), arc(0, 720), arc(1e16, 0), [[0, 'ELLIPSE'], [8, '0'], [10, 0], [20, 0], [30, 0], [11, 10], [21, 0], [31, 0], [40, 0.5], [41, 1e17], [42, 0]]]));
+    const sweeps = d.curves.map((c) => turned(c.curve));
+    expect(sweeps.slice(0, 4).map((x) => (x * 180) / Math.PI)).toEqual([90, 180, 360, 360].map((x) => expect.closeTo(x, 9)));
+    for (const x of sweeps.slice(4)) expect(x > 0 && x <= 2 * Math.PI + 1e-9).toBe(true);
+  });
+
   it('small DXFs: lines in 3D, arcs with bulges, and things left out counted', () => {
     // A closed polyline with a half-circle end (bulge 1) and a hatch.
     const text = dxf([

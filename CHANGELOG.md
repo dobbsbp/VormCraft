@@ -4,6 +4,22 @@ What changed in each version of VormCraft. The section for a version is also sho
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
+## 0.9.1
+
+- Large designs, such as big imported models, can be opened after saving. Before, they could be reported as damaged. Zoom Selection and Flip work on large selections too.
+- An autosaved copy recovered after a crash keeps its undo steps.
+- Cancelling New or Open after choosing Discard changes, or a file that fails to open, no longer deletes the autosaved copy of your work.
+- Saving in the desktop app writes the new file beside the old one first, so running out of disk space or a crash while saving cannot damage the saved design.
+- Customise…: a mistake in a setting that is then hidden no longer keeps Place switched off.
+- Pressing keys in a list (such as the Library's Room) no longer switches tools or deletes what is selected.
+- Show in Google Drive in the Drive window opens your browser from the desktop app.
+- Switching Google Drive off in Settings stops any autosaved copy waiting to upload, and Save writes to this device again.
+- DXF files with very large arc angles no longer make the import hang.
+- The SketchUp import warning no longer says VormCraft has no components, and the Linux app names itself Linux app when saving settings to Google Drive.
+- Designs and settings files are checked more strictly, so a damaged or tampered file cannot add anything unexpected to the app.
+- The web app now only runs its own code and only connects to Google for Drive, as the desktop app already did.
+- Moving the mouse over a design with a large selection is lighter: the selection is no longer drawn again on every move.
+
 ## 0.9.0
 
 - Design with AI: describe what you want, copy the instructions VormCraft writes for you into any AI chat you use, and paste its answer back with Import AI design. VormCraft checks the design, shows a picture and its size, and places it like a Library item. Nothing is sent anywhere by VormCraft.

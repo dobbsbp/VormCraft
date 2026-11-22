@@ -67,6 +67,7 @@ describe('device preferences', () => {
     expect(deviceIdentity(s, () => 'x', () => 'id-3')).toEqual({ id: 'id-1', name: 'Office PC' });
     expect(guessDeviceName('Mozilla/5.0 (Windows NT 10.0) AppleWebKit Chrome/130 Safari/537', false)).toBe('Chrome on Windows');
     expect(guessDeviceName('Mozilla/5.0 (Linux; Android 14) Chrome/130 Mobile Safari', false)).toBe('Chrome on Android');
-    expect(guessDeviceName('anything', true)).toBe('Windows app');
+    expect(guessDeviceName('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit Edg/130', true)).toBe('Windows app');
+    expect(guessDeviceName('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko)', true)).toBe('Linux app');
   });
 });

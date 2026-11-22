@@ -51,6 +51,8 @@ export class FileCommands {
   onTitleChange: () => void = () => {};
   /** The opened file as it was, while it is in an older format and not yet backed up. */
   private olderFormat: { text: string; version: number } | null = null;
+  /** Removes the recovery copy of changes the user agreed to discard, once they are replaced. */
+  private discardedCopy: (() => Promise<void>) | null = null;
 
   constructor(
     private readonly host: FileHost,
@@ -63,12 +65,31 @@ export class FileCommands {
     return windowTitle(this.name, this.controller.dirty, viewing);
   }
 
-  /** True if it is fine to drop the current document (saved, or the user agreed to discard). */
+  /**
+   * True if it is fine to drop the current document (saved, or the user agreed to discard). The
+   * recovery copy stays until another design has replaced this one (`replaced`): cancelling New
+   * or Open, or a file that fails to open, must not lose it.
+   */
   async confirmDiscard(): Promise<boolean> {
+    this.discardedCopy = null;
     if (!this.controller.dirty) return true;
     const ok = await confirmDialog('Unsaved changes', `${this.name} has changes that are not saved. Discard them?`, 'Discard changes');
-    if (ok) await this.options.autosave?.clear();
+    if (ok) this.discardedCopy = this.options.autosave?.discarding() ?? null;
     return ok;
+  }
+
+  /** Like `confirmDiscard`, for leaving the app (closing or reloading): the copy goes at once. */
+  async confirmLeave(): Promise<boolean> {
+    const ok = await this.confirmDiscard();
+    if (ok) await this.replaced();
+    return ok;
+  }
+
+  /** Another design replaced the one whose changes were discarded: its copy is not needed. */
+  private async replaced(): Promise<void> {
+    const remove = this.discardedCopy;
+    this.discardedCopy = null;
+    await remove?.();
   }
 
   async newDocument(): Promise<void> {
@@ -83,13 +104,14 @@ export class FileCommands {
     this.drive = undefined;
     this.olderFormat = null;
     this.onTitleChange();
+    await this.replaced();
   }
 
   async open(): Promise<void> {
     if (!(await this.confirmDiscard())) return;
     await this.guard(async () => {
       const file = await this.host.open(OPEN_FILTER);
-      if (file) this.load(file);
+      if (file) await this.load(file);
     });
   }
 
@@ -114,12 +136,12 @@ export class FileCommands {
   /** Open a design read from Google Drive (after the caller checked unsaved changes). */
   async openFromDrive(name: string, text: string, drive: DriveLocation): Promise<void> {
     await this.guard(async () => {
-      this.load({ name, text });
+      await this.load({ name, text });
       this.drive = drive;
     });
   }
 
-  private load(file: OpenedFile): void {
+  private async load(file: OpenedFile): Promise<void> {
     let doc: Document;
     try {
       doc = parseDocument(file.text);
@@ -138,6 +160,7 @@ export class FileCommands {
     if (this.options.settings().history && doc.versions.items.length === 0) this.controller.recordVersion('opened');
     this.controller.notify(`Opened ${file.name}`);
     this.onTitleChange();
+    await this.replaced();
   }
 
   /** Continue with a recovered autosaved copy (it keeps its name and where it was saved). */

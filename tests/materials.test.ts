@@ -145,6 +145,9 @@ describe('materials', () => {
     expect(() => ms.add({ ...RED, color: 'red' })).toThrow(/colour/);
     expect(() => ms.add({ ...RED, opacity: 2 })).toThrow(/Opacity/);
     expect(() => ms.update(a, { texture: { image: PIXEL, width: 0, height: 1 } })).toThrow(/size/);
+    // Only an embedded picture: nothing that could end the CSS url("…") or fetch from elsewhere.
+    for (const image of ['data:image/png;base64,a"), url("https://example.com/track', 'data:image/svg+xml,<svg/>', 'https://example.com/a.png'])
+      expect(() => ms.update(a, { texture: { image, width: 1, height: 1 } })).toThrow(/must be an image/);
   });
 
   it('deleting a material unpaints its faces, undoably', () => {

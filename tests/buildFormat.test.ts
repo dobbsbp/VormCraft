@@ -66,6 +66,8 @@ describe('build files: formulas', () => {
     expect(() => parseFormula('constructor', names)).toThrow(/not one of the settings/);
     expect(() => parseFormula('constructor(1)', names)).toThrow(/not a function it knows/);
     expect(() => parseFormula('toString', names)).toThrow(/not one of the settings/);
+    expect(() => parseFormula('1 toString 2', names)).toThrow(/"toString" left over/);
+    expect(() => parseFormula('width constructor 2', names)).toThrow(/"constructor" left over/);
     expect(problems({ ...file([{ name: 'P', colour: 'toString', shapes: [{ type: 'box', from: [0, 0, 0], to: [1, 1, 1] }] }]), units: 'constructor' })).toEqual([
       'units: must be one of "mm", "cm", "m", "in", "ft"',
       expect.stringMatching(/^parts\[0\] \(P\)\.colour: must be a colour/),

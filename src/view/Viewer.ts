@@ -145,6 +145,13 @@ export class Viewer implements SceneView {
   /** Bounds of everything drawn. */
   private sphere: THREE.Sphere | null = null;
   private readonly overlayGroup = new THREE.Group();
+  /**
+   * The selection (tinted faces, edges, group boxes): drawn again only when the selection or the
+   * model changes (`selectionKey`), not on every mouse move like the rest of the overlay.
+   */
+  private readonly selectionGroup = new THREE.Group();
+  /** What `selectionGroup` shows; null after a model change, so it is drawn again. */
+  private selectionKey: string | null = null;
   private readonly guideGroup = new THREE.Group();
   private readonly sectionGroup = new THREE.Group();
   /**
@@ -229,7 +236,7 @@ export class Viewer implements SceneView {
     this.backEdges.visible = false;
     this.backEdges.renderOrder = -1;
     this.hiddenEdges = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineDashedMaterial({ color: THEME.edge, dashSize: 4, gapSize: 3, transparent: true, opacity: 0.6 }));
-    this.scene.add(this.frontMesh, this.backMesh, this.edges, this.backEdges, this.hiddenEdges, this.layerGroup, buildAxes(), this.guideGroup, this.sectionGroup, this.overlayGroup);
+    this.scene.add(this.frontMesh, this.backMesh, this.edges, this.backEdges, this.hiddenEdges, this.layerGroup, buildAxes(), this.guideGroup, this.sectionGroup, this.selectionGroup, this.overlayGroup);
     this.unclipped.add(this.freeSection, this.freeOverlay);
 
     this.svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -295,6 +302,7 @@ export class Viewer implements SceneView {
     for (const l of [this.backEdges, this.hiddenEdges]) Object.assign(l.material as THREE.LineDashedMaterial, { dashSize: dash, gapSize: dash * 0.75 });
     this.rebuildGuides();
     this.rebuildSection();
+    this.selectionKey = null;
     this.rebuildOverlay();
   }
 
@@ -716,21 +724,27 @@ export class Viewer implements SceneView {
     const add = (o: THREE.Object3D | null) => o && this.overlayGroup.add(o);
     const addFree = (o: THREE.Object3D | null) => o && this.freeOverlay.add(o);
 
-    const selectedFaces = [...this.overlay.selectedFaces].filter((f) => m.faces.has(f));
-    add(this.tint(selectedFaces, THEME.select, 0.32));
-    const selectedEdges = [...this.overlay.selectedEdges].filter((e) => m.halfEdges.has(e));
-    if (selectedEdges.length) add(this.lines(concat(selectedEdges.map((e) => edgeSegment(m, e))), this.lineMaterial(THEME.select, 3), 2));
-
     // Groups: a box around each selected or hovered one, and a dashed one around the open group.
     const boxLines = (ids: Iterable<GroupId>) => concat([...ids].filter((g) => this.doc.groups.has(g)).map((g) => this.groupBox(g)));
-    const selectedBoxes = boxLines(this.overlay.selectedGroups);
-    if (selectedBoxes.length) add(this.lines(selectedBoxes, this.lineMaterial(THEME.select, 2.5), 2));
+    const selectedFaces = [...this.overlay.selectedFaces].filter((f) => m.faces.has(f));
+    const selectedEdges = [...this.overlay.selectedEdges].filter((e) => m.halfEdges.has(e));
+    const selectedGroups = [...this.overlay.selectedGroups].filter((g) => this.doc.groups.has(g));
+    const key = JSON.stringify([selectedFaces, selectedEdges, selectedGroups, this.doc.editing]);
+    if (key !== this.selectionKey) {
+      this.selectionKey = key;
+      this.clearGroup(this.selectionGroup);
+      const keep = (o: THREE.Object3D | null) => o && this.selectionGroup.add(o);
+      keep(this.tint(selectedFaces, THEME.select, 0.32));
+      if (selectedEdges.length) keep(this.lines(concat(selectedEdges.map((e) => edgeSegment(m, e))), this.lineMaterial(THEME.select, 3), 2));
+      const selectedBoxes = boxLines(selectedGroups);
+      if (selectedBoxes.length) keep(this.lines(selectedBoxes, this.lineMaterial(THEME.select, 2.5), 2));
+      if (this.doc.editing !== null) {
+        const open = this.groupBox(this.doc.editing);
+        if (open.length) keep(this.lines(open, this.lineMaterial(THEME.edge, 1.2, { dashed: true }), 2));
+      }
+    }
     const hoverBoxes = boxLines(preview.groups ?? []);
     if (hoverBoxes.length) add(this.lines(hoverBoxes, this.lineMaterial(THEME.hover, 2), 2));
-    if (this.doc.editing !== null) {
-      const open = this.groupBox(this.doc.editing);
-      if (open.length) add(this.lines(open, this.lineMaterial(THEME.edge, 1.2, { dashed: true }), 2));
-    }
 
     const hoverFaces = (preview.faces ?? []).filter((f) => m.faces.has(f));
     add(this.tint(hoverFaces, THEME.hover, 0.22));
@@ -1119,7 +1133,8 @@ export class Viewer implements SceneView {
     const hits = pickHits({ camera: this.view(), ndc, viewport, faceObjects: wire ? [] : [this.frontMesh, this.backMesh], data: this.data, seeThrough: this.faceStyle === 'xray', keep });
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(ndc, this.view());
-    const meshes = wire ? [] : this.layers.flatMap((l) => [l.front, l.back]);
+    // The raycaster ignores .visible: leave out hidden meshes (a faded layer's back is its front).
+    const meshes = wire ? [] : this.layers.flatMap((l) => [l.front, l.back]).filter((m) => m.visible);
     const hit = raycaster.intersectObjects(meshes, false).find((h) => h.faceIndex !== undefined && h.faceIndex !== null && (!keep || keep([h.point.x, h.point.y, h.point.z])));
     const layer = hit && this.layers.find((l) => l.front === hit.object || l.back === hit.object);
     if (!hit || !layer || (hits.face && hits.face.distance <= hit.distance)) return { ...hits, other: null };

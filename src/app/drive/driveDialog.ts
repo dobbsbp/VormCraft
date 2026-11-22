@@ -2,6 +2,7 @@ import type { DriveFile } from './driveApi';
 import type { DesignEverywhere, FolderContents } from './driveSession';
 import type { MenuEntry } from '../../tools/contextMenu';
 import { ContextMenu } from '../contextMenuView';
+import { openLink } from '../help';
 import { choiceDialog, confirmDialog, promptDialog } from '../dialogs';
 import { ICONS } from '../icons';
 
@@ -158,6 +159,11 @@ export function showDriveBrowser(source: DriveBrowserSource, mode: DriveBrowserM
     a.target = '_blank';
     a.rel = 'noopener';
     a.textContent = 'Show in Google Drive';
+    // Through openLink: the desktop app hands the page to the system browser.
+    a.addEventListener('click', (e) => {
+      e.preventDefault();
+      void openLink(a.href);
+    });
     account.append(a);
   };
 

@@ -116,7 +116,7 @@ export function parseFormula(text: string, names: ReadonlySet<string>): Expr {
     let left = primary();
     for (;;) {
       const op = peek();
-      const p = op === undefined ? undefined : PRECEDENCE[op];
+      const p = op !== undefined && has(PRECEDENCE, op) ? PRECEDENCE[op] : undefined;
       if (p === undefined || p < min) return left;
       i++;
       // ^ groups to the right, the others to the left.

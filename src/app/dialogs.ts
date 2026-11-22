@@ -12,9 +12,19 @@ const PRESETS: { id: string; label: string; value: number | undefined }[] = [
 ];
 const STORAGE_KEY = 'vormcraft.export.resolution';
 
+/**
+ * The remembered curve resolution: a preset's id or "custom:<mm>". Anything else (it also comes
+ * from settings loaded from Google Drive) is read as Normal; the dialog builds its HTML from it.
+ */
+export function cleanResolution(saved: string | null): string {
+  if (saved !== null && PRESETS.some((p) => p.id === saved)) return saved;
+  const custom = saved?.match(/^custom:(\d+(?:\.\d+)?(?:e-?\d+)?)$/i);
+  return custom && Number(custom[1]) > 0 ? `custom:${Number(custom[1])}` : 'normal';
+}
+
 function remembered(): string {
   try {
-    return localStorage.getItem(STORAGE_KEY) ?? 'normal';
+    return cleanResolution(localStorage.getItem(STORAGE_KEY));
   } catch {
     return 'normal';
   }

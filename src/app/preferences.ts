@@ -130,9 +130,9 @@ export interface DeviceIdentity {
 
 const DEVICE_KEY = 'vormcraft.device';
 
-/** A first guess at a name for this device ("Windows app", "Chrome on Android"). */
+/** A first guess at a name for this device ("Windows app", "Linux app", "Chrome on Android"). */
 export function guessDeviceName(userAgent: string, desktopApp: boolean): string {
-  if (desktopApp) return 'Windows app';
+  if (desktopApp) return /Linux/.test(userAgent) && !/Windows/.test(userAgent) ? 'Linux app' : 'Windows app';
   const browser = /Edg\//.test(userAgent) ? 'Edge' : /Firefox\//.test(userAgent) ? 'Firefox' : /Chrome\//.test(userAgent) ? 'Chrome' : /Safari\//.test(userAgent) ? 'Safari' : 'Browser';
   const os = /Android/.test(userAgent) ? 'Android' : /iPhone|iPad/.test(userAgent) ? 'iPhone or iPad' : /Windows/.test(userAgent) ? 'Windows' : /Mac OS/.test(userAgent) ? 'Mac' : /Linux/.test(userAgent) ? 'Linux' : '';
   return os ? `${browser} on ${os}` : browser;
