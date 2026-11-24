@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { drawCircle, drawPolygon, drawRectangle, faceCentre, findFaceAt, GROUND_PLANE, initBooleanKernel, makePlane, Model, pushPull, type Vec3 } from '../src/core';
 import { Guides } from '../src/doc/Guides';
-import { infer } from '../src/tools/inference';
+import { infer, nearOnScreen } from '../src/tools/inference';
+import { modelBounds } from '../src/core/ops/group';
 import type { InferenceHints } from '../src/tools/types';
 import { Navigator } from '../src/view/navigation';
 import { cameraProjector, screenRay } from '../src/view/projector';
@@ -258,5 +259,44 @@ describe('inference snapping', () => {
     const onAxis = inferAt(m, cam(), [98, 30, 20], { hints });
     expect(onAxis?.kind).toBe('axis');
     expect(onAxis!.point[1]).toBeCloseTo(30, 6);
+  });
+});
+
+describe('skipping groups far from the cursor', () => {
+  /** Boxes in a row (like furniture in a room), each its own model. */
+  function room(): Model[] {
+    return [0, 1, 2, 3, 4, 5].map((i) => {
+      const m = new Model();
+      pushPull(m, drawRectangle(m, GROUND_PLANE, [i * 400, 0, 0], 100, 100).inner!, 50 + i * 20);
+      return m;
+    });
+  }
+
+  it('finds the same snaps with and without the bounds, everywhere on screen', () => {
+    const others = room();
+    const cam = camera([-600, -1500, 900], [1000, 50, 0]);
+    const proj = cameraProjector(cam, VIEWPORT);
+    let snapped = 0;
+    let skipped = 0;
+    for (let x = 0; x <= VIEWPORT.width; x += 7) {
+      for (let y = 0; y <= VIEWPORT.height; y += 9) {
+        const cursor: [number, number] = [x, y];
+        const input = { model: new Model(), guides: new Guides(), projector: proj, cursor, ray: screenRay(cam, cursor, VIEWPORT), faceHit: null, others };
+        const plain = infer(input);
+        const culled = infer({ ...input, boundsOf: (m: Model) => modelBounds([m]) });
+        expect(culled).toEqual(plain);
+        if (plain && ['endpoint', 'midpoint', 'onEdge'].includes(plain.kind)) snapped++;
+        if (others.every((m) => !nearOnScreen(modelBounds([m]), proj, cursor, 13))) skipped++;
+      }
+    }
+    expect(snapped).toBeGreaterThan(50); // the boxes were in view and snapped to
+    expect(skipped).toBeGreaterThan(1000); // and most of the screen skipped them all
+  });
+
+  it('keeps a box that reaches behind the camera, and skips empty models', () => {
+    const cam = camera([0, -500, 100], [0, 0, 100]);
+    const proj = cameraProjector(cam, VIEWPORT);
+    expect(nearOnScreen({ min: [-50, -1000, 0], max: [50, 1000, 200] }, proj, [5, 5], 13)).toBe(true);
+    expect(nearOnScreen(null, proj, [500, 400], 13)).toBe(false);
   });
 });

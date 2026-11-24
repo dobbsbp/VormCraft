@@ -10,7 +10,7 @@ TypeScript, Three.js, Manifold, Tauri and Vitest.
 `README.md` is the public feature list; keep it current when adding features.
 Unfinished work and known bugs live in `TODO.md`.
 
-## Current state (0.9.1, November 2026)
+## Current state (0.9.2, November 2026)
 - Released for Windows (NSIS installer, auto-update) and the web (installable PWA, works offline).
   All are built by GitHub Actions from a version tag.
 - Linux (since 0.6.0): AppImages for x86_64 and ARM64 with auto-update, on WebKitGTK. About shows
@@ -56,7 +56,7 @@ Unfinished work and known bugs live in `TODO.md`.
     (`driveDialog.ts`). Folders made on the Drive website are invisible (`drive.file`);
   - import SKP/OBJ/STL and DXF (curve detail chosen on import, arcs in splines found, a group per
     layer, faces where outlines close; `dxfFile.ts`, `dxfImport.ts`, `importLines.ts`); export STL/OBJ.
-- About 740 Vitest tests; `npm test`, `npm run typecheck` and the build must stay clean, with no
+- About 790 Vitest tests; `npm test`, `npm run typecheck` and the build must stay clean, with no
   warnings.
 
 ## Rules
@@ -91,7 +91,8 @@ Unfinished work and known bugs live in `TODO.md`.
   after every model change.
   - `displayData.ts` derives buffers from the model (one face id per triangle, one edge id per
     line segment).
-  - `picking.ts` maps hits back to model ids.
+  - `picking.ts` maps hits back to model ids; `fastRaycast.ts` gives the face meshes bounds trees
+    (three-mesh-bvh, "indirect" so triangle order is kept).
   - `navigation.ts`: pure camera maths.
   - `touchGestures.ts`: Viewer-mode gesture maths.
   - `thumbnails.ts`: Library preview pictures, drawn by a small renderer of its own.

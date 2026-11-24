@@ -1,5 +1,6 @@
 import type { Plane } from '../core/math/plane';
 import type { Vec3 } from '../core/math/vec3';
+import type { Affine } from '../core/ops/transform';
 import type { FaceId, HalfEdgeId, VertexId } from '../core/model/Model';
 import type { Document, DocumentSnapshot } from '../doc/Document';
 import type { GroupId } from '../doc/Groups';
@@ -122,6 +123,11 @@ export interface PreviewLines {
   color: PreviewColor;
   dashed?: boolean;
   width?: number;
+  /**
+   * Draw `points` moved by this map. The view keeps the drawing of the same `points` array and
+   * only moves it, so a big outline (Move or Rotate on a whole room) is not rebuilt every frame.
+   */
+  transform?: Affine;
 }
 
 /** Transient drawing a tool wants on screen (in addition to selection, guides and snap cue). */

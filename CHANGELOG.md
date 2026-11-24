@@ -4,9 +4,12 @@ What changed in each version of VormCraft. The section for a version is also sho
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
-## Unreleased
+## 0.9.2
 
 - The web addresses and the e-mail address in About VormCraft can be clicked.
+- Zooming with the mouse wheel, orbiting and panning are smooth: the view glides instead of jumping.
+- Moving the mouse over large designs, such as a furnished room, is much faster.
+- Snapping and the tools' previews keep up with the mouse in large designs, even when moving or rotating a whole room.
 
 ## 0.9.1
 

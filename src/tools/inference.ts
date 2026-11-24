@@ -25,6 +25,12 @@ export interface InferenceInput {
    */
   others?: readonly Model[];
   hints?: InferenceHints;
+  /**
+   * The bounds of a model in `others` (cached by the caller). With it, models nowhere near the
+   * cursor on screen are skipped instead of testing every point and line in them, which made
+   * every tool lag on a furnished room.
+   */
+  boundsOf?: (m: Model) => { min: Vec3; max: Vec3 } | null;
   /** Pixel radius for point snaps (endpoints, midpoints, guide points). */
   pointTolerancePx?: number;
   /** Pixel radius for line snaps (edges, guides, axes). */
@@ -94,8 +100,10 @@ export function infer(input: InferenceInput): Snap | null {
     if (!prev || d < prev.px) found.set(snap.kind, { snap, px: d });
   };
 
+  const reach = Math.max(pointTol, lineTol);
   for (const m of [model, ...(input.others ?? [])]) {
     const own = m === model;
+    if (!own && input.boundsOf && !nearOnScreen(input.boundsOf(m), projector, cursor, reach)) continue;
     for (const v of m.vertices.values()) {
       if (m.outgoing(v.id).size > 0) offer({ kind: 'endpoint', point: v.pos }, pointTol);
     }
@@ -230,6 +238,28 @@ function constrainToPlane(snap: Snap | null, input: InferenceInput, model: Model
   if (snap?.kind === 'onFace' && snap.face !== undefined && planesCoincide(model.facePlane(snap.face), plane)) return snap;
   const p = rayPlane(input.ray, plane);
   return p ? { kind: 'onPlane', point: p } : snap;
+}
+
+/**
+ * Whether a box can have anything within `reach` pixels of the cursor: the cursor is inside the
+ * screen rectangle around its projected corners, grown by `reach`. A box with a corner behind
+ * the camera always counts (its projection is not bounded by the corners'). An empty model never does.
+ */
+export function nearOnScreen(b: { min: Vec3; max: Vec3 } | null, projector: Projector, cursor: [number, number], reach: number): boolean {
+  if (!b) return false;
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (let i = 0; i < 8; i++) {
+    const s = projector.toScreen([i & 1 ? b.max[0] : b.min[0], i & 2 ? b.max[1] : b.min[1], i & 4 ? b.max[2] : b.min[2]]);
+    if (!s) return true;
+    x0 = Math.min(x0, s[0]);
+    y0 = Math.min(y0, s[1]);
+    x1 = Math.max(x1, s[0]);
+    y1 = Math.max(y1, s[1]);
+  }
+  return cursor[0] >= x0 - reach && cursor[0] <= x1 + reach && cursor[1] >= y0 - reach && cursor[1] <= y1 + reach;
 }
 
 /** Intersection of two 3D lines if they actually meet (within tolerance) and are not parallel. */

@@ -233,3 +233,81 @@ export function dragModeFor(button: number, leftTool: DragMode | null): DragMode
   if (button === 2) return 'pan';
   return null;
 }
+
+/** How quickly a wheel zoom catches up: the part still to go shrinks by 1/e every this many ms. */
+export const WHEEL_ZOOM_MS = 60;
+
+/**
+ * Wheel zoom spread over a few frames instead of one jump. Wheel notches add zoom steps; each
+ * frame takes a share of what is left (ease-out, about 95% done after 180 ms). Steps multiply
+ * (`zoomToward`), so applying them in parts ends exactly where one jump would.
+ */
+export class SmoothZoom {
+  private pending = 0;
+
+  add(steps: number): void {
+    this.pending += steps;
+  }
+
+  /** The zoom steps to apply for a frame `ms` long; the last bit is taken whole so it ends. */
+  take(ms: number): number {
+    let s = this.pending * (1 - Math.exp(-Math.max(ms, 0) / WHEEL_ZOOM_MS));
+    if (Math.abs(this.pending - s) < 1e-3) s = this.pending;
+    this.pending -= s;
+    return s;
+  }
+
+  get active(): boolean {
+    return this.pending !== 0;
+  }
+
+  reset(): void {
+    this.pending = 0;
+  }
+}
+
+/**
+ * How closely mouse orbit and pan follow the mouse: the part of a movement still to go shrinks
+ * by 1/e every this many ms. Shorter than the wheel's, so the view stays attached to the hand.
+ * 0 turns the smoothing off (the view moves at once, as before).
+ */
+export const DRAG_SMOOTH_MS = 35;
+
+/**
+ * Mouse orbit and pan spread over a few frames: pointer moves add pixels, each frame takes a share
+ * of what is left. Orbit and pan are sums of pixel moves, so the view ends where it would have
+ * without smoothing (orbit's pitch limit aside).
+ */
+export class SmoothDrag {
+  private dx = 0;
+  private dy = 0;
+
+  constructor(readonly ms = DRAG_SMOOTH_MS) {}
+
+  add(dx: number, dy: number): void {
+    this.dx += dx;
+    this.dy += dy;
+  }
+
+  /** The pixels to move by for a frame `ms` long; the last fraction of a pixel is taken whole. */
+  take(ms: number): [number, number] {
+    const k = this.ms <= 0 ? 1 : 1 - Math.exp(-Math.max(ms, 0) / this.ms);
+    let sx = this.dx * k;
+    let sy = this.dy * k;
+    if (Math.hypot(this.dx - sx, this.dy - sy) < 0.05) {
+      sx = this.dx;
+      sy = this.dy;
+    }
+    this.dx -= sx;
+    this.dy -= sy;
+    return [sx, sy];
+  }
+
+  get active(): boolean {
+    return this.dx !== 0 || this.dy !== 0;
+  }
+
+  reset(): void {
+    this.dx = this.dy = 0;
+  }
+}

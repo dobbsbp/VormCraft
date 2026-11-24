@@ -407,6 +407,7 @@ export class ToolController {
       faceHit,
       others: this.visibleModels().filter((m) => m !== this.doc.model),
       hints: this.hints(),
+      boundsOf: (m) => this.boundsOf(m),
     });
     const edge = s.edge ?? this.snap?.edge;
     if (edge !== undefined && edge !== null && this.doc.model.halfEdges.has(edge)) {
@@ -574,6 +575,17 @@ export class ToolController {
   }
 
   /** The top level and every group that is not hidden. */
+  /** Each model's bounds for snapping, worked out again after any document change. */
+  private boundsOf(m: Model): { min: Vec3; max: Vec3 } | null {
+    const c = this.bounds.get(m);
+    if (c && c.revision === this.revision && c.vertices === m.vertices.size) return c.box;
+    const box = modelBounds([m]);
+    this.bounds.set(m, { revision: this.revision, vertices: m.vertices.size, box });
+    return box;
+  }
+
+  private readonly bounds = new WeakMap<Model, { revision: number; vertices: number; box: { min: Vec3; max: Vec3 } | null }>();
+
   private visibleModels() {
     return [this.doc.root, ...[...this.doc.groups.items.values()].filter((g) => !this.doc.groups.isHidden(g.id)).map((g) => g.model)];
   }

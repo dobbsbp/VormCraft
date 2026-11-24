@@ -4,7 +4,7 @@ import { translation } from '../core/ops/transform';
 import type { DocumentSnapshot } from '../doc/Document';
 import { closestRayLine } from './geom';
 import { lineColor } from './LineTool';
-import { applyToTargets, parseArray, previewEdges, targetsAt, type Targets } from './targets';
+import { applyToTargets, parseArray, previewLines, targetsAt, type Targets } from './targets';
 import type { InferenceHints, Preview, Snap, Tool, ToolContext, ToolEvent } from './types';
 import { formatLength, parseLength, parseLengths } from './units';
 
@@ -160,14 +160,13 @@ export class MoveTool implements Tool {
 
   preview(): Preview {
     if (!this.targets || !this.from || !this.to || distance(this.from, this.to) <= TOL) return {};
-    const segs = previewEdges(this.ctx.doc, this.targets, translation(sub(this.to, this.from)));
     // Moving the plane that cuts (not a copy of it): the cut follows the mouse.
     const active = this.ctx.doc.sections.activePlane();
     const sectionMove = !this.copy && active && this.targets.sections.includes(active.id) ? { id: active.id, point: add(active.point, sub(this.to, this.from)), normal: active.normal } : undefined;
     return {
       ...(sectionMove ? { sectionMove } : {}),
       lines: [
-        { points: segs.flat(), color: 'select', width: 1.5 },
+        ...previewLines(this.ctx.doc, this.targets, translation(sub(this.to, this.from))),
         { points: [this.from, this.to], color: lineColor(this.snap), dashed: true, width: 1.5 },
       ],
     };

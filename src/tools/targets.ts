@@ -11,7 +11,7 @@ import { groupModels } from './groupModels';
 import type { LabelId } from '../doc/Labels';
 import type { SectionId } from '../doc/Sections';
 import { sectionFrames } from './sectionPick';
-import type { ToolContext, ToolEvent, Vec3Pair } from './types';
+import type { PreviewLines, ToolContext, ToolEvent, Vec3Pair } from './types';
 
 /** What Move / Rotate act on. Groups move whole. */
 export interface Targets {
@@ -122,34 +122,53 @@ function moveLabels(doc: Document, ids: LabelId[], a: Affine): void {
   }
 }
 
-/** Edges among the targets (and edges they stretch), as segment pairs after a transform. */
-export function previewEdges(doc: Document, t: Targets, a: Affine): Vec3Pair[] {
+/**
+ * The preview of the targets moved by `a`: the lines that move whole (groups, guides, section
+ * planes, and lines with both ends moving), worked out once per `Targets` and drawn moved by `a`,
+ * and the lines the move stretches (one end moving), worked out each time.
+ */
+export function previewLines(doc: Document, t: Targets, a: Affine): PreviewLines[] {
+  let whole = wholeOutlines.get(t);
+  if (!whole) {
+    whole = outline(doc, t, true).flat();
+    wholeOutlines.set(t, whole);
+  }
+  return [
+    { points: whole, transform: a, color: 'select', width: 1.5 },
+    { points: outline(doc, t, false, a).flat(), color: 'select', width: 1.5 },
+  ];
+}
+
+/** Each set of targets' unmoved outline (they do not change while a tool holds them). */
+const wholeOutlines = new WeakMap<Targets, Vec3[]>();
+
+/** The whole-moving part of the outline (unmoved), or the stretched lines after `a`. */
+function outline(doc: Document, t: Targets, whole: boolean, a?: Affine): Vec3Pair[] {
   const m = doc.model;
   const out: Vec3Pair[] = [];
-  const at = (v: VertexId): Vec3 => (t.vertices.has(v) ? applyAffine(a, m.pos(v)) : m.pos(v));
   for (const e of m.edges()) {
+    if (m.he(e).hidden) continue;
     const p = m.he(e).origin;
     const q = m.dest(e);
-    if (m.he(e).hidden) continue;
-    if (t.vertices.has(p) || t.vertices.has(q)) out.push([at(p), at(q)]);
+    const n = (t.vertices.has(p) ? 1 : 0) + (t.vertices.has(q) ? 1 : 0);
+    if (whole && n === 2) out.push([m.pos(p), m.pos(q)]);
+    else if (!whole && n === 1) out.push([t.vertices.has(p) ? applyAffine(a!, m.pos(p)) : m.pos(p), t.vertices.has(q) ? applyAffine(a!, m.pos(q)) : m.pos(q)]);
   }
+  if (!whole) return out;
   for (const id of t.groups) {
-    for (const g of groupModels(doc, id)) for (const e of g.edges()) out.push([applyAffine(a, g.pos(g.he(e).origin)), applyAffine(a, g.pos(g.dest(e)))]);
+    for (const g of groupModels(doc, id)) for (const e of g.edges()) out.push([g.pos(g.he(e).origin), g.pos(g.dest(e))]);
   }
-  // Moved guides: a long stretch of each line, and a small cross for each point.
   for (const id of t.guides) {
     const g = doc.guides.items.get(id);
     if (!g) continue;
-    const moved = transformGuide(g, a);
-    if (moved.kind === 'line') out.push([add(moved.point, scale(moved.dir, -2000)), add(moved.point, scale(moved.dir, 2000))]);
-    else for (const d of [[5, 0, 0], [0, 5, 0], [0, 0, 5]] as Vec3[]) out.push([sub(moved.pos, d), add(moved.pos, d)]);
+    if (g.kind === 'line') out.push([add(g.point, scale(g.dir, -2000)), add(g.point, scale(g.dir, 2000))]);
+    else for (const d of [[5, 0, 0], [0, 5, 0], [0, 0, 5]] as Vec3[]) out.push([sub(g.pos, d), add(g.pos, d)]);
   }
-  // Moved section planes: their outline where it would be.
   if (t.sections.length) {
     const frames = sectionFrames(doc);
     for (const id of t.sections) {
       const c = frames.get(id);
-      if (c) for (let i = 0; i < 4; i++) out.push([applyAffine(a, c[i]), applyAffine(a, c[(i + 1) % 4])]);
+      if (c) for (let i = 0; i < 4; i++) out.push([c[i], c[(i + 1) % 4]]);
     }
   }
   return out;

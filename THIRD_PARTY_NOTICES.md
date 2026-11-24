@@ -6,6 +6,7 @@ its Windows app, Linux app and web app. Each is used under its own licence, link
 | Library | Used for | Licence | Copyright |
 | --- | --- | --- | --- |
 | [three.js](https://github.com/mrdoob/three.js) 0.186 | 3D display | MIT | © 2010–2026 three.js authors |
+| [three-mesh-bvh](https://github.com/gkjohnson/three-mesh-bvh) 0.9 | Fast picking under the cursor | MIT | © 2018 Garrett Johnson |
 | [Manifold](https://github.com/elalish/manifold) 3.5 | Booleans (cutting solids) | Apache-2.0 | © The Manifold Authors |
 | [earcut](https://github.com/mapbox/earcut) 3.2 | Triangulating faces | ISC | © Mapbox, Volodymyr Agafonkin |
 | [fflate](https://github.com/101arrowz/fflate) 0.8 | Compressing design history; reading SketchUp files | MIT | © Arjun Barrett |
@@ -13,7 +14,7 @@ its Windows app, Linux app and web app. Each is used under its own licence, link
 | [FlatBuffers](https://github.com/google/flatbuffers) 25.9 | Reading SketchUp (.skp) files (used by OpenSKP) | Apache-2.0 | © Google Inc. |
 | [Tauri](https://github.com/tauri-apps/tauri) 2 | The Windows and Linux apps | Apache-2.0 or MIT | © Tauri Programme within The Commons Conservancy |
 
-## MIT licence (three.js, fflate, OpenSKP)
+## MIT licence (three.js, three-mesh-bvh, fflate, OpenSKP)
 
 > Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
 > associated documentation files (the "Software"), to deal in the Software without restriction,

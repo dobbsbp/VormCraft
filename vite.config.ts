@@ -31,6 +31,8 @@ export default defineConfig({
             { name: 'three-renderer', test: /node_modules[\\/]three[\\/]/ },
             { name: 'manifold', test: /node_modules[\\/]manifold-3d[\\/]/ },
             { name: 'vendor', test: /node_modules[\\/]/ },
+            // Our geometry kernel apart from the app shell, which outgrew 500 kB with it.
+            { name: 'kernel', test: /[\\/]src[\\/]core[\\/]/ },
           ],
         },
       },

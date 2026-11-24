@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { checkWatertight, distance, drawEdges, drawRectangle, findFaceAt, GROUND_PLANE, initBooleanKernel, pushPull, volume, type Vec3 } from '../src/core';
+import { applyAffine } from '../src/core/ops/transform';
 import { parseArray } from '../src/tools/targets';
 import { ev, harness, use } from './helpers/tools';
 
@@ -280,5 +281,42 @@ describe('array parsing', () => {
     expect(parseArray('*3')).toEqual({ count: 3, divide: false });
     expect(parseArray('/3')).toEqual({ count: 3, divide: true });
     expect(parseArray('30')).toBeUndefined();
+  });
+});
+
+describe('Move preview', () => {
+  /** Each segment as text, ends in a fixed order, so outlines can be compared as sets. */
+  const segments = (pairs: Vec3[][]) => pairs.map((pair) => pair.map((p) => p.map((x) => x.toFixed(6)).join(',')).sort().join(' ')).sort();
+
+  it('draws the moved outline (whole and stretched lines) where the lines end up, and keeps the whole part between moves', () => {
+    const H = harness();
+    pushPull(H.model, drawRectangle(H.model, GROUND_PLANE, [0, 0, 0], 10, 20).inner!, 30);
+    H.controller.selection.set([...H.model.faces.keys()], [...H.model.edges()]);
+    H.controller.makeGroup();
+    const group = [...H.doc.groups.items.keys()][0];
+    // A loose box: moving its top stretches its upright edges.
+    pushPull(H.model, drawRectangle(H.model, GROUND_PLANE, [100, 0, 0], 10, 20).inner!, 30);
+    const top = findFaceAt(H.model, [105, 10, 30])!;
+    H.controller.selection.set([top], [], [], [group]);
+    use(H.controller, 'move');
+    click(H, [105, 10, 30]);
+    move(H, [105, 10, 35]);
+    const first = H.controller.tool.preview().lines!;
+    move(H, [105, 10, 40]);
+    const lines = H.controller.tool.preview().lines!;
+    const whole = lines.find((l) => l.transform)!;
+    expect(whole.points).toBe(first.find((l) => l.transform)!.points); // the same array: the view keeps its drawing
+    const shown: Vec3[][] = [];
+    for (const l of lines.filter((l) => l.color === 'select')) {
+      for (let i = 0; i < l.points.length; i += 2) shown.push([l.points[i], l.points[i + 1]].map((p) => (l.transform ? applyAffine(l.transform, p) : p)));
+    }
+    click(H, [105, 10, 40]);
+    // Where the lines are after the move: the loose box's lines that moved or stretched, and the group's.
+    const m = H.model;
+    const after: Vec3[][] = [...m.edges()].map((e) => [m.pos(m.he(e).origin), m.pos(m.dest(e))]).filter((pair) => pair.some((p) => Math.abs(p[2] - 40) < 1e-9));
+    const g = H.doc.groups.get(group)!.model;
+    after.push(...[...g.edges()].map((e) => [g.pos(g.he(e).origin), g.pos(g.dest(e))]));
+    expect(segments(shown)).toEqual(segments(after));
+    expect(shown.length).toBe(8 + 12);
   });
 });

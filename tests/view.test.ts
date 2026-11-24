@@ -3,7 +3,8 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { buildDemoModel } from '../src/app/demoModel';
 import { checkWatertight, drawCircle, drawRectangle, findFaceAt, GROUND_PLANE, initBooleanKernel, Model, pushPull } from '../src/core';
 import { buildDisplayData, faceTriangles, type DisplayData } from '../src/view/displayData';
-import { dragModeFor, Navigator } from '../src/view/navigation';
+import { dragModeFor, Navigator, SmoothDrag, SmoothZoom } from '../src/view/navigation';
+import { useFastRaycast } from '../src/view/fastRaycast';
 import { pick } from '../src/view/picking';
 
 beforeAll(async () => {
@@ -337,5 +338,159 @@ describe('parallel projection', () => {
     expect(ortho.quaternion.angleTo(camera.quaternion)).toBeCloseTo(0, 9);
     // Panning moves a fixed amount per pixel, whatever the depth.
     expect(nav.unitsPerPixel(10, 500)).toBeCloseTo(nav.unitsPerPixel(5000, 500), 9);
+  });
+});
+
+describe('smooth wheel zoom', () => {
+  const camera = () => {
+    const c = new THREE.PerspectiveCamera(35, 1.5, 1, 1e6);
+    c.position.set(4000, -6000, 3000);
+    new Navigator(c).lookAt(new THREE.Vector3());
+    return c;
+  };
+
+  it('eases out and ends exactly where one jump would', () => {
+    const focus = new THREE.Vector3(200, 100, 0);
+    const jump = new Navigator(camera());
+    jump.zoomToward(focus, 3);
+
+    const eased = new Navigator(camera());
+    const zoom = new SmoothZoom();
+    zoom.add(1);
+    zoom.add(2);
+    const firstFrame = zoom.take(16);
+    expect(firstFrame).toBeGreaterThan(0);
+    expect(firstFrame).toBeLessThan(1.5); // not a jump
+    eased.zoomToward(focus, firstFrame);
+    let frames = 1;
+    while (zoom.active) {
+      eased.zoomToward(focus, zoom.take(16));
+      frames++;
+    }
+    expect(frames).toBeGreaterThan(5);
+    expect(frames).toBeLessThan(40); // done in well under a second
+    expect(eased.camera.position.distanceTo(jump.camera.position)).toBeLessThan(1e-6);
+  });
+
+  it('zooms out as well, and stops when reset', () => {
+    const zoom = new SmoothZoom();
+    zoom.add(-1);
+    expect(zoom.take(16)).toBeLessThan(0);
+    zoom.reset();
+    expect(zoom.active).toBe(false);
+    expect(zoom.take(16)).toBe(0);
+  });
+});
+
+describe('smooth orbit and pan', () => {
+  const camera = () => {
+    const c = new THREE.PerspectiveCamera(35, 1.5, 1, 1e6);
+    c.position.set(4000, -6000, 3000);
+    new Navigator(c).lookAt(new THREE.Vector3());
+    return c;
+  };
+
+  it('pans in parts to where one move would go', () => {
+    const direct = new Navigator(camera());
+    direct.pan(30, -12, 5000, 800);
+    direct.pan(15, 4, 5000, 800);
+
+    const eased = new Navigator(camera());
+    const drag = new SmoothDrag();
+    drag.add(30, -12);
+    const [fx, fy] = drag.take(16);
+    expect(Math.abs(fx)).toBeGreaterThan(0);
+    expect(Math.abs(fx)).toBeLessThan(30); // not all at once
+    eased.pan(fx, fy, 5000, 800);
+    drag.add(15, 4);
+    let frames = 1;
+    while (drag.active) {
+      eased.pan(...drag.take(16), 5000, 800);
+      frames++;
+    }
+    expect(frames).toBeLessThan(20); // settles in about a quarter of a second
+    expect(eased.camera.position.distanceTo(direct.camera.position)).toBeLessThan(1e-6);
+  });
+
+  it('orbits in parts to where one move would go', () => {
+    const pivot = new THREE.Vector3(100, 200, 0);
+    const direct = new Navigator(camera());
+    direct.orbit(40, 25, pivot);
+
+    const eased = new Navigator(camera());
+    const drag = new SmoothDrag();
+    drag.add(40, 25);
+    while (drag.active) eased.orbit(...drag.take(16), pivot);
+    expect(eased.camera.position.distanceTo(direct.camera.position)).toBeLessThan(1e-3);
+    expect(eased.camera.quaternion.angleTo(direct.camera.quaternion)).toBeLessThan(1e-6);
+  });
+
+  it('moves at once when the smoothing is off', () => {
+    const drag = new SmoothDrag(0);
+    drag.add(10, -5);
+    expect(drag.take(16)).toEqual([10, -5]);
+    expect(drag.active).toBe(false);
+  });
+});
+
+describe('fast picking (bounds tree)', () => {
+  /** A busier model: boxes and a cylinder (many triangles), in two draw groups like painted faces. */
+  function busy(): Model {
+    const m = new Model();
+    for (let i = 0; i < 4; i++) pushPull(m, drawRectangle(m, GROUND_PLANE, [i * 30, 0, 0], 20, 15).inner!, 10 + i * 5);
+    pushPull(m, drawCircle(m, GROUND_PLANE, [40, 60, 0], 15).inner!, 25);
+    return m;
+  }
+
+  function meshPair(data: DisplayData, fast: boolean, g = new THREE.BufferGeometry()): THREE.Mesh[] {
+    g.setAttribute('position', new THREE.BufferAttribute(data.positions, 3));
+    g.setIndex(new THREE.BufferAttribute(data.indices, 1));
+    g.clearGroups();
+    const half = Math.floor(data.indices.length / 6) * 3;
+    g.addGroup(0, half, 0);
+    g.addGroup(half, data.indices.length - half, 1);
+    const side = (s: THREE.Side) => [new THREE.MeshBasicMaterial({ side: s }), new THREE.MeshBasicMaterial({ side: s })];
+    const pair = [new THREE.Mesh(g, side(THREE.FrontSide)), new THREE.Mesh(g, side(THREE.BackSide))];
+    if (fast) pair.forEach(useFastRaycast);
+    return pair;
+  }
+
+  function firstHits(objects: THREE.Object3D[], camera: THREE.Camera) {
+    const out: (string | null)[] = [];
+    const rc = new THREE.Raycaster();
+    for (let x = -0.9; x <= 0.9; x += 0.15) {
+      for (let y = -0.9; y <= 0.9; y += 0.15) {
+        rc.setFromCamera(new THREE.Vector2(x, y), camera);
+        const h = rc.intersectObjects(objects, false)[0];
+        out.push(h ? `${h.faceIndex} ${h.distance.toFixed(4)}` : null);
+      }
+    }
+    return out;
+  }
+
+  it('hits the same triangles at the same distances as testing every triangle', () => {
+    const data = buildDisplayData(busy());
+    const { camera } = cameraAt([-80, -120, 90], [50, 30, 10]);
+    const plain = firstHits(meshPair(data, false), camera);
+    expect(plain.filter(Boolean).length).toBeGreaterThan(20);
+    expect(firstHits(meshPair(data, true), camera)).toEqual(plain);
+  });
+
+  it('follows the geometry when it is replaced', () => {
+    const g = new THREE.BufferGeometry();
+    const fast = meshPair(buildDisplayData(box()), true, g);
+    const { camera } = cameraAt([-80, -120, 90], [50, 30, 10]);
+    firstHits(fast, camera); // builds the tree for the small box
+    const data = buildDisplayData(busy());
+    meshPair(data, true, g); // same geometry, new positions and index (as Viewer.refresh does)
+    expect(firstHits(fast, camera)).toEqual(firstHits(meshPair(data, false), camera));
+  });
+
+  it('keeps face ids: a picked point lies on the face it names', () => {
+    const m = busy();
+    const data = buildDisplayData(m);
+    const { camera } = cameraAt([5, 5, 200], [5, 5, 0]);
+    const hit = pick({ camera, ndc: ndcOf([5, 5, 10], camera), viewport: VIEWPORT, faceObjects: meshPair(data, true), data });
+    expect(hit?.kind === 'face' && hit.face).toBe(findFaceAt(m, [5, 5, 10]));
   });
 });

@@ -5,7 +5,7 @@ import { add, distance, scale, type Vec3 } from '../core/math/vec3';
 import { rotation } from '../core/ops/transform';
 import type { DocumentSnapshot } from '../doc/Document';
 import { AXES, pointOnPlane } from './geom';
-import { applyToTargets, parseArray, previewEdges, targetsAt, type Targets } from './targets';
+import { applyToTargets, parseArray, previewLines, targetsAt, type Targets } from './targets';
 import type { AxisLock, InferenceHints, Preview, PreviewLines, Tool, ToolContext, ToolEvent } from './types';
 
 const SNAP_STEP = Math.PI / 12; // 15°
@@ -211,7 +211,7 @@ export class RotateTool implements Tool {
       for (let i = 0; i <= n; i++) arc.push(at((a * i) / n, 0.42));
       lines.push({ points: arc.slice(1).flatMap((p, i) => [arc[i], p]), color: 'select', width: 3 });
       labels.push({ at: at(a / 2, 0.6), text: `${Math.round(((a * 180) / Math.PI) * 10) / 10}°` });
-      if (this.targets) lines.push({ points: previewEdges(this.ctx.doc, this.targets, rotation(c, normal, a)).flat(), color: 'select', width: 1.5 });
+      if (this.targets) lines.push(...previewLines(this.ctx.doc, this.targets, rotation(c, normal, a)));
     }
     return { lines, labels };
   }

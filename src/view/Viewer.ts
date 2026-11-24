@@ -22,7 +22,8 @@ import { formatLength } from '../tools/units';
 import { surfaceOutline } from '../core/model/surfaces';
 import { BackdropLayer } from './backdrop';
 import { buildDisplayData, edgeSegment, faceTriangles, type DisplayData } from './displayData';
-import { dragModeFor, Navigator, ViewHistory, type CameraState, type DragMode, type StandardView } from './navigation';
+import { dragModeFor, Navigator, SmoothDrag, SmoothZoom, ViewHistory, type CameraState, type DragMode, type StandardView } from './navigation';
+import { useFastRaycast } from './fastRaycast';
 import { pickHits } from './picking';
 import { cameraProjector, screenRay } from './projector';
 import { DOUBLE_TAP_MS, DOUBLE_TAP_PX, Glide, midpoint, TAP_SLOP_PX, twoFingerStep, type ScreenPoint } from './touchGestures';
@@ -165,6 +166,17 @@ export class Viewer implements SceneView {
   private readonly freeSection = new THREE.Group();
   private readonly freeOverlay = new THREE.Group();
   private readonly lineMaterials: LineMaterial[] = [];
+  /**
+   * Overlay materials, one per look, kept for the viewer's life. The overlay is rebuilt on every
+   * mouse move; disposing its materials each time made three.js free and recompile their shaders,
+   * which made moving things (the Move tool's preview) lag.
+   */
+  private readonly sharedMaterials = new Map<string, THREE.Material>();
+  /**
+   * Preview lines drawn moved (`PreviewLines.transform`), by the tool's points array: kept while
+   * the tool hands back the same array, so moving a whole room only moves its outline.
+   */
+  private keptLines = new Map<Vec3[], LineSegments2>();
   private readonly svg: SVGSVGElement;
   private readonly boxEl: HTMLDivElement;
   private overlay: Overlay = { selectedFaces: [], selectedEdges: [], selectedLabels: [], selectedGuides: [], selectedGroups: [], preview: {}, snap: null };
@@ -181,6 +193,23 @@ export class Viewer implements SceneView {
   private readonly views = new ViewHistory();
   /** When the wheel last zoomed: a burst of wheel steps counts as one view change. */
   private lastWheel = 0;
+  /** Wheel zoom still to come, eased over a few frames, toward the point under the cursor. */
+  private readonly wheelZoom = new SmoothZoom();
+  private wheelFocus = new THREE.Vector3();
+  /** Where the cursor was when `wheelFocus` was picked. */
+  private wheelScreen: [number, number] = [NaN, NaN];
+  /** The camera animation the wheel zoom belongs to; any other navigation stops it. */
+  private wheelRun = -1;
+  /** Orbit/pan/zoom-drag movement still to come, eased over a few frames, and what it moves. */
+  private readonly dragEase = new SmoothDrag();
+  private dragEaseOf: { mode: DragMode; pivot: THREE.Vector3; depth: number } | null = null;
+  /**
+   * The last mouse event while the view was easing: hover picking waits until the view stops,
+   * since picking a busy model takes longer than a frame and would make the easing stutter.
+   */
+  private hoverEvent: PointerEvent | WheelEvent | null = null;
+  /** The camera animation the drag easing belongs to; any other navigation stops it. */
+  private dragEaseRun = -1;
   private renderQueued = false;
   private readonly resizeObserver: ResizeObserver;
   /** Fingers (and pens) down in Viewer mode: pointer id → client position. */
@@ -228,6 +257,8 @@ export class Viewer implements SceneView {
     this.defaultBack = faceMaterial(THEME.faceBack, THREE.BackSide);
     this.frontMesh = new THREE.Mesh(geometry, [this.defaultFront]);
     this.backMesh = new THREE.Mesh(geometry, [this.defaultBack]);
+    useFastRaycast(this.frontMesh);
+    useFastRaycast(this.backMesh);
     this.edges = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: THEME.edge }));
     this.backEdges = new THREE.LineSegments(
       this.edges.geometry,
@@ -426,6 +457,8 @@ export class Viewer implements SceneView {
       geo.computeBoundingSphere();
       const front = new THREE.Mesh(geo, faded ? this.fadedFace : [this.defaultFront]);
       const back = new THREE.Mesh(geo, faded ? this.fadedFace : [this.defaultBack]);
+      useFastRaycast(front);
+      useFastRaycast(back);
       if (!faded) this.applyPaints(geo, data, front, back);
       else back.visible = false;
       const edgeGeo = new THREE.BufferGeometry();
@@ -648,15 +681,20 @@ export class Viewer implements SceneView {
   // ------------------------------------------------------------------ overlay
 
   private lineMaterial(color: number, width: number, opts: { dashed?: boolean; onTop?: boolean } = {}): LineMaterial {
+    const key = `line ${color} ${width} ${!!opts.dashed} ${!!opts.onTop}`;
+    let m = this.sharedMaterials.get(key) as LineMaterial | undefined;
+    if (!m) {
+      m = new LineMaterial({ color, linewidth: width, dashed: !!opts.dashed, depthTest: !opts.onTop, transparent: !!opts.onTop });
+      this.sharedMaterials.set(key, m);
+      this.lineMaterials.push(m);
+    }
     const { width: w, height: h } = this.viewport();
-    const m = new LineMaterial({ color, linewidth: width, dashed: !!opts.dashed, depthTest: !opts.onTop, transparent: !!opts.onTop });
     m.resolution.set(w, h);
     if (opts.dashed) {
       const size = Math.max(this.sceneSphere().radius / 60, 1);
       m.dashSize = size;
       m.gapSize = size * 0.8;
     }
-    this.lineMaterials.push(m);
     return m;
   }
 
@@ -677,10 +715,13 @@ export class Viewer implements SceneView {
       all.set(p, o);
       o += p.length;
     }
-    const mesh = new THREE.Mesh(
-      new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(all, 3)),
-      new THREE.MeshBasicMaterial({ color, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 }),
-    );
+    const key = `tint ${color} ${opacity}`;
+    let material = this.sharedMaterials.get(key);
+    if (!material) {
+      material = new THREE.MeshBasicMaterial({ color, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 });
+      this.sharedMaterials.set(key, material);
+    }
+    const mesh = new THREE.Mesh(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(all, 3)), material);
     mesh.renderOrder = 1;
     return mesh;
   }
@@ -691,7 +732,7 @@ export class Viewer implements SceneView {
       const obj = child as THREE.Mesh;
       obj.geometry?.dispose();
       const mat = obj.material as THREE.Material | undefined;
-      if (mat) {
+      if (mat && ![...this.sharedMaterials.values()].includes(mat)) {
         mat.dispose();
         const i = this.lineMaterials.indexOf(mat as LineMaterial);
         if (i >= 0) this.lineMaterials.splice(i, 1);
@@ -713,6 +754,7 @@ export class Viewer implements SceneView {
 
   private rebuildOverlay(): void {
     this.clearGroup(this.overlayGroup);
+    for (const o of this.keptLines.values()) this.freeOverlay.remove(o);
     this.clearGroup(this.freeOverlay);
     const { preview, snap } = this.overlay;
     const live = preview.sectionMove ?? null;
@@ -789,10 +831,25 @@ export class Viewer implements SceneView {
       // A locked direction is drawn solid and thicker than a passing inference.
       previewLines.push({ points: [snap.from, snap.point], color, dashed: !snap.locked, width: snap.locked ? 3 : 2 });
     }
+    const kept = new Map<Vec3[], LineSegments2>();
     for (const l of previewLines) {
       if (l.points.length < 2) continue;
-      addFree(this.lines(l.points.flatMap((p) => [...p]), this.lineMaterial(PREVIEW_COLORS[l.color], l.width ?? 1.5, { dashed: l.dashed, onTop: true }), 3));
+      const material = this.lineMaterial(PREVIEW_COLORS[l.color], l.width ?? 1.5, { dashed: l.dashed, onTop: true });
+      if (!l.transform) {
+        addFree(this.lines(flatPoints(l.points), material, 3));
+        continue;
+      }
+      const obj = this.keptLines.get(l.points) ?? this.lines(flatPoints(l.points), material, 3);
+      obj.material = material;
+      const { m, t } = l.transform;
+      obj.matrixAutoUpdate = false;
+      obj.matrix.set(m[0], m[1], m[2], t[0], m[3], m[4], m[5], t[1], m[6], m[7], m[8], t[2], 0, 0, 0, 1);
+      obj.matrixWorldNeedsUpdate = true;
+      kept.set(l.points, obj);
+      addFree(obj);
     }
+    for (const [points, obj] of this.keptLines) if (!kept.has(points)) obj.geometry.dispose();
+    this.keptLines = kept;
 
     const box = preview.box;
     if (box) {
@@ -1279,6 +1336,8 @@ export class Viewer implements SceneView {
       const pivot = this.focusPoint(screen);
       const depth = Math.max(pivot.clone().sub(this.camera.position).dot(this.nav.forward()), this.camera.near);
       this.drag = { mode, x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY, button: e.button, viewsBefore, pivot, depth, pointerId: e.pointerId };
+      this.dragEase.reset(); // rememberView stopped the last drag's easing
+      this.dragEaseOf = { mode, pivot, depth };
       capturePointer(el, e.pointerId, true);
       el.classList.add(mode === 'orbit' ? 'is-orbiting' : mode === 'zoom' ? 'is-zooming' : 'is-panning');
     });
@@ -1293,13 +1352,13 @@ export class Viewer implements SceneView {
         const dy = e.clientY - this.drag.y;
         this.drag.x = e.clientX;
         this.drag.y = e.clientY;
-        if (this.drag.mode === 'orbit') this.nav.orbit(dx, dy, this.drag.pivot);
-        else if (this.drag.mode === 'zoom') this.nav.zoomToward(this.drag.pivot, -dy / 40);
-        else this.nav.pan(dx, dy, this.drag.depth, el.clientHeight);
-        this.requestRender();
+        this.dragEase.add(dx, dy);
+        if (this.dragEaseRun !== this.recenterAnimation) this.runDragEase();
         return;
       }
-      if (!this.viewerMode) this.onPointer('move', this.sample(this.local(e), e, this.leftDown));
+      if (this.viewerMode) return;
+      if (this.easing()) this.hoverEvent = e;
+      else this.onPointer('move', this.sample(this.local(e), e, this.leftDown));
     });
 
     const endDrag = (e: PointerEvent) => {
@@ -1321,11 +1380,15 @@ export class Viewer implements SceneView {
       // Right button pressed and released in place: a right-click, not an orbit.
       if (e.type === 'pointerup' && d.button === 2 && Math.hypot(e.clientX - d.startX, e.clientY - d.startY) < 5) {
         if (this.views.size > d.viewsBefore) this.views.pop(); // the orbit that never happened
+        this.dragEase.reset();
         if (this.viewerMode) return;
         this.onContextMenu(this.sample(this.local(e), e, false), [e.clientX, e.clientY]);
         return;
       }
-      if (!this.viewerMode) this.onPointer('move', this.sample(this.local(e), e, false));
+      // While the view is still easing to a stop, the hover is updated when it gets there.
+      if (this.viewerMode) return;
+      if (this.easing()) this.hoverEvent = e;
+      else this.onPointer('move', this.sample(this.local(e), e, false));
     };
     el.addEventListener('pointerup', endDrag);
     el.addEventListener('pointercancel', endDrag);
@@ -1344,13 +1407,98 @@ export class Viewer implements SceneView {
         const now = performance.now();
         if (now - this.lastWheel > 700) this.rememberView();
         this.lastWheel = now;
-        this.nav.zoomToward(this.focusPoint(screen), -px / 100);
-        this.requestRender();
-        if (!this.viewerMode) this.onPointer('move', this.sample(screen, e, this.leftDown));
+        // Zooming keeps the point under a still cursor in place, so it only needs picking again
+        // when the cursor moves (picking a busy model is slow).
+        const still = this.wheelZoom.active && Math.hypot(screen[0] - this.wheelScreen[0], screen[1] - this.wheelScreen[1]) < 2;
+        if (!still) {
+          this.wheelFocus = this.focusPoint(screen);
+          this.wheelScreen = screen;
+        }
+        this.hoverEvent = e;
+        if (this.wheelRun !== this.recenterAnimation) this.wheelZoom.reset(); // stopped by other navigation
+        this.wheelZoom.add(-px / 100);
+        if (this.wheelRun !== this.recenterAnimation) this.runWheelZoom();
       },
       { passive: false },
     );
   }
+
+  /**
+   * Move the camera by the drag movement still to come, a share each frame, until it is all used
+   * (after the button is let go too, so the view eases to a stop). Another camera move stops it.
+   */
+  private runDragEase(): void {
+    const id = (this.dragEaseRun = this.recenterAnimation);
+    const el = this.renderer.domElement;
+    let last = performance.now() - FIRST_FRAME_MS;
+    const frame = (time: number) => {
+      const of = this.dragEaseOf;
+      if (id !== this.recenterAnimation || !of) return;
+      const [dx, dy] = this.dragEase.take(frameMs(time, last));
+      last = time;
+      if (of.mode === 'orbit') this.nav.orbit(dx, dy, of.pivot);
+      else if (of.mode === 'zoom') this.nav.zoomToward(of.pivot, -dy / 40);
+      else this.nav.pan(dx, dy, of.depth, el.clientHeight);
+      this.requestRender();
+      if (this.dragEase.active) {
+        requestAnimationFrame(frame);
+        return;
+      }
+      this.dragEaseRun = -1;
+      this.hoverAfterEasing();
+    };
+    requestAnimationFrame(frame);
+  }
+
+  /** Whether the view is still easing after a wheel turn or a drag (hover picking waits). */
+  private easing(): boolean {
+    return (this.wheelZoom.active && this.wheelRun === this.recenterAnimation) || (this.dragEase.active && this.dragEaseRun === this.recenterAnimation);
+  }
+
+  /** The view has stopped: update the hover and snap under the cursor once. */
+  private hoverAfterEasing(): void {
+    const e = this.hoverEvent;
+    if (!e || this.easing() || this.drag) return;
+    this.hoverEvent = null;
+    if (!this.viewerMode) this.onPointer('move', this.sample(this.local(e), e, this.leftDown));
+  }
+
+  /** Ease the wheel zoom in over the next frames; stops when another camera move takes over. */
+  private runWheelZoom(): void {
+    const id = (this.wheelRun = this.recenterAnimation);
+    let last = performance.now() - FIRST_FRAME_MS;
+    const frame = (time: number) => {
+      if (id !== this.recenterAnimation) return; // the next wheel turn drops what was left
+      this.nav.zoomToward(this.wheelFocus, this.wheelZoom.take(frameMs(time, last)));
+      last = time;
+      this.requestRender();
+      if (this.wheelZoom.active) {
+        requestAnimationFrame(frame);
+        return;
+      }
+      this.wheelRun = -1;
+      this.hoverAfterEasing();
+    };
+    requestAnimationFrame(frame);
+  }
+}
+
+/**
+ * Easing starts as if a 60 Hz frame had already passed: the first frame can begin before the
+ * event that asked for it, and should still move.
+ */
+const FIRST_FRAME_MS = 1000 / 60;
+
+/** How long an animation frame lasted, for easing; long gaps (a hidden tab) count as 100 ms. */
+function frameMs(time: number, last: number): number {
+  return Math.min(Math.max(time - last, 0), 100);
+}
+
+/** Segment points as one flat array of coordinates. */
+function flatPoints(points: readonly Vec3[]): Float32Array {
+  const out = new Float32Array(points.length * 3);
+  for (let i = 0; i < points.length; i++) out.set(points[i], i * 3);
+  return out;
 }
 
 function concat(parts: Float32Array[]): Float32Array {
