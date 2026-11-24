@@ -121,6 +121,8 @@ async function start(): Promise<void> {
   menu.onDone = () => update();
   // Development builds point out any change that breaks a solid (tests refuse such changes).
   if (import.meta.env.DEV) controller.onSolidsWorse = (label, problem) => console.warn(`[VormCraft] ${label} ${problem}`);
+  // And any change that alters a model without marking it changed (stale drawings, stale undo).
+  if (import.meta.env.DEV) controller.onUnmarkedChange = (label, problem) => console.warn(`[VormCraft] ${label} ${problem}`);
   if (import.meta.env.DEV) Object.assign(window, { __app: { doc, viewer, controller, files, materials, scenes, player, history, lifecycle } });
 
   const hint = document.getElementById('status-hint')!;

@@ -92,9 +92,25 @@ export class Model {
   private nextId = 1;
   private readonly edgeIndex = new Map<string, HalfEdgeId>();
   private readonly outgoingIndex = new Map<VertexId, Set<HalfEdgeId>>();
+  private changes = 0;
+
+  /**
+   * Moves whenever the model changes, so the view and undo can skip models that did not (in a
+   * furnished room, looking at every group after each change took a few hundred milliseconds).
+   * The methods here move it; code that writes to a record directly must call `touch`.
+   */
+  get version(): number {
+    return this.changes;
+  }
+
+  /** Mark the model changed, after writing to its records directly (a position, normal, paint). */
+  touch(): void {
+    this.changes++;
+  }
 
   /** A fresh id, unique across every entity kind in this model. */
   newId(): number {
+    this.changes++;
     return this.nextId++;
   }
 
@@ -108,6 +124,7 @@ export class Model {
     if (id === undefined) return this.newId();
     if (!Number.isInteger(id) || id <= 0) throw new Error(`Invalid id ${id}`);
     if (this.vertices.has(id) || this.curves.has(id) || this.faces.has(id) || this.halfEdges.has(id) || this.loops.has(id)) throw new Error(`Id ${id} is in use`);
+    this.changes++;
     if (id >= this.nextId) this.nextId = id + 1;
     return id;
   }
@@ -153,6 +170,7 @@ export class Model {
 
   removeVertexIfIsolated(v: VertexId): boolean {
     if (!this.vertices.has(v) || this.outgoing(v).size > 0) return false;
+    this.changes++;
     this.vertices.delete(v);
     this.outgoingIndex.delete(v);
     return true;
@@ -201,6 +219,7 @@ export class Model {
     const h = this.he(id);
     const t = this.he(h.twin);
     if (h.loop !== null || t.loop !== null) throw new Error(`Edge ${id} still bounds a face`);
+    this.changes++;
     this.edgeIndex.delete(edgeKey(h.origin, t.origin));
     this.edgeIndex.delete(edgeKey(t.origin, h.origin));
     this.outgoingIndex.get(h.origin)?.delete(h.id);
@@ -217,6 +236,7 @@ export class Model {
   setEdgeCurve(a: VertexId, b: VertexId, curve: CurveId | null): void {
     const id = this.halfEdgeBetween(a, b);
     if (id === undefined) throw new Error(`No edge ${a}-${b}`);
+    this.changes++;
     this.he(id).curve = curve;
     this.he(this.he(id).twin).curve = curve;
   }
@@ -225,6 +245,7 @@ export class Model {
   setEdgeSoft(a: VertexId, b: VertexId, soft: boolean | undefined): void {
     const id = this.halfEdgeBetween(a, b);
     if (id === undefined) throw new Error(`No edge ${a}-${b}`);
+    this.changes++;
     for (const h of [this.he(id), this.he(this.he(id).twin)]) {
       if (soft === undefined) delete h.soft;
       else h.soft = soft;
@@ -235,6 +256,7 @@ export class Model {
   setEdgeHidden(a: VertexId, b: VertexId, hidden: boolean): void {
     const id = this.halfEdgeBetween(a, b);
     if (id === undefined) throw new Error(`No edge ${a}-${b}`);
+    this.changes++;
     for (const h of [this.he(id), this.he(this.he(id).twin)]) {
       if (hidden) h.hidden = true;
       else delete h.hidden;
@@ -288,6 +310,7 @@ export class Model {
   }
 
   private detach(h: HalfEdge): void {
+    this.changes++;
     h.loop = null;
     h.next = null;
     h.prev = null;
@@ -295,6 +318,7 @@ export class Model {
 
   private relink(side: { loop: LoopId | null; prev: HalfEdgeId | null; next: HalfEdgeId | null; wasFirst: boolean }, x: HalfEdgeId, y: HalfEdgeId): void {
     if (side.loop === null) return;
+    this.changes++;
     const hx = this.he(x);
     const hy = this.he(y);
     hx.loop = side.loop;
@@ -348,6 +372,7 @@ export class Model {
     }
     if (opts.id !== undefined && this.faces.has(opts.id)) throw new Error(`Face id ${opts.id} is in use`);
     const id = opts.id ?? this.newId();
+    this.changes++;
     if (opts.id !== undefined && opts.id >= this.nextId) this.nextId = opts.id + 1;
     const normal = opts.normal ? normalize(opts.normal) : newellNormal(outer.map((v) => this.pos(v)));
     const loopIds = all.map((ring) => this.buildLoop(id, ring));
@@ -541,10 +566,23 @@ export class Model {
     return m;
   }
 
+  /**
+   * A copy for an undo snapshot, shared with earlier snapshots while this model has not changed
+   * (copying every group of a furnished room for each step took a tenth of a second). Read it or
+   * copy it; never change it.
+   */
+  snapshotCopy(): Model {
+    if (this.snapshotOf?.version !== this.changes) this.snapshotOf = { version: this.changes, copy: this.clone() };
+    return this.snapshotOf.copy;
+  }
+
+  private snapshotOf: { version: number; copy: Model } | null = null;
+
   /** Replace this model's contents with a copy of another's (restores a snapshot in place). */
   copyFrom(other: Model): void {
     const c = other.clone();
     this.nextId = c.nextId;
+    this.changes++;
     const maps = [
       [this.vertices, c.vertices],
       [this.halfEdges, c.halfEdges],

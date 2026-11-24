@@ -24,6 +24,7 @@ import { BackdropLayer } from './backdrop';
 import { buildDisplayData, edgeSegment, faceTriangles, type DisplayData } from './displayData';
 import { dragModeFor, Navigator, SmoothDrag, SmoothZoom, ViewHistory, type CameraState, type DragMode, type StandardView } from './navigation';
 import { useFastRaycast } from './fastRaycast';
+import { cachedModelKey } from '../core/model/modelKey';
 import { pickHits } from './picking';
 import { cameraProjector, screenRay } from './projector';
 import { DOUBLE_TAP_MS, DOUBLE_TAP_PX, Glide, midpoint, TAP_SLOP_PX, twoFingerStep, type ScreenPoint } from './touchGestures';
@@ -68,6 +69,8 @@ interface Layer {
   front: THREE.Mesh;
   back: THREE.Mesh;
   edges: THREE.LineSegments;
+  /** What it was drawn from (`Viewer.layerKey`): the same key keeps the drawing. */
+  key: string;
 }
 
 /**
@@ -124,6 +127,10 @@ export class Viewer implements SceneView {
   viewerMode = false;
 
   private data: DisplayData | null = null;
+  /** What the model being edited was last drawn from: the same key keeps the drawing. */
+  private dataKey = '';
+  /** A number per material definition object, for keys that change when a material does. */
+  private readonly materialIds = new WeakMap<object, number>();
   private readonly frontMesh: THREE.Mesh;
   private readonly backMesh: THREE.Mesh;
   /** Default face colours (front, and back as a cue), then one pair per material in use. */
@@ -306,28 +313,39 @@ export class Viewer implements SceneView {
   /** Rebuild the display copy from the model and guides. Call after every model change. */
   refresh(): void {
     const editing = this.doc.editing;
-    const data = buildDisplayData(this.model, editing === null ? undefined : this.doc.groups.inheritedMaterial(editing), this.hiddenLinesShown);
-    this.data = data;
-    const g = this.frontMesh.geometry;
-    g.setAttribute('position', new THREE.BufferAttribute(data.positions, 3));
-    g.setAttribute('uv', new THREE.BufferAttribute(data.uvs, 2));
-    g.setIndex(new THREE.BufferAttribute(data.indices, 1));
-    g.computeBoundingSphere();
-    this.applyPaints(g, data, this.frontMesh, this.backMesh);
+    const inherited = editing === null ? undefined : this.doc.groups.inheritedMaterial(editing);
+    const materials = this.materialsKey();
+    // Only what changed is drawn again: moving one object in a big design changes one group.
+    const key = `${this.layerKey(this.model, false, inherited, materials)} ${this.hiddenLinesShown}`;
+    const changed = key !== this.dataKey || !this.data;
+    this.dataKey = key;
+    if (changed) {
+      const data = buildDisplayData(this.model, inherited, this.hiddenLinesShown);
+      this.data = data;
+      const g = this.frontMesh.geometry;
+      g.setAttribute('position', new THREE.BufferAttribute(data.positions, 3));
+      g.setAttribute('uv', new THREE.BufferAttribute(data.uvs, 2));
+      g.setIndex(new THREE.BufferAttribute(data.indices, 1));
+      g.computeBoundingSphere();
+      this.applyPaints(g, data, this.frontMesh, this.backMesh);
+    }
+    const data = this.data!;
     this.styleDefaults();
     const faces = this.faceStyle !== 'wireframe';
     this.frontMesh.visible = this.backMesh.visible = faces;
-    this.rebuildLayers();
+    this.rebuildLayers(materials);
     this.freeUnusedPaints();
     this.sphere = this.computeSphere();
-    const eg = this.edges.geometry;
-    eg.setAttribute('position', new THREE.BufferAttribute(data.edgePositions, 3));
-    eg.setDrawRange(0, data.hiddenFrom * 2);
-    eg.computeBoundingSphere();
+    if (changed) {
+      const eg = this.edges.geometry;
+      eg.setAttribute('position', new THREE.BufferAttribute(data.edgePositions, 3));
+      eg.setDrawRange(0, data.hiddenFrom * 2);
+      eg.computeBoundingSphere();
+      const hg = this.hiddenEdges.geometry;
+      hg.setAttribute('position', new THREE.BufferAttribute(data.edgePositions.slice(data.hiddenFrom * 6), 3));
+      hg.computeBoundingSphere();
+    }
     this.backEdges.computeLineDistances();
-    const hg = this.hiddenEdges.geometry;
-    hg.setAttribute('position', new THREE.BufferAttribute(data.edgePositions.slice(data.hiddenFrom * 6), 3));
-    hg.computeBoundingSphere();
     this.hiddenEdges.computeLineDistances();
     const dash = Math.max(this.sceneSphere().radius / 120, 0.5);
     for (const l of [this.backEdges, this.hiddenEdges]) Object.assign(l.material as THREE.LineDashedMaterial, { dashSize: dash, gapSize: dash * 0.75 });
@@ -435,11 +453,8 @@ export class Viewer implements SceneView {
    * Draw the geometry outside the model being edited: groups (inside the open group, drawn
    * normally) and, while a group is open, the rest of the model (faded).
    */
-  private rebuildLayers(): void {
-    for (const l of this.layers) {
-      l.front.geometry.dispose();
-      l.edges.geometry.dispose();
-    }
+  private rebuildLayers(materials: string): void {
+    const old = new Map(this.layers.map((l) => [l.owner, l]));
     this.layerGroup.clear();
     this.layers = [];
     const editing = this.doc.editing;
@@ -449,7 +464,16 @@ export class Viewer implements SceneView {
       const model = this.doc.modelOf(owner);
       if (model.faces.size === 0 && model.halfEdges.size === 0) continue;
       const faded = editing !== null && (owner === null || !this.doc.groups.isWithin(owner, editing));
-      const data = buildDisplayData(model, owner === null ? undefined : this.doc.groups.inheritedMaterial(owner));
+      const inherited = owner === null ? undefined : this.doc.groups.inheritedMaterial(owner);
+      const key = this.layerKey(model, faded, inherited, materials);
+      const kept = old.get(owner);
+      if (kept?.key === key) {
+        old.delete(owner);
+        this.layerGroup.add(kept.front, kept.back, kept.edges);
+        this.layers.push(kept);
+        continue;
+      }
+      const data = buildDisplayData(model, inherited);
       const geo = new THREE.BufferGeometry();
       geo.setAttribute('position', new THREE.BufferAttribute(data.positions, 3));
       geo.setAttribute('uv', new THREE.BufferAttribute(data.uvs, 2));
@@ -467,8 +491,28 @@ export class Viewer implements SceneView {
       if (faded) front.renderOrder = edges.renderOrder = 2;
       if (this.faceStyle === 'wireframe') front.visible = back.visible = false;
       this.layerGroup.add(front, back, edges);
-      this.layers.push({ owner, data, front, back, edges });
+      this.layers.push({ owner, data, front, back, edges, key });
     }
+    for (const l of old.values()) {
+      l.front.geometry.dispose();
+      l.edges.geometry.dispose();
+    }
+  }
+
+  /** What a model's drawing depends on, as a key: its contents, how it is shown and its paints. */
+  private layerKey(model: Model, faded: boolean, inherited: MaterialId | null | undefined, materials: string): string {
+    return `${cachedModelKey(model)} ${faded} ${inherited ?? ''} ${this.faceStyle} ${materials}`;
+  }
+
+  /** The material definitions, by identity: paints are made again when one is replaced. */
+  private materialsKey(): string {
+    const ids: number[] = [];
+    for (const def of this.materials.items.values()) {
+      let id = this.materialIds.get(def);
+      if (id === undefined) this.materialIds.set(def, (id = ++materialCounter));
+      ids.push(id);
+    }
+    return ids.join(',');
   }
 
   /** Whether lines the user hid are drawn dashed, so they can be picked (and unhidden). */
@@ -1493,6 +1537,8 @@ const FIRST_FRAME_MS = 1000 / 60;
 function frameMs(time: number, last: number): number {
   return Math.min(Math.max(time - last, 0), 100);
 }
+
+let materialCounter = 0;
 
 /** Segment points as one flat array of coordinates. */
 function flatPoints(points: readonly Vec3[]): Float32Array {

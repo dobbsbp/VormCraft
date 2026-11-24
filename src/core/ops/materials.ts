@@ -4,6 +4,7 @@ import type { FaceId, MaterialId, Model } from '../model/Model';
 
 /** Paint faces with a material, or back to the default material with `undefined`. */
 export function paintFaces(model: Model, faces: Iterable<FaceId>, material: MaterialId | undefined): void {
+  model.touch();
   for (const id of faces) {
     const f = model.face(id);
     if (material === undefined) delete f.material;
@@ -14,6 +15,7 @@ export function paintFaces(model: Model, faces: Iterable<FaceId>, material: Mate
 /** Remove a material from every face that uses it (they go back to the default material). */
 export function unpaintMaterial(model: Model, material: MaterialId): void {
   for (const f of model.faces.values()) if (f.material === material) delete f.material;
+  model.touch();
 }
 
 /**
@@ -26,6 +28,7 @@ export function unpaintMaterial(model: Model, material: MaterialId): void {
 export function inheritMaterials(before: Model, after: Model): void {
   const painted = [...before.faces.values()].filter((f) => f.material !== undefined);
   if (!painted.length) return;
+  after.touch();
   const regions = new Map<FaceId, { plane: Plane; rings: Vec2[][] }>();
   const regionOf = (id: FaceId) => {
     if (!regions.has(id)) {

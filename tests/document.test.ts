@@ -1,6 +1,8 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { buildDemoModel } from '../src/app/demoModel';
-import { checkWatertight, drawRectangle, findFaceAt, GROUND_PLANE, initBooleanKernel, volume } from '../src/core';
+import { checkWatertight, drawRectangle, findFaceAt, GROUND_PLANE, initBooleanKernel, Model, modelKey, pushPull, volume } from '../src/core';
+import { inheritMaterials, paintFaces, unpaintMaterial } from '../src/core/ops/materials';
+import { transformVertices, translation } from '../src/core/ops/transform';
 import { Document } from '../src/doc/Document';
 import { FileFormatError, FORMAT_VERSION, parseDocument, serializeDocument } from '../src/io/fileFormat';
 import { ev, harness, use } from './helpers/tools';
@@ -108,6 +110,69 @@ describe('undo / redo', () => {
     expect(H.controller.dirty).toBe(true);
     H.controller.markSaved();
     expect(H.controller.dirty).toBe(false);
+  });
+});
+
+describe('model versions (skipping what did not change)', () => {
+  const slab = () => {
+    const m = new Model();
+    pushPull(m, drawRectangle(m, GROUND_PLANE, [0, 0, 0], 10, 10).inner!, 5);
+    return m;
+  };
+
+  it('move with every kind of change, and not when only read', () => {
+    const m = slab();
+    const changed = (f: () => void) => {
+      const v = m.version;
+      f();
+      return m.version !== v;
+    };
+    const face = [...m.faces.keys()][0];
+    const e = [...m.edges()][0];
+    expect(changed(() => m.validate())).toBe(false);
+    expect(changed(() => modelKey(m))).toBe(false);
+    expect(changed(() => transformVertices(m, new Set(m.vertices.keys()), translation([1, 0, 0])))).toBe(true);
+    expect(changed(() => paintFaces(m, [face], 'oak'))).toBe(true);
+    expect(changed(() => unpaintMaterial(m, 'oak'))).toBe(true);
+    expect(changed(() => m.setEdgeSoft(m.he(e).origin, m.dest(e), true))).toBe(true);
+    expect(changed(() => m.setEdgeHidden(m.he(e).origin, m.dest(e), true))).toBe(true);
+    expect(changed(() => m.copyFrom(slab()))).toBe(true);
+    const lone = new Model();
+    drawRectangle(lone, GROUND_PLANE, [0, 0, 0], 10, 10);
+    const v = lone.version;
+    lone.flipFace([...lone.faces.keys()][0]);
+    expect(lone.version).not.toBe(v);
+    const painted = slab();
+    paintFaces(painted, painted.faces.keys(), 'oak');
+    const after = slab();
+    const w = after.version;
+    inheritMaterials(painted, after);
+    expect(after.version).not.toBe(w);
+  });
+
+  it('let undo snapshots share copies of groups that did not change', () => {
+    const doc = new Document();
+    const a = doc.groups.add(slab(), null);
+    const b = doc.groups.add(slab(), null);
+    const first = doc.snapshot();
+    const second = doc.snapshot();
+    expect(second.groups.get(a)!.model).toBe(first.groups.get(a)!.model);
+    expect(second.model).toBe(first.model);
+
+    const painted = doc.groups.get(a)!.model;
+    paintFaces(painted, painted.faces.keys(), 'oak');
+    const third = doc.snapshot();
+    expect(third.groups.get(a)!.model).not.toBe(first.groups.get(a)!.model);
+    expect(third.groups.get(b)!.model).toBe(first.groups.get(b)!.model);
+
+    // Restoring gives the document its own copies: changing them leaves the snapshots alone.
+    doc.restore(first);
+    expect([...doc.groups.get(a)!.model.faces.values()].every((f) => f.material === undefined)).toBe(true);
+    const keyBefore = modelKey(first.groups.get(b)!.model);
+    const live = doc.groups.get(b)!.model;
+    paintFaces(live, live.faces.keys(), 'oak');
+    expect(modelKey(first.groups.get(b)!.model)).toBe(keyBefore);
+    expect(modelKey(third.groups.get(b)!.model)).toBe(keyBefore);
   });
 });
 

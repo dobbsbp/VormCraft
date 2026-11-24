@@ -13,6 +13,7 @@ export { volume, faceArea, faceCentre } from './check/measure';
 export { describeSolid, facesPressed, solidReport, solidsMadeWorse, volumeLines, type SolidReport } from './check/solid';
 export { triangulateFace, triangulateFaces, type TriangleMesh } from './triangulate';
 export { findFaceAt } from './model/query';
+export { cachedModelKey, KEYED_FIELDS, modelKey } from './model/modelKey';
 export { offsetFace, offsetFaceRings, offsetRing2D, offsetRingValid, type OffsetRing } from './ops/offset';
 export { erase } from './ops/erase';
 export { chainPlane, edgeChain, offsetChain, offsetChainPoints, offsetEdges, offsetPolyline2D, type EdgeChain } from './ops/offsetEdges';

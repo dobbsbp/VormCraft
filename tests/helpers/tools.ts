@@ -13,6 +13,10 @@ export function harness() {
   controller.onSolidsWorse = (label, problem) => {
     throw new Error(`${label} ${problem}`);
   };
+  // And no change may alter a model without marking it changed (the view and undo rely on it).
+  controller.onUnmarkedChange = (label, problem) => {
+    throw new Error(`${label} ${problem}`);
+  };
   return { doc, model: doc.model, controller, ctx: controller.ctx };
 }
 

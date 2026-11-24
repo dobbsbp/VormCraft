@@ -4,6 +4,10 @@ What changed in each version of VormCraft. The section for a version is also sho
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
+## 0.9.3
+
+- Moving, rotating or changing one object in a large design no longer pauses: only what changed is drawn again.
+
 ## 0.9.2
 
 - The web addresses and the e-mail address in About VormCraft can be clicked.

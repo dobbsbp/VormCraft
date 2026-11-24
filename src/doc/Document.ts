@@ -73,7 +73,7 @@ export class Document {
   }
 
   snapshot(): DocumentSnapshot {
-    return { model: this.root.clone(), groups: this.groups.clone(), guides: this.guides.clone(), labels: this.labels.clone(), materials: this.materials.clone(), scenes: this.scenes.clone(), units: this.units, sections: this.sections.clone() };
+    return { model: this.root.snapshotCopy(), groups: this.groups.clone(true), guides: this.guides.clone(), labels: this.labels.clone(), materials: this.materials.clone(), scenes: this.scenes.clone(), units: this.units, sections: this.sections.clone() };
   }
 
   /**

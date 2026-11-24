@@ -10,7 +10,7 @@ TypeScript, Three.js, Manifold, Tauri and Vitest.
 `README.md` is the public feature list; keep it current when adding features.
 Unfinished work and known bugs live in `TODO.md`.
 
-## Current state (0.9.2, November 2026)
+## Current state (0.9.3, November 2026)
 - Released for Windows (NSIS installer, auto-update) and the web (installable PWA, works offline).
   All are built by GitHub Actions from a version tag.
 - Linux (since 0.6.0): AppImages for x86_64 and ARM64 with auto-update, on WebKitGTK. About shows
@@ -155,6 +155,9 @@ Unfinished work and known bugs live in `TODO.md`.
 ## Conventions
 - **Units and axes:** millimetres; Z is up (red = X, green = Y, blue = Z). Library items stand on
   z = 0, centred, front facing -Y.
+- **Model versions:** `Model.version` moves with every change made through its methods. Code that
+  writes to a record directly (a position, normal or paint) must call `model.touch()`: the view,
+  snapping and undo skip models whose version did not move (tests check it on every change).
 - **Tolerance:** `TOL` in `src/core/math/tolerance.ts` (0.001 mm). Compare positions with it,
   never with `===`.
 - **Loop orientation:** face loops are counter-clockwise about the face normal; hole loops are

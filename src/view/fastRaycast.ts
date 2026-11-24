@@ -1,6 +1,10 @@
 import * as THREE from 'three';
 import { acceleratedRaycast, MeshBVH } from 'three-mesh-bvh';
 
+const sphere = new THREE.Sphere();
+/** The positions each geometry's bounding sphere was worked out from. */
+const spheresFor = new WeakMap<THREE.BufferGeometry, unknown>();
+
 /** What each geometry's bounds tree was built from, to tell when it is out of date. */
 const builtFrom = new WeakMap<THREE.BufferGeometry, { position: unknown; index: unknown; groups: number }>();
 
@@ -16,6 +20,14 @@ export function useFastRaycast(mesh: THREE.Mesh): void {
     const g = this.geometry;
     const position = g.getAttribute('position');
     if (!position || !g.index || g.index.count === 0) return;
+    // A ray that misses the bounding sphere misses the mesh: no tree needed (after a change, the
+    // first ray would otherwise build one for every object in the design at once).
+    if (!g.boundingSphere || spheresFor.get(g) !== position) {
+      g.computeBoundingSphere();
+      spheresFor.set(g, position);
+    }
+    sphere.copy(g.boundingSphere!).applyMatrix4(this.matrixWorld);
+    if (!raycaster.ray.intersectsSphere(sphere)) return;
     const built = builtFrom.get(g);
     if (!g.boundsTree || !built || built.position !== position || built.index !== g.index || built.groups !== groupsKey(g)) {
       g.boundsTree = new MeshBVH(g, { indirect: true });

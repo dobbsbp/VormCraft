@@ -5,6 +5,8 @@ import { checkWatertight, drawCircle, drawRectangle, findFaceAt, GROUND_PLANE, i
 import { buildDisplayData, faceTriangles, type DisplayData } from '../src/view/displayData';
 import { dragModeFor, Navigator, SmoothDrag, SmoothZoom } from '../src/view/navigation';
 import { useFastRaycast } from '../src/view/fastRaycast';
+import { KEYED_FIELDS, modelKey } from '../src/core/model/modelKey';
+import { LIBRARY } from '../src/library';
 import { pick } from '../src/view/picking';
 
 beforeAll(async () => {
@@ -492,5 +494,77 @@ describe('fast picking (bounds tree)', () => {
     const { camera } = cameraAt([5, 5, 200], [5, 5, 0]);
     const hit = pick({ camera, ndc: ndcOf([5, 5, 10], camera), viewport: VIEWPORT, faceObjects: meshPair(data, true), data });
     expect(hit?.kind === 'face' && hit.face).toBe(findFaceAt(m, [5, 5, 10]));
+  });
+});
+
+describe('model keys (redraw only what changed)', () => {
+  it('read every field the records carry (a field it missed would leave stale drawings)', () => {
+    const models = [buildDemoModel(), ...LIBRARY.flatMap((item) => item.build().map((p) => p.model))];
+    const soft = box();
+    const e = [...soft.edges()][0];
+    soft.setEdgeSoft(soft.he(e).origin, soft.dest(e), true);
+    soft.setEdgeHidden(soft.he(e).origin, soft.dest(e), true);
+    [...soft.faces.values()][0].material = 'oak';
+    models.push(soft);
+    const seen = { vertex: new Set<string>(), halfEdge: new Set<string>(), loop: new Set<string>(), face: new Set<string>(), curve: new Set<string>() };
+    for (const m of models) {
+      for (const [kind, map] of [['vertex', m.vertices], ['halfEdge', m.halfEdges], ['loop', m.loops], ['face', m.faces], ['curve', m.curves]] as const) {
+        for (const r of map.values()) for (const k of Object.keys(r)) seen[kind].add(k);
+      }
+    }
+    for (const kind of Object.keys(seen) as (keyof typeof seen)[]) {
+      expect([...seen[kind]].filter((k) => !(KEYED_FIELDS[kind] as readonly string[]).includes(k))).toEqual([]);
+    }
+    expect(seen.curve.size).toBeGreaterThan(0);
+  });
+
+  it('stay the same for an unchanged model or a copy, and change with any edit', () => {
+    const m = box();
+    const key = modelKey(m);
+    expect(modelKey(m)).toBe(key);
+    expect(modelKey(m.clone())).toBe(key);
+
+    const moved = m.clone();
+    const v = [...moved.vertices.values()][0];
+    v.pos = [v.pos[0] + 1e-9, v.pos[1], v.pos[2]]; // even a tiny move
+    expect(modelKey(moved)).not.toBe(key);
+
+    const painted = m.clone();
+    [...painted.faces.values()][0].material = 'oak';
+    expect(modelKey(painted)).not.toBe(key);
+
+    const soft = m.clone();
+    const e = [...soft.edges()][0];
+    soft.setEdgeSoft(soft.he(e).origin, soft.dest(e), true);
+    expect(modelKey(soft)).not.toBe(key);
+
+    const hidden = m.clone();
+    const h = [...hidden.edges()][0];
+    hidden.setEdgeHidden(hidden.he(h).origin, hidden.dest(h), true);
+    expect(modelKey(hidden)).not.toBe(key);
+
+    const face = new Model();
+    drawRectangle(face, GROUND_PLANE, [0, 0, 0], 10, 10);
+    const flipped = face.clone();
+    flipped.flipFace([...flipped.faces.keys()][0]);
+    expect(modelKey(flipped)).not.toBe(modelKey(face));
+
+    const bigger = box(10, 10, 11);
+    expect(modelKey(bigger)).not.toBe(key);
+    expect(new Set([key, modelKey(moved), modelKey(painted), modelKey(soft), modelKey(hidden), modelKey(flipped), modelKey(bigger)]).size).toBe(7);
+  });
+
+  it('a ray that misses an object builds no search tree for it', () => {
+    const data = buildDisplayData(box());
+    const [front] = meshes(data);
+    useFastRaycast(front);
+    const { camera } = cameraAt([5, 5, 60], [5, 5, 0]);
+    const rc = new THREE.Raycaster();
+    rc.setFromCamera(new THREE.Vector2(0.9, 0.9), camera); // well off to the side
+    expect(rc.intersectObject(front, false)).toEqual([]);
+    expect(front.geometry.boundsTree).toBeUndefined();
+    rc.setFromCamera(ndcOf([5, 5, 10], camera), camera);
+    expect(rc.intersectObject(front, false).length).toBeGreaterThan(0);
+    expect(front.geometry.boundsTree).toBeDefined();
   });
 });

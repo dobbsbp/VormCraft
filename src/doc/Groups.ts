@@ -272,12 +272,14 @@ export class Groups {
     }
   }
 
-  clone(): Groups {
+  /** A copy; `forSnapshot` shares unchanged models with earlier snapshots (see `snapshotCopy`). */
+  clone(forSnapshot = false): Groups {
     const c = new Groups();
     c.nextId = this.nextId;
     c.nextComponentId = this.nextComponentId;
-    for (const [k, g] of this.items) c.items.set(k, { ...g, model: g.model.clone(), ...(g.component ? { component: { ...g.component } } : {}) });
-    for (const [k, d] of this.components) c.components.set(k, { ...d, parts: d.parts.map((p) => ({ ...p, model: p.model.clone() })) });
+    const copy = (m: Model) => (forSnapshot ? m.snapshotCopy() : m.clone());
+    for (const [k, g] of this.items) c.items.set(k, { ...g, model: copy(g.model), ...(g.component ? { component: { ...g.component } } : {}) });
+    for (const [k, d] of this.components) c.components.set(k, { ...d, parts: d.parts.map((p) => ({ ...p, model: copy(p.model) })) });
     return c;
   }
 

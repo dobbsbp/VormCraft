@@ -14,6 +14,7 @@ import { ALL_PARTS, applyScene, captureScene, type SceneId, type SceneParts, typ
 import { extractGeometry, mergeGeometry, modelBounds } from '../core/ops/group';
 import { mergeFlatFaces, shapesOf, unifySolids } from '../core/ops/mergeShapes';
 import { reverseFaces } from '../core/ops/orient';
+import { modelKey } from '../core/model/modelKey';
 import { scaling, selectionVertices, transformVertices } from '../core/ops/transform';
 import { pointVertices } from '../core/ops/points';
 import { edgeId } from './Selection';
@@ -195,6 +196,7 @@ export class ToolController {
   private apply(change: () => void, base: DocumentSnapshot | undefined, by: Tool | null, label = by?.name ?? 'Edit', inherit = true): DocumentSnapshot {
     if (this.previewing) throw new Error('You are looking at an earlier version: Restore it, or go Back to now, to make changes');
     const before = this.doc.snapshot();
+    const marks = this.onUnmarkedChange ? this.modelMarks(before) : null;
     try {
       if (base) this.doc.restore(base);
       change();
@@ -210,6 +212,7 @@ export class ToolController {
         // Erasing faces opens a solid on purpose.
         if (worse && !(ERASING.has(label) && !/inside out|pressed/.test(worse))) this.onSolidsWorse(label, worse);
       }
+      if (marks) this.checkMarks(marks, label);
     } catch (err) {
       this.doc.restore(before);
       throw err;
@@ -231,6 +234,30 @@ export class ToolController {
    * from it refuses the change. Off (null) in released builds: the check costs time on big models.
    */
   onSolidsWorse: ((label: string, problem: string) => void) | null = null;
+
+  /**
+   * Development builds and tests: told when a change altered a model without moving its version
+   * (a direct write to a record with no `touch()`), which would leave a stale drawing on screen and
+   * a stale copy in undo. Throwing from it refuses the change. Off in released builds.
+   */
+  onUnmarkedChange: ((label: string, problem: string) => void) | null = null;
+
+  /** Every model's version and fingerprint, and the snapshot copies' fingerprints (never changed). */
+  private modelMarks(snapshot: DocumentSnapshot) {
+    const live = [...this.doc.allModels(), ...[...this.doc.groups.components.values()].flatMap((c) => c.parts.map((p) => p.model))];
+    const copies = [snapshot.model, ...[...snapshot.groups.items.values()].map((g) => g.model), ...[...snapshot.groups.components.values()].flatMap((c) => c.parts.map((p) => p.model))];
+    return {
+      live: new Map(live.map((m) => [m, { version: m.version, key: modelKey(m) }])),
+      copies: new Map(copies.map((m) => [m, modelKey(m)])),
+    };
+  }
+
+  private checkMarks(marks: ReturnType<ToolController['modelMarks']>, label: string): void {
+    for (const [m, was] of marks.live) {
+      if (m.version === was.version && modelKey(m) !== was.key) this.onUnmarkedChange!(label, 'changed a model without moving its version');
+    }
+    for (const [m, key] of marks.copies) if (modelKey(m) !== key) this.onUnmarkedChange!(label, 'changed an undo snapshot');
+  }
 
   /** Counts document changes (panels redraw when it moves). */
   revision = 0;
@@ -574,18 +601,18 @@ export class ToolController {
     this.selection.set(model.faces.keys(), [...model.edges()].filter((e) => !model.he(e).hidden), [], this.doc.groups.children(this.doc.editing).filter((g) => !g.hidden).map((g) => g.id));
   }
 
-  /** The top level and every group that is not hidden. */
-  /** Each model's bounds for snapping, worked out again after any document change. */
+  /** Each model's bounds for snapping, worked out again when the model changes. */
   private boundsOf(m: Model): { min: Vec3; max: Vec3 } | null {
     const c = this.bounds.get(m);
-    if (c && c.revision === this.revision && c.vertices === m.vertices.size) return c.box;
+    if (c && c.version === m.version) return c.box;
     const box = modelBounds([m]);
-    this.bounds.set(m, { revision: this.revision, vertices: m.vertices.size, box });
+    this.bounds.set(m, { version: m.version, box });
     return box;
   }
 
-  private readonly bounds = new WeakMap<Model, { revision: number; vertices: number; box: { min: Vec3; max: Vec3 } | null }>();
+  private readonly bounds = new WeakMap<Model, { version: number; box: { min: Vec3; max: Vec3 } | null }>();
 
+  /** The top level and every group that is not hidden. */
   private visibleModels() {
     return [this.doc.root, ...[...this.doc.groups.items.values()].filter((g) => !this.doc.groups.isHidden(g.id)).map((g) => g.model)];
   }

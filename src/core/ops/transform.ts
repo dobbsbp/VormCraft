@@ -129,9 +129,11 @@ export function transformVertices(model: Model, vertices: ReadonlySet<VertexId>,
   const oldPos = new Map([...vertices].map((v) => [v, model.pos(v)]));
   const oldNormal = new Map([...faces].map((f) => [f, model.face(f).normal]));
   const undo = () => {
+    model.touch();
     for (const [v, p] of oldPos) model.vertices.get(v)!.pos = p;
     for (const [f, n] of oldNormal) model.face(f).normal = n;
   };
+  model.touch();
   for (const v of vertices) model.vertices.get(v)!.pos = applyAffine(a, model.pos(v));
 
   const bent: FaceId[] = [];
@@ -171,6 +173,7 @@ export function transformVertices(model: Model, vertices: ReadonlySet<VertexId>,
   }
 
   const s = similarityScale(a);
+  model.touch();
   for (const c of curves) {
     const curve = model.curves.get(c);
     if (!curve) continue;
