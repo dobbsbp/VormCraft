@@ -1,4 +1,4 @@
-import { strFromU8, strToU8 } from 'fflate';
+import { strFromU8, strToU8, zipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
 import { DriveApi, DriveError, type DriveFile } from '../src/app/drive/driveApi';
 import { DriveAutosaveScheduler, type Clock } from '../src/app/drive/driveAutosave';
@@ -144,17 +144,21 @@ describe('Google Drive', () => {
     expect(strFromU8((await session.open(file)).bytes)).toBe('{"a":2}');
   });
 
-  it('a .vorm saved as bytes gets the VormCraft file type; one saved before it is given it when saved over', async () => {
+  it('the Drive file type follows the contents: plain JSON stays JSON (so 0.9 apps list it), a zip is a VormCraft file', async () => {
     const { session, fake } = setup();
     await session.connect();
-    const old = await session.create('Old.vorm', '{"a":1}');
-    expect(fake.files.get(old.file.id)!.mimeType).toBe('application/json');
-    const zipped = strToU8('PK zipped design');
+    // A plain design, passed as bytes as Save does today: still JSON.
+    const plain = await session.create('Plain.vorm', strToU8('{"a":1}'));
+    expect(fake.files.get(plain.file.id)!.mimeType).toBe('application/json');
+    const saved = await session.update(plain.location, 'Plain.vorm', strToU8('{"a":2}'));
+    expect(fake.files.get(plain.file.id)!.mimeType).toBe('application/json');
+    expect(strFromU8((await session.open(plain.file)).bytes)).toBe('{"a":2}');
+    // A zipped design (format 9) gets the VormCraft type, also when it replaces a plain one.
+    const zipped = zipSync({ 'design.json': strToU8('{}') });
     const created = await session.create('New.vorm', zipped);
     expect(fake.files.get(created.file.id)!.mimeType).toBe('application/x-vormcraft');
-    await session.update(old.location, 'Old.vorm', zipped);
-    expect(fake.files.get(old.file.id)!.mimeType).toBe('application/x-vormcraft');
-    expect(strFromU8((await session.open(old.file)).bytes)).toBe('PK zipped design');
+    await session.update(saved.location, 'Plain.vorm', zipped);
+    expect(fake.files.get(plain.file.id)!.mimeType).toBe('application/x-vormcraft');
   });
 
   it('notices a file changed elsewhere, and can replace it when asked', async () => {

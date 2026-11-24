@@ -4,15 +4,18 @@
  * tested against a stand-in.
  */
 
+import { isZipped } from '../../io/vormFile';
+
 export const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 const API = 'https://www.googleapis.com/drive/v3';
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3';
 const FOLDER = 'application/vnd.google-apps.folder';
-/** Settings files, and designs saved before format 9 (plain JSON). */
+/** Settings files, and designs as plain JSON (all of them before format 9, which 0.9 apps list). */
 const FILE_TYPE = 'application/json';
-/** Designs from format 9 on (a zip; the type the desktop and web apps register for .vorm files). */
+/** Zipped designs (format 9; the type the desktop and web apps register for .vorm files). */
 const DESIGN_TYPE = 'application/x-vormcraft';
-const typeOf = (data: string | Uint8Array) => (typeof data === 'string' ? FILE_TYPE : DESIGN_TYPE);
+/** By what the file is, not how it is passed: a plain-JSON design stays visible to 0.9 apps. */
+const typeOf = (data: string | Uint8Array) => (typeof data !== 'string' && isZipped(data) ? DESIGN_TYPE : FILE_TYPE);
 const FIELDS = 'id,name,modifiedTime,size,headRevisionId,parents';
 /** Larger files upload in pieces (resumable), so a dropped connection does not start over. */
 const RESUMABLE_ABOVE = 5 * 1024 * 1024;
@@ -214,8 +217,8 @@ export class DriveApi {
    * complete, so the file is always either the old version or the new one, never half of each.
    */
   async update(fileId: string, data: string | Uint8Array): Promise<DriveFile> {
-    // A design saved before format 9 becomes the new type when it is saved over.
-    return this.upload('PATCH', `${UPLOAD}/files/${fileId}`, typeof data === 'string' ? {} : { mimeType: DESIGN_TYPE }, data);
+    // The type follows the contents (a plain design saved over as a zip becomes the new type).
+    return this.upload('PATCH', `${UPLOAD}/files/${fileId}`, { mimeType: typeOf(data) }, data);
   }
 
   private async upload(method: 'POST' | 'PATCH', base: string, metadata: object, data: string | Uint8Array): Promise<DriveFile> {

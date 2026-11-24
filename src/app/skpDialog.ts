@@ -37,12 +37,12 @@ export function showSkpDialog(fileName: string, stats: SkpStats, count: (leaveOu
     <form method="dialog">
       <h2></h2>
       <p class="note summary pre"></p>
-      <p class="check bad warning" hidden></p>
       <div class="heavy" hidden>
         <p class="note">These are placed so often that they make up most of the model. Leave out:</p>
         <div class="rows"></div>
         <p class="note total"></p>
       </div>
+      <p class="check bad warning" hidden></p>
       <label class="row"><input type="checkbox" name="scenes"> Bring in its scenes (camera views)</label>
       <label class="row"><input type="checkbox" name="guides"> Bring in its guides</label>
       <p class="note">The file comes in as a group, with its groups and components inside as groups of their own, with their paint. Layers/tags are not brought in.</p>
@@ -87,7 +87,7 @@ export function showSkpDialog(fileName: string, stats: SkpStats, count: (leaveOu
     total.textContent = `The model comes in with ${n(faces)} faces.`;
     warning.hidden = faces <= LARGE_SKP;
     ok.disabled = faces > MAX_SKP;
-    ok.textContent = faces > LARGE_SKP ? 'Import anyway' : 'Import';
+    ok.textContent = faces > LARGE_SKP && faces <= MAX_SKP ? 'Import anyway' : 'Import';
     if (faces > MAX_SKP) {
       warning.textContent = `This model is too large to import: ${n(faces)} faces once every copy of its components is placed (${n(stats.definitionFaces)} drawn), and VormCraft can hold about ${n(MAX_SKP)}.${heavyBoxes.length ? ' Leave out more of the parts above.' : ''}`;
     } else {
@@ -117,5 +117,11 @@ export function showSkpDialog(fileName: string, stats: SkpStats, count: (leaveOu
       finish({ ...choice, leaveOut: leaveOut() });
     });
     dlg.showModal();
+    // Keep the top where it opened, so ticking a part (which can show a warning) never moves the
+    // list under the mouse. (Centred, the window would move up by half of what it grows.)
+    if (heavyBoxes.length) {
+      dlg.style.marginTop = `${Math.max(16, dlg.getBoundingClientRect().top - 40)}px`;
+      dlg.style.marginBottom = 'auto';
+    }
   });
 }

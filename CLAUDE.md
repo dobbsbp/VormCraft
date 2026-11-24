@@ -10,7 +10,7 @@ TypeScript, Three.js, Manifold, Tauri and Vitest.
 `README.md` is the public feature list; keep it current when adding features.
 Unfinished work and known bugs live in `TODO.md`.
 
-## Current state (0.9.3, November 2026)
+## Current state (0.9.4, November 2026)
 - Released for Windows (NSIS installer, auto-update) and the web (installable PWA, works offline).
   All are built by GitHub Actions from a version tag.
 - Linux (since 0.6.0): AppImages for x86_64 and ARM64 with auto-update, on WebKitGTK. About shows
@@ -43,7 +43,8 @@ Unfinished work and known bugs live in `TODO.md`.
   design checks, previews and places the `vormcraft-build` JSON it writes (tested with Claude,
   ChatGPT, Grok and Gemini). VormCraft never contacts an AI itself.
 - **Until 1.0.0 (1 January 2027):** bug fixes and adjustments only; releases are held unless the
-  maintainer asks.
+  maintainer asks. 0.9.4 (24 November 2026) is the bridge for file format 9: it opens the new
+  zipped files but still saves format 8; 1.0.0 turns `WRITE_ZIPPED` on.
 - **Checks:** Entity Info shows volumes and whether shapes are proper solids; tests refuse changes
   that break solids.
 - **Files:**

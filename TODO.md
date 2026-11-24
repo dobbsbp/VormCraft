@@ -119,9 +119,8 @@ CHANGELOG.md when it ships.
     which the web app's CSP refuses) so saving a very large design never stalls the window. Today
     a 230,000-face design takes about 1 s to write the JSON and 1.7 s to compress.
   - A `thumbnail.png` entry (a picture of the design) for the Drive browser and recent files.
-  - Rollout (decided November 2026): the bridge release (0.9.4, or 1.0.0 if nothing ships
-    before it) opens format 9 and still saves format 8. The release after turns `WRITE_ZIPPED`
-    on in `fileFormat.ts`; then also: README (files 3 to 5 times smaller), CHANGELOG, a new
+  - Rollout (decided November 2026): the bridge release, 0.9.4 (24 November 2026), opens
+    format 9 and still saves format 8. 1.0.0 turns `WRITE_ZIPPED` on in `fileFormat.ts`; then also: README (files 3 to 5 times smaller), CHANGELOG, a new
     `tests/fixtures` file only if the format changes again. Before it, by hand: install 0.9.3
     from GitHub Releases, open a file the bridge saved (locally and through Google Drive).
     0.9.3 and earlier say "This is not a VormCraft file" for a zipped file, with no offer to
