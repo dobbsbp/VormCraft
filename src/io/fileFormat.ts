@@ -20,7 +20,30 @@ import { applyPatch, diffLines, type Patch } from './lineDiff';
 export const FILE_EXTENSION = 'vorm';
 /** Extensions of files saved before the app was renamed (they still open). */
 export const OLD_FILE_EXTENSIONS = ['benup'];
-export const FORMAT_VERSION = 8;
+export const FORMAT_VERSION = 9;
+/**
+ * The oldest format version whose reader can open what this version writes (`minReaderVersion`
+ * in the file). Raise it only when older readers would misread a file; something they can safely
+ * leave out (a new optional field) keeps it as it is, so older apps still open newer files and
+ * only miss the new parts. Format 9 changed only the container (see `vormFile.ts`) and the
+ * rounding of positions, so its JSON reads as format 8.
+ */
+export const MIN_READER_VERSION = 8;
+/** The plain-JSON format every 0.9 app opens (format 9's JSON, marked 8, without `savedBy`). */
+export const OLDER_VERSION = 8;
+/**
+ * Whether Save writes format 9 (a zip). Off for the bridge release: it opens format 9 files but
+ * keeps saving format 8 as plain JSON, so files it saves still open in the 0.9 apps not updated
+ * yet. Turn it on one release later (1.0.0), once updates have reached most people. A change older
+ * apps cannot read always ships reading one release before writing.
+ */
+export const WRITE_ZIPPED = false;
+/** The format version this app writes: in files, autosaved copies, the history and undo steps. */
+export const WRITE_VERSION = WRITE_ZIPPED ? FORMAT_VERSION : OLDER_VERSION;
+/** Positions are saved to a millionth of a millimetre (a thousandth of `TOL`), not 17 digits. */
+const POSITION_DIGITS = 1e6;
+const round = (x: number) => Math.round(x * POSITION_DIGITS) / POSITION_DIGITS;
+const roundVec = (v: Vec3): Vec3 => [round(v[0]), round(v[1]), round(v[2])];
 
 /**
  * Geometry as stored: vertices, faces as vertex-id loops (outer first, then holes), every edge with
@@ -46,13 +69,18 @@ interface GeometryData {
  * hidden groups and scenes (saved views); version 5 the design's version history (compressed);
  * version 6 the last undo steps (each stored as only what changed: see `encodeUndo`); version 7
  * hidden edges (a fifth entry per edge), the units lengths are shown in, and dimensions (labels with an `end`); version 8
- * components (each definition saved once; an instance is a group with only its placement) and section planes. Geometry is always in
+ * components (each definition saved once; an instance is a group with only its placement) and section planes; version 9
+ * `minReaderVersion` and positions rounded to 0.000001 mm, saved in a zip (`vormFile.ts`). Geometry is always in
  * millimetres (`units`).
  * Older versions still open, and so do files from before the app was renamed (format tag 'benup').
  */
-interface FileV3 extends GeometryData {
+export interface FileV3 extends GeometryData {
   format: 'vormcraft' | 'benup';
-  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+  version: number;
+  /** The oldest format version that can read this file (version 9; before, the version itself). */
+  minReaderVersion?: number;
+  /** The app that saved it ("VormCraft 1.0.0"), for finding out where a damaged file came from. */
+  savedBy?: string;
   units: 'mm';
   /** The units lengths are shown and typed in (version 7; millimetres before). */
   displayUnits?: DisplayUnits;
@@ -91,8 +119,8 @@ interface FileUndo {
 
 function geometryData(m: Model): GeometryData {
   return {
-    vertices: [...m.vertices.values()].map((v) => [v.id, ...v.pos]),
-    curves: [...m.curves.values()].map((c) => ({ id: c.id, kind: c.kind, center: c.center, normal: c.normal, radius: c.radius, segments: c.segments })),
+    vertices: [...m.vertices.values()].map((v) => [v.id, round(v.pos[0]), round(v.pos[1]), round(v.pos[2])]),
+    curves: [...m.curves.values()].map((c) => ({ id: c.id, kind: c.kind, center: roundVec(c.center), normal: c.normal, radius: round(c.radius), segments: c.segments })),
     faces: [...m.faces.values()].map((f) => ({ id: f.id, normal: f.normal, loops: m.faceVertexLoops(f.id), ...(f.material !== undefined ? { material: f.material } : {}) })),
     edges: [...m.edges()].map((e) => {
       const h = m.he(e);
@@ -106,6 +134,8 @@ function geometryData(m: Model): GeometryData {
 export interface SerializeOptions {
   /** Include the version history (default true). */
   history?: boolean;
+  /** The format version to mark it with (default `WRITE_VERSION`). */
+  version?: number;
   /** Undo steps to keep with the design (oldest first): the newest `UNDO_STEPS` are saved. */
   undo?: readonly Step[];
 }
@@ -115,7 +145,7 @@ export const UNDO_STEPS = 100;
 export const UNDO_LIMIT_BYTES = 8 * 1024 * 1024;
 
 /** The design itself as a file object (no history, no undo). */
-function documentFile(doc: Document): FileV3 {
+function documentFile(doc: Document, version = WRITE_VERSION): FileV3 {
   // Parents first, so a reader can create groups in order.
   // Groups inside component instances are made from the definition, so they are left out.
   const ordered = doc.groups
@@ -125,7 +155,8 @@ function documentFile(doc: Document): FileV3 {
   const empty = geometryData(new Model());
   return {
     format: 'vormcraft',
-    version: 8,
+    version,
+    minReaderVersion: MIN_READER_VERSION,
     units: 'mm',
     displayUnits: { unit: doc.units.unit, precision: doc.units.precision },
     ...geometryData(doc.root),
@@ -161,14 +192,20 @@ function documentFile(doc: Document): FileV3 {
   };
 }
 
-export function serializeDocument(doc: Document, opts: SerializeOptions = {}): string {
-  const file = documentFile(doc);
+/** The whole file as an object, ready to be written as JSON (`serializeDocument`) or zipped (`encodeVorm`). */
+export function documentToFile(doc: Document, opts: SerializeOptions = {}): FileV3 {
+  const file = documentFile(doc, opts.version);
   const undo = opts.undo?.length ? encodeUndo(linedJson(file), opts.undo) : undefined;
   if (opts.history !== false && doc.versions.items.length) {
-    file.history = { versions: doc.versions.items, textures: Object.fromEntries(doc.versions.textures) };
+    file.history = { versions: [...doc.versions.items], textures: Object.fromEntries(doc.versions.textures) };
   }
   if (undo) file.undo = undo;
-  return JSON.stringify(file);
+  return file;
+}
+
+/** The file as JSON text (autosaved copies and the design history keep this form). */
+export function serializeDocument(doc: Document, opts: SerializeOptions = {}): string {
+  return JSON.stringify(documentToFile(doc, opts));
 }
 
 const isScalar = (v: unknown) => v === null || typeof v !== 'object';
@@ -339,7 +376,7 @@ function affine(a: unknown): Affine {
   return { m: [...x.m] as unknown as Affine['m'], t: vec(x.t, 'component placement') };
 }
 
-/** Parse a VormCraft file. Throws FileFormatError with a readable message for bad or newer files. */
+/** Parse a VormCraft file's JSON. Throws FileFormatError with a readable message for bad or newer files. */
 export function parseDocument(text: string): Document {
   let raw: unknown;
   try {
@@ -347,10 +384,23 @@ export function parseDocument(text: string): Document {
   } catch {
     throw new FileFormatError('This is not a VormCraft file (it is not valid JSON).');
   }
+  return parseFile(raw);
+}
+
+/**
+ * Whether this app can open a file of this format: its own and older ones, and newer ones that
+ * say older readers can open them (`minReaderVersion`), whose new parts are then left out.
+ */
+export function canRead(version: number, minReaderVersion: unknown): boolean {
+  return version <= FORMAT_VERSION || (typeof minReaderVersion === 'number' && minReaderVersion <= FORMAT_VERSION);
+}
+
+/** Read a file already parsed from JSON (see `parseDocument`). */
+export function parseFile(raw: unknown): Document {
   const f = raw as Partial<FileV3> & { version?: unknown };
   if (!f || typeof f !== 'object' || (f.format !== 'vormcraft' && f.format !== 'benup')) throw new FileFormatError('This is not a VormCraft file.');
   if (typeof f.version !== 'number') throw new FileFormatError('The file has no version number.');
-  if (f.version > FORMAT_VERSION) throw new NewerFormatError(`This file was saved by a newer version of VormCraft (format ${f.version}); please update the app.`);
+  if (!canRead(f.version, f.minReaderVersion)) throw new NewerFormatError(`This file was saved by a newer version of VormCraft (format ${f.version}); please update the app.`);
   if (f.units !== 'mm') throw new FileFormatError(`Unsupported units "${String(f.units)}".`);
 
   const materials = new Materials();
@@ -440,8 +490,9 @@ export function parseDocument(text: string): Document {
   // Undo steps: left out if they do not belong to this exact design (or are damaged).
   const u = f.undo;
   if (u && typeof u.base === 'string' && Array.isArray(u.steps) && u.steps.every((s) => typeof s.data === 'string' && typeof s.label === 'string')) {
-    // An autosaved copy says where it came from (`autosave`), added after the undo steps were.
-    const { history: _history, undo: _undo, autosave: _autosave, ...design } = f as FileV3 & { autosave?: unknown };
+    // An autosaved copy says where it came from (`autosave`), and a saved file which app saved it
+    // (`savedBy`), both added after the undo steps were.
+    const { history: _history, undo: _undo, autosave: _autosave, savedBy: _savedBy, ...design } = f as FileV3 & { autosave?: unknown };
     const base = linedJson(design);
     if (hashText(base) === u.base) doc.savedUndo = decodeUndo(base, u);
   }

@@ -73,7 +73,8 @@ function expectSolid(h: H, o: { expected: number; within: number; shown?: number
     expect(shown.size).toBe(o.shown);
   }
   expect(openMeshEdges(tessellate(m, solid, { maxDeviation: 0.05 }))).toBe(0);
-  expect(solidReport(parseDocument(serializeDocument(h.doc)).root).volumes[0]).toBeCloseTo(r.volumes[0], 3);
+  // Saved and opened again (positions are saved to 0.000001 mm: thin pipes move most, by about 2 parts in 100 million).
+  expect(Math.abs(solidReport(parseDocument(serializeDocument(h.doc)).root).volumes[0] / r.volumes[0] - 1)).toBeLessThan(1e-7);
   expect(h.controller.history.undoLabel).toBe(o.label ?? 'Follow Me');
   h.controller.undo();
   expect(h.controller.history.redoLabel).toBe(o.label ?? 'Follow Me');

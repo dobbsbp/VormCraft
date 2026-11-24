@@ -1,16 +1,18 @@
 import { Document } from '../doc/Document';
 import type { DisplayUnits } from '../doc/Units';
 import { checkWatertightAll, exportObj, exportStl } from '../io/export';
-import { FILE_EXTENSION, fileFormatVersion, FORMAT_VERSION, NewerFormatError, OLD_FILE_EXTENSIONS, parseDocument, serializeDocument } from '../io/fileFormat';
+import { FILE_EXTENSION, NewerFormatError, OLD_FILE_EXTENSIONS, WRITE_VERSION } from '../io/fileFormat';
+import { encodeVorm, readVorm } from '../io/vormFile';
+import { APP_VERSION } from './updater';
 import type { ToolController } from '../tools/ToolController';
 import type { AutoSaver } from './autosave';
 import { importMesh } from '../core/ops/importMesh';
 import { convertMesh, parseMeshFile } from '../io/meshFiles';
 import { confirmDialog, progressDialog, showExportDialog } from './dialogs';
 import { showImportDialog } from './importDialog';
-import { convertSkp, summarizeSkp } from '../io/skpImport';
+import { convertSkp, suggestLeaveOut, summarizeSkp } from '../io/skpImport';
 import { shrinkImage } from './materialLibrary';
-import { showSkpDialog } from './skpDialog';
+import { LARGE_SKP, MAX_SKP, showSkpDialog } from './skpDialog';
 import { readSkp } from './skpReader';
 import type { FileFilter, FileHost, OpenedFile } from './files';
 import type { DriveLocation } from './drive/driveSession';
@@ -50,7 +52,8 @@ export class FileCommands {
   saveToDrive: (() => Promise<void>) | null = null;
   onTitleChange: () => void = () => {};
   /** The opened file as it was, while it is in an older format and not yet backed up. */
-  private olderFormat: { text: string; version: number } | null = null;
+  /** The file as opened, when in another format version: kept beside it on the first save over it. */
+  private olderFormat: { bytes: Uint8Array; version: number } | null = null;
   /** Removes the recovery copy of changes the user agreed to discard, once they are replaced. */
   private discardedCopy: (() => Promise<void>) | null = null;
 
@@ -110,7 +113,7 @@ export class FileCommands {
   async open(): Promise<void> {
     if (!(await this.confirmDiscard())) return;
     await this.guard(async () => {
-      const file = await this.host.open(OPEN_FILTER);
+      const file = await this.host.openBinary(OPEN_FILTER);
       if (file) await this.load(file);
     });
   }
@@ -128,37 +131,41 @@ export class FileCommands {
   }
 
   /** Open a file handed over by the system (the installed web app opening a .vorm file). */
-  async openText(name: string, text: string): Promise<void> {
+  async openBytes(name: string, bytes: Uint8Array): Promise<void> {
     if (!(await this.confirmDiscard())) return;
-    await this.guard(async () => this.load({ name, text }));
+    await this.guard(async () => this.load({ name, bytes }));
   }
 
   /** Open a design read from Google Drive (after the caller checked unsaved changes). */
-  async openFromDrive(name: string, text: string, drive: DriveLocation): Promise<void> {
+  async openFromDrive(name: string, bytes: Uint8Array, drive: DriveLocation): Promise<void> {
     await this.guard(async () => {
-      await this.load({ name, text });
+      await this.load({ name, bytes });
       this.drive = drive;
     });
   }
 
-  private async load(file: OpenedFile): Promise<void> {
-    let doc: Document;
+  private async load(file: { name: string; path?: string; bytes: Uint8Array }): Promise<void> {
+    let read;
     try {
-      doc = parseDocument(file.text);
+      read = readVorm(file.bytes);
     } catch (err) {
       if (err instanceof NewerFormatError) this.options.onNewerFile?.();
       throw err;
     }
+    const { doc, version, newer } = read;
     this.controller.replaceDocument(doc);
     this.name = file.name.replace(EXTENSION, '');
     // A file from before the rename is saved as a new .vorm file, not over the old one.
     this.path = EXTENSION.exec(file.name)?.[1].toLowerCase() === FILE_EXTENSION ? file.path : undefined;
     this.drive = undefined;
-    const version = fileFormatVersion(file.text) ?? FORMAT_VERSION;
-    this.olderFormat = version < FORMAT_VERSION && this.path ? { text: file.text, version } : null;
+    this.olderFormat = version !== WRITE_VERSION && this.path ? { bytes: file.bytes, version } : null;
     // The design as opened is the first point to come back to.
     if (this.options.settings().history && doc.versions.items.length === 0) this.controller.recordVersion('opened');
-    this.controller.notify(`Opened ${file.name}`);
+    this.controller.notify(
+      newer
+        ? `Opened ${file.name}. It was saved by a newer version of VormCraft, so anything this version does not know about is left out. Update VormCraft to see all of it.`
+        : `Opened ${file.name}`,
+    );
     this.onTitleChange();
     await this.replaced();
   }
@@ -174,11 +181,11 @@ export class FileCommands {
     this.onTitleChange();
   }
 
-  /** The design as it is saved now (recording a "save" point in its history first). */
-  textForSave(): string {
+  /** The design as it is saved now, as a .vorm file (recording a "save" point in its history first). */
+  bytesForSave(): Uint8Array {
     const s = this.options.settings();
     if (s.history) this.controller.recordVersion('save', s.historyLimitMB * 1024 * 1024);
-    return serializeDocument(this.controller.doc, { history: s.history, undo: s.history ? this.controller.history.steps : undefined });
+    return encodeVorm(this.controller.doc, { history: s.history, undo: s.history ? this.controller.history.steps : undefined, savedBy: `VormCraft ${APP_VERSION}` });
   }
 
   /** The design was saved somewhere other than this device's files (Google Drive). */
@@ -204,14 +211,14 @@ export class FileCommands {
     if (!saveAs && this.drive && this.saveToDrive) return this.saveToDrive();
     this.controller.endPreview();
     await this.guard(async () => {
-      const text = this.textForSave();
+      const bytes = this.bytesForSave();
       const target = saveAs ? undefined : this.path;
-      // First save over a file from an older format: keep the original beside it.
+      // First save over a file from another format version: keep the original beside it.
       if (target && this.olderFormat && target === this.path) {
         const backup = target.replace(EXTENSION, '') + ` (format ${this.olderFormat.version} backup).${FILE_EXTENSION}`;
-        await this.host.save(this.olderFormat.text, backup, MODEL_FILTER, backup);
+        await this.host.save(this.olderFormat.bytes, backup, MODEL_FILTER, backup);
       }
-      const written = await this.host.save(text, `${this.name}.${FILE_EXTENSION}`, MODEL_FILTER, target);
+      const written = await this.host.save(bytes, `${this.name}.${FILE_EXTENSION}`, MODEL_FILTER, target);
       if (!written) return;
       this.olderFormat = null;
       this.name = written.name.replace(EXTENSION, '');
@@ -224,12 +231,26 @@ export class FileCommands {
     });
   }
 
+  /**
+   * Save a copy in the plain format every 0.9 app opens (to send to someone who has not updated);
+   * the design stays as it is.
+   */
+  async saveCopyForOlder(): Promise<void> {
+    this.controller.endPreview();
+    await this.guard(async () => {
+      const s = this.options.settings();
+      const bytes = encodeVorm(this.controller.doc, { history: s.history, undo: s.history ? this.controller.history.steps : undefined, zipped: false });
+      const written = await this.host.save(bytes, `${this.name} (for older VormCraft).${FILE_EXTENSION}`, MODEL_FILTER);
+      if (written) this.controller.notify(`Saved a copy that VormCraft 0.9 opens: ${written.name}`);
+    });
+  }
+
   /** Save a copy without the design's history (to send to someone); the design stays as it is. */
   async saveCopyWithoutHistory(): Promise<void> {
     this.controller.endPreview();
     await this.guard(async () => {
-      const text = serializeDocument(this.controller.doc, { history: false });
-      const written = await this.host.save(text, `${this.name} (copy).${FILE_EXTENSION}`, MODEL_FILTER);
+      const bytes = encodeVorm(this.controller.doc, { history: false, savedBy: `VormCraft ${APP_VERSION}` });
+      const written = await this.host.save(bytes, `${this.name} (copy).${FILE_EXTENSION}`, MODEL_FILTER);
       if (written) this.controller.notify(`Saved a copy without history: ${written.name}`);
     });
   }
@@ -289,18 +310,26 @@ export class FileCommands {
       this.controller.notify(`${name}.skp has no geometry placed in the model (only unused components), so there is nothing to import.`);
       return;
     }
-    const choice = await showSkpDialog(fileName, stats);
+    const choice = await showSkpDialog(fileName, stats, (ids) => summarizeSkp(skp, ids).placedFaces, suggestLeaveOut(skp, stats, LARGE_SKP));
     if (!choice) return;
-    progress = progressDialog('Importing', `Building ${stats.placedFaces.toLocaleString()} faces…`);
+    // Building more than this runs out of memory and takes the whole app down: never start it.
+    const faces = choice.leaveOut.length ? summarizeSkp(skp, choice.leaveOut).placedFaces : stats.placedFaces;
+    if (faces > MAX_SKP) {
+      this.controller.notify(`${name}.skp is too large to import (${n(faces)} faces once every copy of its components is placed).`);
+      return;
+    }
+    const left = stats.heavy.filter((h) => choice.leaveOut.includes(h.id));
+    progress = progressDialog('Importing', `Building ${faces.toLocaleString()} faces…`);
     try {
       await new Promise((r) => setTimeout(r, 30));
-      const result = convertSkp(skp, { name, scenes: choice.scenes, guides: choice.guides });
+      const result = convertSkp(skp, { name, scenes: choice.scenes, guides: choice.guides, leaveOut: choice.leaveOut });
       progress.set('Preparing textures…');
       for (const [key, m] of result.materials) if (m.texture) result.materials.set(key, { ...m, texture: { ...m.texture, image: await shrinkImage(m.texture.image) } });
       this.controller.importSkp(result, `Import ${name}.skp`);
       const f = result.faces;
       const notes = [f.turned ? `${n(f.turned)} turned round to fit` : '', f.detached ? `${n(f.detached)} kept on edges of their own` : '', f.skipped ? `${n(f.skipped)} broken faces left out` : ''].filter(Boolean);
-      this.controller.notify(`Imported ${name}.skp: ${n(f.total - f.skipped)} faces${notes.length ? ` (${notes.join(', ')})` : ''}${result.scenes.length ? `, ${result.scenes.length} scenes` : ''}.`);
+      const leftOut = left.length ? ` Left out: ${left.map((h) => `${h.name} (${n(h.copies)} copies)`).join(', ')}.` : '';
+      this.controller.notify(`Imported ${name}.skp: ${n(f.total - f.skipped)} faces${notes.length ? ` (${notes.join(', ')})` : ''}${result.scenes.length ? `, ${result.scenes.length} scenes` : ''}.${leftOut}`);
     } finally {
       progress.close();
     }

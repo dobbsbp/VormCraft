@@ -272,21 +272,21 @@ export class DriveSession {
     return out;
   }
 
-  async open(file: DriveFile): Promise<{ text: string; location: DriveLocation }> {
-    const text = await this.api.download(file.id);
+  async open(file: DriveFile): Promise<{ bytes: Uint8Array; location: DriveLocation }> {
+    const bytes = await this.api.downloadBytes(file.id);
     const meta = await this.api.meta(file.id);
-    return { text, location: { fileId: file.id, revision: meta?.headRevisionId ?? file.headRevisionId, folderId: meta?.parents?.[0] ?? file.parents?.[0] } };
+    return { bytes, location: { fileId: file.id, revision: meta?.headRevisionId ?? file.headRevisionId, folderId: meta?.parents?.[0] ?? file.parents?.[0] } };
   }
 
   /**
    * A new design file in a folder (VormCraft's own if none is given; a name already there gets
    * " (2)" and so on). The folder is remembered as where the next new design starts.
    */
-  async create(fileName: string, text: string, folderId?: string): Promise<{ file: DriveFile; location: DriveLocation }> {
+  async create(fileName: string, bytes: string | Uint8Array, folderId?: string): Promise<{ file: DriveFile; location: DriveLocation }> {
     const s = this.need();
     const folder = folderId ?? s.folderId;
     const taken = new Set((await this.api.list(folder)).map((f) => f.name.toLowerCase()));
-    const file = await this.api.create(uniqueName(fileName, taken), folder, text);
+    const file = await this.api.create(uniqueName(fileName, taken), folder, bytes);
     s.lastFolderId = folder === s.folderId ? undefined : folder;
     this.save();
     return { file, location: { fileId: file.id, revision: file.headRevisionId, folderId: folder } };
@@ -297,14 +297,14 @@ export class DriveSession {
    * since it was opened or last saved here (throws `DriveClash`). A file that has gone (deleted)
    * is made again in its folder, or in VormCraft's folder if that has gone too.
    */
-  async update(location: DriveLocation, fileName: string, text: string, replace = false): Promise<{ file: DriveFile; location: DriveLocation }> {
+  async update(location: DriveLocation, fileName: string, bytes: string | Uint8Array, replace = false): Promise<{ file: DriveFile; location: DriveLocation }> {
     const current = await this.api.meta(location.fileId);
     if (!current) {
       const folderLeft = location.folderId !== undefined && (await this.api.meta(location.folderId)) !== null;
-      return this.create(fileName, text, folderLeft ? location.folderId : undefined);
+      return this.create(fileName, bytes, folderLeft ? location.folderId : undefined);
     }
     if (!replace && location.revision && current.headRevisionId && current.headRevisionId !== location.revision) throw new DriveClash(current);
-    const file = await this.api.update(location.fileId, text);
+    const file = await this.api.update(location.fileId, bytes);
     return { file, location: { fileId: file.id, revision: file.headRevisionId, folderId: file.parents?.[0] ?? current.parents?.[0] ?? location.folderId } };
   }
 
@@ -312,26 +312,26 @@ export class DriveSession {
    * Write a design's autosaved copy to VormCraft/Autosave: one file per design, replaced each
    * time. Never touches the design's own file.
    */
-  async autosave(designKey: string, fileName: string, text: string): Promise<DriveFile> {
+  async autosave(designKey: string, fileName: string, bytes: string | Uint8Array): Promise<DriveFile> {
     const s = this.need();
     s.autosaveFolderId ??= await this.api.folder(AUTOSAVE_FOLDER, s.folderId);
     const known = s.autosaveFiles[designKey];
     let file: DriveFile | null = null;
     if (known) {
       try {
-        file = await this.api.update(known, text);
+        file = await this.api.update(known, bytes);
       } catch (err) {
         if (!(err instanceof DriveError && err.status === 404)) throw err;
       }
     }
     if (!file) {
       try {
-        file = await this.api.create(fileName, s.autosaveFolderId, text);
+        file = await this.api.create(fileName, s.autosaveFolderId, bytes);
       } catch (err) {
         // The Autosave folder was deleted: make it again.
         if (!(err instanceof DriveError && err.status === 404)) throw err;
         s.autosaveFolderId = await this.api.folder(AUTOSAVE_FOLDER, s.folderId);
-        file = await this.api.create(fileName, s.autosaveFolderId, text);
+        file = await this.api.create(fileName, s.autosaveFolderId, bytes);
       }
       s.autosaveFiles[designKey] = file.id;
     }

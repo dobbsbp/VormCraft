@@ -1,15 +1,16 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { checkWatertight } from '../src/core';
-import { FORMAT_VERSION, parseDocument, serializeDocument } from '../src/io/fileFormat';
+import { FORMAT_VERSION, OLDER_VERSION, parseDocument, serializeDocument, WRITE_VERSION } from '../src/io/fileFormat';
 import { openVersion } from '../src/io/versions';
+import { encodeVorm, isZipped, readVorm } from '../src/io/vormFile';
 
 /**
  * Files saved by every earlier version of the app must keep opening. Each file in tests/fixtures
  * was saved in one format version; never change or delete them. When FORMAT_VERSION goes up,
  * add a fixture for the new version (saved by the new code) and a case here.
  */
-const fixture = (name: string) => readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8');
+const fixture = (name: string) => new Uint8Array(readFileSync(new URL(`./fixtures/${name}`, import.meta.url)));
 
 describe('files from every format version open', () => {
   it.each([
@@ -21,10 +22,14 @@ describe('files from every format version open', () => {
     ['format-v6.vorm', 6],
     ['format-v7.vorm', 7],
     ['format-v8.vorm', 8],
+    ['format-v9.vorm', 9],
   ])('%s', (name, version) => {
-    const text = fixture(name);
-    expect(JSON.parse(text).version).toBe(version);
-    const doc = parseDocument(text);
+    const bytes = fixture(name);
+    // Plain JSON before format 9, a zip from then on.
+    expect(isZipped(bytes)).toBe(version >= 9);
+    const read = readVorm(bytes);
+    expect(read).toMatchObject({ version, newer: false });
+    const doc = read.doc;
     // The geometry every version has: a 300 × 200 × 100 plate with a circle on top, and a guide.
     expect(doc.root.faces.size).toBe(7);
     expect(checkWatertight(doc.root).shells).toBe(1);
@@ -79,14 +84,22 @@ describe('files from every format version open', () => {
       expect(doc.sections.items.size).toBe(0);
       expect(doc.scenes.items[0]?.section).toBeUndefined();
     }
-    // Opened and saved again, it is in the current format and still opens.
+    // Opened and saved again, it is in the current format and still opens, undo steps and all.
     const again = parseDocument(serializeDocument(doc));
-    expect(JSON.parse(serializeDocument(again)).version).toBe(FORMAT_VERSION);
+    expect(JSON.parse(serializeDocument(again)).version).toBe(WRITE_VERSION);
     expect(again.root.faces.size).toBe(7);
+    // Both ways of saving: zipped (format 9) and the plain JSON every 0.9 app opens (format 8).
+    for (const zipped of [true, false]) {
+      const resaved = readVorm(encodeVorm(doc, { undo: doc.savedUndo, zipped }));
+      expect(resaved.version).toBe(zipped ? FORMAT_VERSION : OLDER_VERSION);
+      expect(resaved.doc.root.faces.size).toBe(7);
+      expect(resaved.doc.savedUndo.map((s) => s.label)).toEqual(doc.savedUndo.map((s) => s.label));
+      expect(resaved.doc.versions.items).toHaveLength(doc.versions.items.length);
+    }
   });
 
   it('there is a fixture for the current format version', () => {
-    const names = ['format-v1.benup', 'format-v2.vorm', 'format-v3.vorm', 'format-v4.vorm', 'format-v5.vorm', 'format-v6.vorm', 'format-v7.vorm', 'format-v8.vorm'];
+    const names = ['format-v1.benup', 'format-v2.vorm', 'format-v3.vorm', 'format-v4.vorm', 'format-v5.vorm', 'format-v6.vorm', 'format-v7.vorm', 'format-v8.vorm', 'format-v9.vorm'];
     expect(names.some((n) => n.includes(`v${FORMAT_VERSION}.`))).toBe(true);
   });
 });

@@ -1,4 +1,5 @@
 import wasmUrl from 'manifold-3d/manifold.wasm?url';
+import { WRITE_ZIPPED } from '../io/fileFormat';
 import { distance, initBooleanKernel } from '../core';
 import { Document } from '../doc/Document';
 import { ToolController } from '../tools/ToolController';
@@ -370,6 +371,7 @@ async function start(): Promise<void> {
     checkUpdates: () => void lifecycle.checkForUpdates(),
     about: () => void lifecycle.about(),
     saveCopy: () => void files.saveCopyWithoutHistory(),
+    saveCopyForOlder: () => void files.saveCopyForOlder(),
     exportMenu: (anchor) => {
       const r = anchor.getBoundingClientRect();
       menu.open(
@@ -783,6 +785,8 @@ interface KeepActions {
   checkUpdates(): void;
   about(): void;
   saveCopy(): void;
+  /** Save a copy in the plain format VormCraft 0.9 opens (offered once files are zipped). */
+  saveCopyForOlder(): void;
   /** The Help menu, under its toolbar button. */
   help(anchor: HTMLElement): void;
   /** The Export menu (STL or OBJ), under its toolbar button. */
@@ -824,6 +828,8 @@ function commandList(viewer: Viewer, controller: ToolController, files: FileComm
         ]
       : []),
     { id: 'file:copy', name: 'Save a Copy Without History…', keywords: ['file', 'share', 'send', 'export'], run: keep.saveCopy },
+    // Only while some people may still have 0.9 (from 1.0, when files are zipped, until about 1.2).
+    ...(WRITE_ZIPPED ? [{ id: 'file:older', name: 'Save a Copy for Older VormCraft (0.9)…', keywords: ['file', 'share', 'send', 'old', 'version', 'compatible'], run: keep.saveCopyForOlder }] : []),
     { id: 'file:history', name: 'History (earlier versions)', keywords: ['versions', 'restore', 'backup', 'go back', 'revert'], run: keep.toggleHistory },
     { id: 'file:properties', name: 'Design Properties (Units)…', keywords: ['units', 'millimetres', 'centimetres', 'metres', 'inches', 'feet', 'precision', 'model info'], run: keep.designProperties },
     { id: 'app:settings', name: 'Settings', keywords: ['preferences', 'options', 'autosave', 'backup folder'], run: keep.settings },

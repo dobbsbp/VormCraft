@@ -14,20 +14,21 @@ use tauri::Manager;
 struct LaunchFile {
   name: String,
   path: String,
-  text: String,
 }
 
-/// The .vorm (or older .benup) file passed on the command line, read here so it opens even before
-/// the file system plugin has been given access to its folder.
+/// The .vorm (or older .benup) file passed on the command line, if it exists. The page reads it
+/// (as bytes: from format 9 a .vorm file is a zip, not text).
 #[tauri::command]
 fn launch_file() -> Option<LaunchFile> {
   let path = std::env::args().skip(1).find(|a| {
     let a = a.to_lowercase();
     a.ends_with(".vorm") || a.ends_with(".benup")
   })?;
-  let text = std::fs::read_to_string(&path).ok()?;
+  if !std::path::Path::new(&path).is_file() {
+    return None;
+  }
   let name = std::path::Path::new(&path).file_name()?.to_string_lossy().into_owned();
-  Some(LaunchFile { name, path, text })
+  Some(LaunchFile { name, path })
 }
 
 /// Which graphics card draws the view: "high" (the default: the faster, separate card on laptops

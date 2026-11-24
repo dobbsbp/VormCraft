@@ -79,8 +79,55 @@ CHANGELOG.md when it ships.
     Drive. Wanted only after seeing how the Library works.
   - More categories: Building (stairs, railings), Office, Outdoor.
   - Size versions for more items.
-- **Components:** components inside components (nested ones become plain groups today);
-  SketchUp imports still come in as full copies; a component browser listing them.
+- **Components (plan of November 2026, for after 1.0).** Today: Make Component, Make Unique,
+  Edit Component, Explode, linked Move/Rotate copies and Library items, Entity Info's copy count,
+  each definition saved once (format 8). Missing: any way to see the components in a design.
+  - **Decided:** a copy has a name of its own as well as the component's name (as in SketchUp).
+    Renaming the component renames it everywhere; renaming a copy names only that copy, and
+    Entity Info shows both. Needs a format change (copy names saved apart from the component's).
+  - **Decided: Components panel versus Library.** The Library is what you can bring
+    in to any design (built-in items, later My Library); the Components panel is what is in this
+    design (made with Make Component, placed from the Library, or imported). Library items placed
+    in the design are listed, marked "Library", with a filter to hide them. "Add to My Library"
+    on a component saves it for other designs; My Library (below) is where saved ones live.
+  - **Phase 1, Components panel ("In this design"):** a row per component with a picture (the
+    Library's thumbnail renderer, kept until it changes), name, copies and faces; search; sort by
+    name, copies or faces. Hover highlights its copies; click selects every copy (also Select All
+    Copies on the right-click menu); double-click edits it. Place copy (PlaceTool), Replace
+    selected with this (each copy keeps its placement; one undo step), Rename, Delete (every copy,
+    asks first with the count). Entity Info: "Show in Components", a Description (format change).
+    Tests for select, replace, delete and undo, with solids kept solid.
+  - **Phase 2, Outliner and editing:** a tree of groups and components (with copy counts and
+    what is inside); click selects, double-click edits, rename inline, an eye to hide. "Hide rest
+    of model" next to the Close badge while editing (today it is only faded).
+  - **Phase 3, nesting and tidying:** components inside components (nested ones become plain
+    groups today): definitions holding instances of others, a check against loops, `syncFrom`
+    rebuilding every level, a format change and fixture. Save a component as a .vorm and insert
+    a .vorm as a component (design together with My Library). Change Axes / Reset Scale only if
+    asked for.
+  - **Phase 4, true instancing:** store a component's geometry once and draw every copy from it
+    (instanced meshes, picking and snapping through each copy's placement; edits no longer
+    rebuild every copy), and import SketchUp components as linked components, nesting included.
+    Today every copy is full geometry, so a file with a small part placed 17,000 times (1.5
+    million faces) cannot come in whole; the import leaves such parts out instead
+    (`HeavyDefinition`, `MAX_SKP` in `skpDialog.ts`). Needs its own design note first.
+  - **Left out:** always face camera, shadows face sun, Dynamic Components (Customise… covers
+    Library items), 3D Warehouse. Later perhaps: a "Cuts an opening" choice on Make Component,
+    like Library doors and windows.
+- **Smaller files (format 9, built November 2026; see SPEC).** Still to do:
+  - Compress in a worker of our own (`skpWorker.ts` shows how; fflate's own workers are blob URLs,
+    which the web app's CSP refuses) so saving a very large design never stalls the window. Today
+    a 230,000-face design takes about 1 s to write the JSON and 1.7 s to compress.
+  - A `thumbnail.png` entry (a picture of the design) for the Drive browser and recent files.
+  - Rollout (decided November 2026): the bridge release (0.9.4, or 1.0.0 if nothing ships
+    before it) opens format 9 and still saves format 8. The release after turns `WRITE_ZIPPED`
+    on in `fileFormat.ts`; then also: README (files 3 to 5 times smaller), CHANGELOG, a new
+    `tests/fixtures` file only if the format changes again. Before it, by hand: install 0.9.3
+    from GitHub Releases, open a file the bridge saved (locally and through Google Drive).
+    0.9.3 and earlier say "This is not a VormCraft file" for a zipped file, with no offer to
+    update. Remove "Save a Copy for Older VormCraft" around 1.2.
+  - Autosaved copies (backup folder, IndexedDB) are still plain JSON: zip them too if they grow
+    too large.
 - **Section planes:** snapping still reaches points on the cut-away side.
 - **Walls and openings:** doors and windows do not stay glued to their opening (moving one leaves
   the hole); walls drawn into each other are not joined (Merge Shapes can unify them); the wall

@@ -8,7 +8,11 @@ export const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 const API = 'https://www.googleapis.com/drive/v3';
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3';
 const FOLDER = 'application/vnd.google-apps.folder';
+/** Settings files, and designs saved before format 9 (plain JSON). */
 const FILE_TYPE = 'application/json';
+/** Designs from format 9 on (a zip; the type the desktop and web apps register for .vorm files). */
+const DESIGN_TYPE = 'application/x-vormcraft';
+const typeOf = (data: string | Uint8Array) => (typeof data === 'string' ? FILE_TYPE : DESIGN_TYPE);
 const FIELDS = 'id,name,modifiedTime,size,headRevisionId,parents';
 /** Larger files upload in pieces (resumable), so a dropped connection does not start over. */
 const RESUMABLE_ABOVE = 5 * 1024 * 1024;
@@ -142,7 +146,7 @@ export class DriveApi {
 
   /** Every design file VormCraft can see, wherever it is (even moved out of its folders), newest first. */
   async allFiles(): Promise<DriveFile[]> {
-    return this.query(`trashed=false and mimeType='${FILE_TYPE}'`, 'modifiedTime desc');
+    return this.query(`trashed=false and (mimeType='${FILE_TYPE}' or mimeType='${DESIGN_TYPE}')`, 'modifiedTime desc');
   }
 
   private async query(q: string, orderBy: string): Promise<DriveFile[]> {
@@ -196,24 +200,30 @@ export class DriveApi {
     return (await this.request(`${API}/files/${fileId}?alt=media`)).text();
   }
 
+  async downloadBytes(fileId: string): Promise<Uint8Array> {
+    return new Uint8Array(await (await this.request(`${API}/files/${fileId}?alt=media`)).arrayBuffer());
+  }
+
   /** A new file in a folder. */
-  async create(name: string, folderId: string, text: string): Promise<DriveFile> {
-    return this.upload('POST', `${UPLOAD}/files`, { name, parents: [folderId], mimeType: FILE_TYPE }, text);
+  async create(name: string, folderId: string, data: string | Uint8Array): Promise<DriveFile> {
+    return this.upload('POST', `${UPLOAD}/files`, { name, parents: [folderId], mimeType: typeOf(data) }, data);
   }
 
   /**
    * Replace a file's contents. Drive swaps in the new contents in one step once the upload is
    * complete, so the file is always either the old version or the new one, never half of each.
    */
-  async update(fileId: string, text: string): Promise<DriveFile> {
-    return this.upload('PATCH', `${UPLOAD}/files/${fileId}`, {}, text);
+  async update(fileId: string, data: string | Uint8Array): Promise<DriveFile> {
+    // A design saved before format 9 becomes the new type when it is saved over.
+    return this.upload('PATCH', `${UPLOAD}/files/${fileId}`, typeof data === 'string' ? {} : { mimeType: DESIGN_TYPE }, data);
   }
 
-  private async upload(method: 'POST' | 'PATCH', base: string, metadata: object, text: string): Promise<DriveFile> {
-    const body = new TextEncoder().encode(text);
+  private async upload(method: 'POST' | 'PATCH', base: string, metadata: object, data: string | Uint8Array): Promise<DriveFile> {
+    const type = typeOf(data);
+    const body = typeof data === 'string' ? new TextEncoder().encode(data) : (data as Uint8Array<ArrayBuffer>);
     if (body.length <= RESUMABLE_ABOVE) {
       const boundary = `vormcraft${Math.random().toString(36).slice(2)}`;
-      const head = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: ${FILE_TYPE}\r\n\r\n`;
+      const head = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: ${type}\r\n\r\n`;
       const blob = new Blob([head, body, `\r\n--${boundary}--`]);
       return this.json<DriveFile>(`${base}?uploadType=multipart&fields=${FIELDS}`, { method, headers: { 'Content-Type': `multipart/related; boundary=${boundary}` }, body: blob });
     }
@@ -221,7 +231,7 @@ export class DriveApi {
     // arrived and carry on from there.
     const start = await this.request(`${base}?uploadType=resumable&fields=${FIELDS}`, {
       method,
-      headers: { 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': FILE_TYPE, 'X-Upload-Content-Length': String(body.length) },
+      headers: { 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': type, 'X-Upload-Content-Length': String(body.length) },
       body: JSON.stringify(metadata),
     });
     const session = start.headers.get('Location');

@@ -4,6 +4,13 @@ What changed in each version of VormCraft. The section for a version is also sho
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
+## Unreleased
+
+- VormCraft can now open the smaller, compressed .vorm files that the next version will save. This version still saves files as before, so they keep opening in every 0.9 version.
+- Files saved by a later version of VormCraft can be opened when they allow it; anything this version does not know about is left out, and VormCraft says so. A file it cannot read at all offers the update.
+- Double-clicking a .vorm file to start the desktop app opens it in every case.
+- Importing a very large SketchUp file no longer crashes VormCraft. When a small part is placed thousands of times (tiles, say), the import window offers to leave it out, and a model still too large to hold is refused with a message.
+
 ## 0.9.3
 
 - Moving, rotating or changing one object in a large design no longer pauses: only what changed is drawn again.

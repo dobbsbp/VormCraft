@@ -1,3 +1,4 @@
+import { strFromU8, strToU8, unzipSync } from 'fflate';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { AutoSaver } from '../src/app/autosave';
 import type { BackupEntry, BackupStore } from '../src/app/backups';
@@ -5,7 +6,8 @@ import { FileCommands } from '../src/app/fileCommands';
 import type { FileHost } from '../src/app/files';
 import { cleanSettings, DEFAULT_SETTINGS, loadSettings, saveSettings, type Settings } from '../src/app/settings';
 import { drawRectangle, GROUND_PLANE, initBooleanKernel } from '../src/core';
-import { FORMAT_VERSION, parseDocument, serializeDocument } from '../src/io/fileFormat';
+import { parseDocument, serializeDocument, WRITE_VERSION, WRITE_ZIPPED } from '../src/io/fileFormat';
+import { isZipped } from '../src/io/vormFile';
 import { harness } from './helpers/tools';
 
 beforeAll(async () => {
@@ -30,17 +32,23 @@ class MemoryStore implements BackupStore {
 /** A desktop-like file host writing to memory. */
 class MemoryHost implements FileHost {
   readonly native = true;
-  files = new Map<string, string>();
+  files = new Map<string, Uint8Array>();
+  /** The design the file picker picks next (as text, as files before format 9 were). */
   next: { text: string; name: string; path: string } | null = null;
   open = async () => this.next;
   nextBinary: { name: string; bytes: Uint8Array } | null = null;
-  openBinary = async () => this.nextBinary;
+  openBinary = async () => this.nextBinary ?? (this.next && { name: this.next.name, path: this.next.path, bytes: strToU8(this.next.text) });
   async save(data: string | Uint8Array, suggestedName: string, _f: unknown, path?: string) {
     const target = path ?? `C:/Saved/${suggestedName}`;
-    this.files.set(target, typeof data === 'string' ? data : '<binary>');
+    this.files.set(target, typeof data === 'string' ? strToU8(data) : data);
     return { name: target.split('/').pop()!, path: target };
   }
-  readPath = async (path: string) => ({ name: path.split('/').pop()!, path, text: this.files.get(path)! });
+  readPath = async (path: string) => ({ name: path.split('/').pop()!, path, bytes: this.files.get(path)! });
+  /** The JSON of a saved .vorm (inside the zip from format 9; the whole file before). */
+  design(path: string) {
+    const bytes = this.files.get(path)!;
+    return JSON.parse(strFromU8(isZipped(bytes) ? unzipSync(bytes)['design.json'] : bytes));
+  }
 }
 
 function setup(over: Partial<Settings> = {}, chooseUnits?: () => Promise<null>) {
@@ -212,10 +220,12 @@ describe('saving with history', () => {
     const h = setup();
     h.change();
     await h.files.save();
-    const file = JSON.parse(h.host.files.get('C:/Saved/Untitled.vorm')!);
+    const file = h.host.design('C:/Saved/Untitled.vorm');
     expect(file.history.versions.map((v: { kind: string }) => v.kind)).toEqual(['save']);
+    // Zipped files say which app saved them; the plain ones for 0.9 apps cannot.
+    expect(file.savedBy).toBe(WRITE_ZIPPED ? 'VormCraft 0.0.0-test' : undefined);
     await h.files.saveCopyWithoutHistory();
-    const copy = JSON.parse(h.host.files.get('C:/Saved/Untitled (copy).vorm')!);
+    const copy = h.host.design('C:/Saved/Untitled (copy).vorm');
     expect(copy.history).toBeUndefined();
   });
 
@@ -224,7 +234,7 @@ describe('saving with history', () => {
     h.change();
     await h.files.save();
     expect(h.doc.versions.items).toHaveLength(0);
-    expect(JSON.parse(h.host.files.get('C:/Saved/Untitled.vorm')!).history).toBeUndefined();
+    expect(h.host.design('C:/Saved/Untitled.vorm').history).toBeUndefined();
   });
 
   it('opening records the design as opened; saving over an older-format file keeps a backup first', async () => {
@@ -237,8 +247,8 @@ describe('saving with history', () => {
     expect(h.doc.versions.items.map((v) => v.kind)).toEqual(['opened']);
     h.change();
     await h.files.save();
-    expect(h.host.files.get('D:/Work/Shed (format 4 backup).vorm')).toBe(oldText);
-    expect(JSON.parse(h.host.files.get('D:/Work/Shed.vorm')!).version).toBe(FORMAT_VERSION);
+    expect(strFromU8(h.host.files.get('D:/Work/Shed (format 4 backup).vorm')!)).toBe(oldText);
+    expect(h.host.design('D:/Work/Shed.vorm').version).toBe(WRITE_VERSION);
     // Only the first time.
     h.host.files.delete('D:/Work/Shed (format 4 backup).vorm');
     h.change();
@@ -254,5 +264,30 @@ describe('saving with history', () => {
     await files.open();
     expect(offered).toBe(true);
     expect(h.controller.error).toMatch(/newer version/);
+  });
+
+  it('a newer file that says this version can read it opens, with a note; saving over it keeps it beside', async () => {
+    const h = setup();
+    const future = { ...JSON.parse(serializeDocument(h.doc, { history: false })), version: 12, minReaderVersion: 8, tags: [{ name: 'Walls' }] };
+    h.host.next = { name: 'Future.vorm', path: 'D:/Future.vorm', text: JSON.stringify(future) };
+    await h.files.open();
+    expect(h.controller.error).toBeFalsy();
+    expect(h.files.name).toBe('Future');
+    h.change();
+    await h.files.save();
+    expect(h.host.files.has('D:/Future (format 12 backup).vorm')).toBe(true);
+    expect(h.host.design('D:/Future.vorm').version).toBe(WRITE_VERSION);
+  });
+
+  it('a saved design opens again from its file, undo steps and all', async () => {
+    const h = setup();
+    h.change();
+    h.change();
+    await h.files.save();
+    await h.files.openPath('C:/Saved/Untitled.vorm');
+    expect(h.doc.root.faces.size).toBe(2);
+    expect(h.controller.history.undoLabel).toBe('Rectangle');
+    h.controller.undo();
+    expect(h.doc.root.faces.size).toBe(1);
   });
 });

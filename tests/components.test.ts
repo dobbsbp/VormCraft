@@ -3,7 +3,7 @@ import { drawRectangle, findFaceAt, GROUND_PLANE, initBooleanKernel, Model, push
 import { modelBounds } from '../src/core/ops/group';
 import { applyToTargets } from '../src/tools/targets';
 import { insertPlaceable, placement, type Placeable } from '../src/tools/PlaceTool';
-import { parseDocument, serializeDocument } from '../src/io/fileFormat';
+import { parseDocument, serializeDocument, WRITE_VERSION } from '../src/io/fileFormat';
 import { ev, harness, use } from './helpers/tools';
 
 beforeAll(async () => {
@@ -187,7 +187,7 @@ describe('components (linked copies)', () => {
     copies(h, ...Array.from({ length: 9 }, (_, i) => [300 * (i + 1), 0, 0] as Vec3));
     const text = serializeDocument(h.doc);
     const file = JSON.parse(text);
-    expect(file.version).toBe(8);
+    expect(file.version).toBe(WRITE_VERSION);
     expect(file.components).toHaveLength(1);
     expect(file.groups.filter((g: { faces: unknown[] }) => g.faces.length)).toHaveLength(0);
     const again = parseDocument(text);

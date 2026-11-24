@@ -1,7 +1,7 @@
 import { create, parseSkp, type SkpModel } from 'openskp';
 import { describe, expect, it } from 'vitest';
 import { checkWatertight, volume } from '../src/core';
-import { convertSkp, placementMatrix, summarizeSkp, type SkpPart } from '../src/io/skpImport';
+import { convertSkp, placementMatrix, suggestLeaveOut, summarizeSkp, type SkpPart } from '../src/io/skpImport';
 
 const INCH = 25.4;
 type P3 = [number, number, number];
@@ -133,6 +133,45 @@ describe('SketchUp files', () => {
     expect(r.scenes).toHaveLength(1);
     expect(r.scenes[0]).toMatchObject({ name: 'Plan', parts: { camera: true, hidden: false, style: false } });
     expect(r.scenes[0].camera).toMatchObject({ projection: 'parallel', fov: 30, height: expect.closeTo(40 * INCH, 6), position: [0, 0, expect.closeTo(2540, 6)] });
+  });
+});
+
+describe('components placed thousands of times', () => {
+  // As in a real file that crashed the import: a small tile placed in pairs, 1,700 pairs over a
+  // wall, beside an ordinary part.
+  const tiled = () =>
+    roundTrip((b) => {
+      b.addGroup((g) => boxFaces(100, 10, 100).forEach((f) => g.addFace(f)), { name: 'Wall' });
+      const tile = b.addComponentDefinition('Tile', (def) => boxFaces(1, 1, 0.1).forEach((f) => def.addFace(f)));
+      const pair = b.addComponentDefinition('Pair', (def) => {
+        def.addInstance(tile, { translation: [0, 0, 0] });
+        def.addInstance(tile, { translation: [1, 0, 0] });
+      });
+      for (let i = 0; i < 1700; i++) b.addInstance(pair, { translation: [(i % 50) * 2, -1, Math.floor(i / 50) * 2] });
+    });
+  const skp = tiled();
+
+  it('the parts whose copies add the most faces are listed, with how many copies and faces', () => {
+    const stats = summarizeSkp(skp);
+    expect(stats.placedFaces).toBe(6 + 3400 * 6);
+    // The pairs have no faces of their own, so only the tile is listed; the wall is placed once.
+    expect(stats.heavy).toEqual([{ id: expect.any(Number), name: 'Tile', copies: 3400, faces: 3400 * 6 }]);
+  });
+
+  it('leaving one out drops every copy of it, and counts match what is built', () => {
+    const tile = summarizeSkp(skp).heavy[0].id;
+    expect(summarizeSkp(skp, [tile]).placedFaces).toBe(6);
+    const r = convertSkp(skp, { name: 'T', leaveOut: [tile] });
+    const parts = allParts(r.root);
+    expect(parts.map((p) => p.name)).toEqual(['T', 'Wall']);
+    expect(r.faces.total).toBe(6);
+    expect(checkWatertight(parts[1].model).watertight).toBe(true);
+  });
+
+  it('the biggest are suggested for leaving out only when the model is over budget', () => {
+    const stats = summarizeSkp(skp);
+    expect(suggestLeaveOut(skp, stats, 1000)).toEqual([stats.heavy[0].id]);
+    expect(suggestLeaveOut(skp, stats, 300_000)).toEqual([]);
   });
 });
 

@@ -4,7 +4,7 @@ import { checkWatertight, drawRectangle, findFaceAt, GROUND_PLANE, initBooleanKe
 import { inheritMaterials, paintFaces, unpaintMaterial } from '../src/core/ops/materials';
 import { transformVertices, translation } from '../src/core/ops/transform';
 import { Document } from '../src/doc/Document';
-import { FileFormatError, FORMAT_VERSION, parseDocument, serializeDocument } from '../src/io/fileFormat';
+import { FileFormatError, parseDocument, serializeDocument, WRITE_VERSION } from '../src/io/fileFormat';
 import { ev, harness, use } from './helpers/tools';
 
 beforeAll(async () => {
@@ -202,7 +202,8 @@ describe('file format', () => {
       const e2 = back.model.halfEdgeBetween(h.origin, doc.model.dest(e))!;
       expect(back.model.he(e2).curve).toBe(h.curve);
     }
-    expect(volume(back.model)).toBeCloseTo(volume(doc.model), 9);
+    // Positions are saved to 0.000001 mm: the volume to a few parts in a billion.
+    expect(Math.abs(volume(back.model) / volume(doc.model) - 1)).toBeLessThan(1e-8);
     expect(checkWatertight(back.model).genus).toBe(1);
     expect(back.guides.lines()).toHaveLength(1);
     expect(back.guides.points()[0].pos).toEqual([5, 6, 7]);
@@ -229,7 +230,7 @@ describe('file format', () => {
     doc.model.setEdgeSoft(a, b, true);
     doc.model.setEdgeSoft(b, c, false);
     const text = serializeDocument(doc);
-    expect(JSON.parse(text).version).toBe(FORMAT_VERSION);
+    expect(JSON.parse(text).version).toBe(WRITE_VERSION);
     const back = parseDocument(text).model;
     const soft = (p: number, q: number) => back.he(back.halfEdgeBetween(p, q)!).soft;
     expect([soft(a, b), soft(b, c), soft(c, d)]).toEqual([true, false, undefined]);

@@ -1,3 +1,4 @@
+import { strFromU8, strToU8 } from 'fflate';
 import { describe, expect, it } from 'vitest';
 import { DriveApi, DriveError, type DriveFile } from '../src/app/drive/driveApi';
 import { DriveAutosaveScheduler, type Clock } from '../src/app/drive/driveAutosave';
@@ -6,7 +7,7 @@ import { contentsText, folderLabel, searchDesigns } from '../src/app/drive/drive
 
 /** A small in-memory stand-in for the Drive REST API (only what VormCraft uses). */
 class FakeDrive {
-  files = new Map<string, DriveFile & { parents: string[]; folder: boolean; text: string; trashed?: boolean }>();
+  files = new Map<string, DriveFile & { parents: string[]; folder: boolean; text: string; trashed?: boolean; mimeType?: string }>();
   calls: string[] = [];
   /** Statuses to answer with before the next real answers (429, 401...). */
   failures: number[] = [];
@@ -96,14 +97,15 @@ class FakeDrive {
     return [...this.files.values()].find((f) => f.name === name)!;
   }
 
-  private write(fileId: string | undefined, meta: { name?: string; parents?: string[] }, text: string): DriveFile {
+  private write(fileId: string | undefined, meta: { name?: string; parents?: string[]; mimeType?: string }, text: string): DriveFile {
     if (fileId) {
       const f = this.files.get(fileId);
       if (!f) throw new Error('no file');
-      Object.assign(f, { text, headRevisionId: `r${this.rev++}`, size: String(text.length) });
+      Object.assign(f, { text, headRevisionId: `r${this.rev++}`, size: String(text.length) }, meta.mimeType ? { mimeType: meta.mimeType } : {});
       return f;
     }
     const id = this.add(meta.name!, meta.parents![0], false, text);
+    if (meta.mimeType) this.files.get(id)!.mimeType = meta.mimeType;
     return this.files.get(id)!;
   }
 }
@@ -136,10 +138,23 @@ describe('Google Drive', () => {
     expect(again.file.name).toBe('Shelf (2).vorm');
     expect((await session.list()).map((f) => f.name).sort()).toEqual(['Shelf (2).vorm', 'Shelf.vorm']);
     const opened = await session.open(file);
-    expect(opened.text).toBe('{"a":1}');
+    expect(strFromU8(opened.bytes)).toBe('{"a":1}');
     const saved = await session.update(location, 'Shelf.vorm', '{"a":2}');
     expect(saved.location.revision).not.toBe(location.revision);
-    expect((await session.open(file)).text).toBe('{"a":2}');
+    expect(strFromU8((await session.open(file)).bytes)).toBe('{"a":2}');
+  });
+
+  it('a .vorm saved as bytes gets the VormCraft file type; one saved before it is given it when saved over', async () => {
+    const { session, fake } = setup();
+    await session.connect();
+    const old = await session.create('Old.vorm', '{"a":1}');
+    expect(fake.files.get(old.file.id)!.mimeType).toBe('application/json');
+    const zipped = strToU8('PK zipped design');
+    const created = await session.create('New.vorm', zipped);
+    expect(fake.files.get(created.file.id)!.mimeType).toBe('application/x-vormcraft');
+    await session.update(old.location, 'Old.vorm', zipped);
+    expect(fake.files.get(old.file.id)!.mimeType).toBe('application/x-vormcraft');
+    expect(strFromU8((await session.open(old.file)).bytes)).toBe('PK zipped design');
   });
 
   it('notices a file changed elsewhere, and can replace it when asked', async () => {

@@ -24,8 +24,8 @@ export interface FileHost {
   save(data: string | Uint8Array, suggestedName: string, filter: FileFilter, path?: string): Promise<{ name: string; path?: string } | null>;
   /** Pick a file and read it as bytes (importing binary formats such as STL). */
   openBinary(filter: FileFilter): Promise<{ name: string; path?: string; bytes: Uint8Array } | null>;
-  /** Read a file by path (desktop only: a file opened from Explorer). */
-  readPath?(path: string): Promise<OpenedFile>;
+  /** Read a file by path as bytes (desktop only: a file opened from Explorer). */
+  readPath?(path: string): Promise<{ name: string; path: string; bytes: Uint8Array }>;
 }
 
 export const isTauri = (): boolean => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -68,7 +68,7 @@ async function tauriHost(): Promise<FileHost> {
       return { name: baseName(path), path, bytes: await fs.readFile(path) };
     },
     async readPath(path) {
-      return { name: baseName(path), path, text: await fs.readTextFile(path) };
+      return { name: baseName(path), path, bytes: await fs.readFile(path) };
     },
   };
 }

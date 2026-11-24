@@ -7,9 +7,10 @@ import { DEFAULT_STYLE, type Scene } from '../doc/Scenes';
 /**
  * SketchUp (.skp) files, read by OpenSKP (an independent, open-source reader; VormCraft is not
  * affiliated with Trimble or SketchUp), turned into VormCraft geometry:
- * - every placed group or component becomes a group (nested as in the file; VormCraft has no
- *   components, so each placement of a component becomes its own copy), with its position,
- *   rotation and scale applied;
+ * - every placed group or component becomes a group (nested as in the file; each placement of a
+ *   component becomes its own copy, as imported components are not linked yet), with its
+ *   position, rotation and scale applied. A file whose copies add up to more faces than
+ *   VormCraft can hold can leave out the groups and components placed most often;
  * - faces keep their holes, paint, and soft/smooth edges; circles and arcs keep their true radius;
  * - materials (colours, transparency, textures at their real size), scenes (cameras) and guides.
  * SketchUp allows faces our solids do not (a face turned the other way from its neighbours, three
@@ -43,7 +44,27 @@ export interface SkpStats {
   materials: number;
   scenes: number;
   guides: number;
+  /**
+   * Groups and components whose copies add the most faces (their own faces × copies, biggest
+   * first), which can be left out of a model too large to bring in whole.
+   */
+  heavy: HeavyDefinition[];
 }
+
+/** A group or component placed many times, as listed by `summarizeSkp`. */
+export interface HeavyDefinition {
+  /** Its id for `SkpConvertOptions.leaveOut` (its place among the file's definitions). */
+  id: number;
+  name: string;
+  copies: number;
+  /** Faces its copies add (its own faces in every copy, not counting groups inside it). */
+  faces: number;
+}
+
+/** A definition is listed as heavy when it is placed this often and adds at least this many faces. */
+const HEAVY_COPIES = 20;
+const HEAVY_FACES = 20_000;
+const HEAVY_LISTED = 8;
 
 export interface SkpImport {
   /** The whole file, as one group (its loose geometry, with every placed group inside). */
@@ -91,21 +112,40 @@ function definitionOf(skp: SkpModel, inst: Instance): Definition | undefined {
   return skp.definitions.get(inst.refIdx) ?? [...skp.definitions.values()][inst.refIdx];
 }
 
-/** What the file holds, for the import window (cheap: no geometry is built). */
-export function summarizeSkp(skp: SkpModel): SkpStats {
+/** Each definition's id, as `HeavyDefinition.id` and `SkpConvertOptions.leaveOut` use it. */
+function definitionIds(skp: SkpModel): Map<Definition, number> {
+  return new Map([...skp.definitions.values()].map((d, i) => [d, i]));
+}
+
+/**
+ * What the file holds, for the import window (cheap: no geometry is built). With `leaveOut`, the
+ * counts are for the model without those groups and components (and everything inside them).
+ */
+export function summarizeSkp(skp: SkpModel, leaveOut: readonly number[] = []): SkpStats {
+  const ids = definitionIds(skp);
+  const skip = new Set(leaveOut);
   let placedFaces = 0;
   let placements = 0;
+  const copies = new Map<Definition, number>();
   const count = (def: Definition, depth: number) => {
     placedFaces += def.faces.length;
     if (depth >= MAX_DEPTH) return;
     for (const inst of def.instances) {
       const child = definitionOf(skp, inst);
-      if (!child) continue;
+      if (!child || skip.has(ids.get(child) ?? -1)) continue;
       placements++;
+      copies.set(child, (copies.get(child) ?? 0) + 1);
       count(child, depth + 1);
     }
   };
   count(skp.root, 0);
+  const heavy: HeavyDefinition[] = [];
+  for (const [def, n] of copies) {
+    const id = ids.get(def);
+    if (id === undefined || n < HEAVY_COPIES || def.faces.length * n < HEAVY_FACES) continue;
+    heavy.push({ id, name: def.name || (def.isGroup ? 'Group' : 'Component'), copies: n, faces: def.faces.length * n });
+  }
+  heavy.sort((a, b) => b.faces - a.faces);
   return {
     version: skp.version,
     units: skp.units,
@@ -115,7 +155,23 @@ export function summarizeSkp(skp: SkpModel): SkpStats {
     materials: skp.materials.length,
     scenes: skp.pages.length,
     guides: skp.root.constructionLines.length + skp.root.constructionPoints.length,
+    heavy: heavy.slice(0, HEAVY_LISTED),
   };
+}
+
+/**
+ * Which of the listed heavy groups and components to leave out by default so the model comes to
+ * no more than `budget` faces: the biggest first, until it fits (none if it fits already).
+ */
+export function suggestLeaveOut(skp: SkpModel, stats: SkpStats, budget: number): number[] {
+  const out: number[] = [];
+  let faces = stats.placedFaces;
+  for (const h of stats.heavy) {
+    if (faces <= budget) break;
+    out.push(h.id);
+    faces = summarizeSkp(skp, out).placedFaces;
+  }
+  return out;
 }
 
 export interface SkpConvertOptions {
@@ -123,10 +179,14 @@ export interface SkpConvertOptions {
   name: string;
   scenes?: boolean;
   guides?: boolean;
+  /** Groups and components (`HeavyDefinition.id`) not to bring in, with everything inside them. */
+  leaveOut?: readonly number[];
 }
 
 export function convertSkp(skp: SkpModel, opts: SkpConvertOptions): SkpImport {
   const faces = { total: 0, turned: 0, detached: 0, skipped: 0 };
+  const ids = definitionIds(skp);
+  const skip = new Set(opts.leaveOut ?? []);
   const usedMaterials = new Set<number>();
   const materialKey = (id: number | null | undefined): string | undefined => {
     if (id === null || id === undefined || !skp.materialsById.has(id)) return undefined;
@@ -223,7 +283,7 @@ export function convertSkp(skp: SkpModel, opts: SkpConvertOptions): SkpImport {
     if (depth < MAX_DEPTH) {
       for (const child of def.instances) {
         const cdef = definitionOf(skp, child);
-        if (!cdef) continue;
+        if (!cdef || skip.has(ids.get(cdef) ?? -1)) continue;
         const part = visit(cdef, mul(m, placementMatrix(child.matrix)), child.name || cdef.name || (cdef.isGroup ? 'Group' : 'Component'), child, depth + 1);
         if (part) children.push(part);
       }

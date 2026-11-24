@@ -1,4 +1,5 @@
-import { FILE_EXTENSION, serializeDocument } from '../../io/fileFormat';
+import { FILE_EXTENSION } from '../../io/fileFormat';
+import { encodeVorm } from '../../io/vormFile';
 import type { ToolController } from '../../tools/ToolController';
 import type { MenuEntry } from '../../tools/contextMenu';
 import { choiceDialog, confirmDialog, progressDialog, promptDialog } from '../dialogs';
@@ -113,11 +114,11 @@ export class DriveCommands {
     if (revision !== this.controller.revision && !this.controller.dirty) return;
     const key = this.files.drive?.fileId ?? this.files.path ?? this.sessionKey;
     const history = this.settings().history;
-    const text = serializeDocument(this.controller.doc, { history, undo: history ? this.controller.history.steps : undefined });
+    const bytes = encodeVorm(this.controller.doc, { history, undo: history ? this.controller.history.steps : undefined, savedBy: `VormCraft ${APP_VERSION}` });
     this.uploading = true;
     this.controller.onUpdate();
     try {
-      await this.session.autosave(key, `${this.files.name} (autosave).${FILE_EXTENSION}`, text);
+      await this.session.autosave(key, `${this.files.name} (autosave).${FILE_EXTENSION}`, bytes);
       this.lastCopy = Date.now();
       this.problem = null;
     } catch (err) {
@@ -201,11 +202,11 @@ export class DriveCommands {
     await this.files.guard(async () => {
       const progress = progressDialog('Saving to Google Drive', `Uploading ${name}…`);
       try {
-        const text = this.files.textForSave();
+        const bytes = this.files.bytesForSave();
         const fileName = `${name}.${FILE_EXTENSION}`;
         const { file, location } = picked.replace
-          ? await this.session.update({ fileId: picked.replace.id, revision: undefined, folderId: picked.folderId }, fileName, text, true)
-          : await this.session.create(fileName, text, picked.folderId);
+          ? await this.session.update({ fileId: picked.replace.id, revision: undefined, folderId: picked.folderId }, fileName, bytes, true)
+          : await this.session.create(fileName, bytes, picked.folderId);
         await this.files.savedElsewhere(file.name, location);
         this.afterSave(file.name);
       } finally {
@@ -224,8 +225,8 @@ export class DriveCommands {
     await this.files.guard(async () => {
       const progress = progressDialog('Saving to Google Drive', `Uploading ${this.files.name}…`);
       try {
-        const text = this.files.textForSave();
-        const { file, location: next } = await this.session.update(location, `${this.files.name}.${FILE_EXTENSION}`, text, replace);
+        const bytes = this.files.bytesForSave();
+        const { file, location: next } = await this.session.update(location, `${this.files.name}.${FILE_EXTENSION}`, bytes, replace);
         await this.files.savedElsewhere(file.name, next);
         this.afterSave(file.name);
       } catch (err) {
@@ -251,8 +252,8 @@ export class DriveCommands {
     if (choice === 'replace') await this.save(true);
     else if (choice === 'both') {
       await this.files.guard(async () => {
-        const text = this.files.textForSave();
-        const { file, location } = await this.session.create(`${this.files.name}.${FILE_EXTENSION}`, text, this.files.drive?.folderId);
+        const bytes = this.files.bytesForSave();
+        const { file, location } = await this.session.create(`${this.files.name}.${FILE_EXTENSION}`, bytes, this.files.drive?.folderId);
         await this.files.savedElsewhere(file.name, location);
         this.afterSave(file.name);
       });
@@ -275,8 +276,8 @@ export class DriveCommands {
       const picked = chosen.file;
       const loading = progressDialog('Opening from Google Drive', `Downloading ${picked.name}…`);
       try {
-        const { text, location } = await this.session.open(picked);
-        await this.files.openFromDrive(picked.name, text, location);
+        const { bytes, location } = await this.session.open(picked);
+        await this.files.openFromDrive(picked.name, bytes, location);
         this.scheduler.settled(this.controller.revision);
       } finally {
         loading.close();

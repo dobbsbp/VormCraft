@@ -168,7 +168,7 @@ export class Lifecycle {
       const handle = params.files[0];
       if (!handle) return;
       const file = await handle.getFile();
-      await this.files.openText(file.name, await file.text());
+      await this.files.openBytes(file.name, new Uint8Array(await file.arrayBuffer()));
     });
   }
 
@@ -177,7 +177,7 @@ export class Lifecycle {
     if (!isTauri()) return null;
     try {
       const { invoke } = await import('@tauri-apps/api/core');
-      const f = await invoke<{ name: string; path: string; text: string } | null>('launch_file');
+      const f = await invoke<{ name: string; path: string } | null>('launch_file');
       return f?.path ?? null;
     } catch {
       return null;

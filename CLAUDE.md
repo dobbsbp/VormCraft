@@ -47,7 +47,10 @@ Unfinished work and known bugs live in `TODO.md`.
 - **Checks:** Entity Info shows volumes and whether shapes are proper solids; tests refuse changes
   that break solids.
 - **Files:**
-  - save/open `.vorm` (format 8, with design history and undo saved inside; components saved once);
+  - save/open `.vorm` (design history and undo saved inside; components saved once). Format 9 is a
+    zip holding `design.json`, with textures, history and undo as entries (`src/io/vormFile.ts`);
+    the bridge release opens it but still saves format 8 plain JSON (`WRITE_ZIPPED` off) so 0.9
+    apps can open what it saves; 1.0.0 turns `WRITE_ZIPPED` on. Older files keep opening;
   - autosave and recovery;
   - Google Drive save, open and autosave, and each device's settings saved/loaded by hand
     (`VormCraft settings.json`; Google-verified; `drive.file` scope only);
@@ -238,7 +241,12 @@ Unfinished work and known bugs live in `TODO.md`.
     deploys the web app only).
   - See `docs/RELEASING.md`.
 - **File format changes:**
-  - Bump `FORMAT_VERSION` (now 8) and keep reading older versions.
+  - Bump `FORMAT_VERSION` (now 9) and keep reading older versions.
+  - Raise `MIN_READER_VERSION` (now 8) only when older apps would misread the new files; new
+    optional data leaves it alone, so older apps still open newer files and leave out the new
+    parts.
+  - A change older apps cannot read (a new container, or a raised `MIN_READER_VERSION`) ships
+    reading one release before writing, as format 9 did (`WRITE_ZIPPED`).
   - Add `tests/fixtures/format-vN.vorm` and its case in `tests/compatibility.test.ts`.
   - Never edit or delete existing fixtures.
 - **Library items:** when they change shape, bump `LIBRARY_VERSION` so cached preview pictures are
