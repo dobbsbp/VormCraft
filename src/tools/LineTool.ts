@@ -5,10 +5,14 @@ import type { DocumentSnapshot } from '../doc/Document';
 import type { InferenceHints, Preview, PreviewColor, Snap, Tool, ToolContext, ToolEvent } from './types';
 import { formatLength, parseLength } from './units';
 
-/** Colour of the rubber-band line: the axis it is inferred along, if any. */
+/**
+ * Colour of the rubber-band line: the axis it is inferred along, if any. A locked line stays in the
+ * lock's colour when it ends on an edge or a guide.
+ */
 export function lineColor(snap: Snap | null): PreviewColor {
-  if (snap?.kind === 'axis') return (['axisX', 'axisY', 'axisZ'] as const)[snap.axis ?? 0];
-  if (snap?.kind === 'parallel') return 'parallel';
+  const locked = snap?.locked && snap.kind !== 'perpendicular';
+  if (snap?.kind === 'axis' || (locked && snap.axis !== undefined)) return (['axisX', 'axisY', 'axisZ'] as const)[snap!.axis ?? 0];
+  if (snap?.kind === 'parallel' || locked) return 'parallel';
   return 'preview';
 }
 

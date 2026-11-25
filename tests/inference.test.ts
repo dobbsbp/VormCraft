@@ -5,6 +5,8 @@ import { Guides } from '../src/doc/Guides';
 import { infer, nearOnScreen } from '../src/tools/inference';
 import { modelBounds } from '../src/core/ops/group';
 import type { InferenceHints } from '../src/tools/types';
+import { lineColor } from '../src/tools/LineTool';
+import { ev, harness, use } from './helpers/tools';
 import { Navigator } from '../src/view/navigation';
 import { cameraProjector, screenRay } from '../src/view/projector';
 
@@ -248,6 +250,95 @@ describe('inference snapping', () => {
     const s = inferAt(m, cam(), [50, 50, 20], { hints: { centres: true, reference: [0, 50, 20], lock: { dir: [1, 0, 0], axis: 0 } }, nudge: [6, 0] });
     expect(s?.locked).toBe(true);
     s!.point.forEach((x, i) => expect(x).toBeCloseTo([50, 50, 20][i], 6));
+  });
+
+  it('a line locked to an axis stops on an edge it crosses (still locked, still that axis)', () => {
+    const m = box();
+    // From the middle of the top, locked to green: the line crosses the top's back edge at y = 100.
+    const hints: InferenceHints = { reference: [30, 50, 20], lock: { dir: [0, 1, 0], axis: 1 } };
+    for (const nudge of [[0, 0], [5, 3], [-4, -5]] as [number, number][]) {
+      const s = inferAt(m, cam(), [30, 100, 20], { hints, nudge });
+      expect(s).toMatchObject({ kind: 'onEdge', locked: true, axis: 1, from: [30, 50, 20] });
+      expect(s!.edge).toBeDefined();
+      s!.point.forEach((x, i) => expect(x).toBeCloseTo([30, 100, 20][i], 6));
+      // The rubber band stays green.
+      expect(lineColor(s)).toBe('axisY');
+    }
+    // Away from the edge it slides along the axis as before.
+    const along = inferAt(m, cam(), [30, 80, 20], { hints });
+    expect(along).toMatchObject({ kind: 'axis', locked: true, axis: 1 });
+    expect(along!.point[0]).toBeCloseTo(30, 6);
+    expect(along!.point[1]).toBeCloseTo(80, 3);
+  });
+
+  it('a locked line catches an edge without careful aiming: off to the side or a little short', () => {
+    const m = box();
+    const hints: InferenceHints = { reference: [30, 50, 20], lock: { dir: [0, 1, 0], axis: 1 } };
+    // The locked line's direction on screen where it meets the back edge, and across it.
+    const proj = cameraProjector(cam(), VIEWPORT);
+    const [x0, y0] = proj.toScreen([30, 100, 20])!;
+    const [x1, y1] = proj.toScreen([30, 101, 20])!;
+    const len = Math.hypot(x1 - x0, y1 - y0);
+    const along: [number, number] = [(x1 - x0) / len, (y1 - y0) / len];
+    const across: [number, number] = [-along[1], along[0]];
+    const at = (a: number, c: number): [number, number] => [along[0] * a + across[0] * c, along[1] * a + across[1] * c];
+    // 30 px or more to either side of the line, and a little short of or past the edge: caught.
+    for (const [a, c] of [[0, 30], [0, -45], [-10, 25], [10, -10]]) {
+      const s = inferAt(m, cam(), [30, 100, 20], { hints, nudge: at(a, c) });
+      expect(s, `${a} px along, ${c} px across`).toMatchObject({ kind: 'onEdge', locked: true, axis: 1 });
+      s!.point.forEach((x, i) => expect(x).toBeCloseTo([30, 100, 20][i], 6));
+    }
+    // Clearly short of it along the line: still sliding along the line.
+    expect(inferAt(m, cam(), [30, 100, 20], { hints, nudge: at(-25, 0) })).toMatchObject({ kind: 'axis', locked: true });
+  });
+
+  it('a locked line that crosses an edge at its corner says so', () => {
+    const m = box();
+    const s = inferAt(m, cam(), [0, 100, 20], { hints: { reference: [0, 30, 20], lock: { dir: [0, 1, 0], axis: 1 } }, nudge: [10, 6] });
+    expect(s).toMatchObject({ kind: 'endpoint', locked: true, axis: 1 });
+    s!.point.forEach((x, i) => expect(x).toBeCloseTo([0, 100, 20][i], 6));
+  });
+
+  it('from the middle of one edge, locked across: the middle of the opposite edge, as itself', () => {
+    const m = box();
+    // The top's front edge midpoint (50, 0, 20), locked to green: it meets the back edge at its midpoint.
+    const hints: InferenceHints = { reference: [50, 0, 20], lock: { dir: [0, 1, 0], axis: 1 } };
+    for (const nudge of [[0, 0], [4, 3]] as [number, number][]) {
+      const s = inferAt(m, cam(), [50, 100, 20], { hints, nudge });
+      expect(s).toMatchObject({ kind: 'midpoint', locked: true, axis: 1, from: [50, 0, 20] });
+      s!.point.forEach((x, i) => expect(x).toBeCloseTo([50, 100, 20][i], 6));
+      expect(lineColor(s)).toBe('axisY');
+    }
+  });
+
+  it('Line, locked to green, ends on the edge it was pointed at and splits the face there', () => {
+    const h = harness();
+    pushPull(h.doc.model, drawRectangle(h.doc.model, GROUND_PLANE, [0, 0, 0], 100, 100).inner!, 20);
+    const faces = h.doc.model.faces.size;
+    use(h.controller, 'line');
+    h.controller.tool.pointerDown(ev(h.doc, [30, 0, 20], { kind: 'onEdge' }));
+    h.controller.toggleLock('y');
+    const s = inferAt(h.doc.model, cam(), [30, 100, 20], { hints: { reference: [30, 0, 20], lock: { dir: [0, 1, 0], axis: 1 } }, nudge: [4, 2] });
+    expect(s?.kind).toBe('onEdge');
+    h.controller.tool.pointerMove(ev(h.doc, s!.point, { snap: s }));
+    h.controller.tool.pointerDown(ev(h.doc, s!.point, { snap: s }));
+    // The top is cut in two by a line from the front edge to exactly the back edge.
+    expect(h.doc.model.faces.size).toBe(faces + 1);
+    expect(h.doc.model.findVertex([30, 100, 20])).toBeDefined();
+  });
+
+  it('a locked line stops on a guide it crosses; a corner nearer the cursor still wins', () => {
+    const m = box();
+    const guides = new Guides();
+    guides.addLine([0, 0, 20], [1, 1, 0]); // across the top, corner to corner
+    const hints: InferenceHints = { reference: [60, 0, 20], lock: { dir: [0, 1, 0], axis: 1 } };
+    const s = inferAt(m, cam(), [60, 60, 20], { hints, guides, nudge: [3, -2] });
+    expect(s).toMatchObject({ kind: 'onGuide', locked: true, axis: 1 });
+    s!.point.forEach((x, i) => expect(x).toBeCloseTo([60, 60, 20][i], 6));
+    // At the far corner (100, 100, 20) the corner is right under the cursor: "as far as that corner".
+    const corner = inferAt(m, cam(), [100, 100, 20], { hints, guides });
+    expect(corner).toMatchObject({ kind: 'axis', locked: true });
+    corner!.point.forEach((x, i) => expect(x).toBeCloseTo([60, 100, 20][i], 6));
   });
 
   it('a line in the model nearer the cursor than the axis wins over the axis, and the other way round', () => {

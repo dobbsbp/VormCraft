@@ -4,6 +4,11 @@ What changed in each version of VormCraft. The section for a version is also sho
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
+## 0.9.5
+
+- Drawing or moving locked to an axis with the arrow keys now stops on an edge or guide the line crosses, as it does without the lock.
+- It catches the edge without careful aiming: only how far along the line the mouse is matters, not how far beside it.
+
 ## 0.9.4
 
 - VormCraft can now open the smaller, compressed .vorm files that the next version will save. This version still saves files as before, so they keep opening in every 0.9 version.

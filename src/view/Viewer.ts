@@ -870,8 +870,9 @@ export class Viewer implements SceneView {
     }
 
     const previewLines: PreviewLines[] = [...(preview.lines ?? [])];
-    if ((snap?.kind === 'axis' || snap?.kind === 'parallel' || snap?.kind === 'perpendicular') && snap.from) {
-      const color = snap.kind === 'axis' ? (['axisX', 'axisY', 'axisZ'] as const)[snap.axis ?? 0] : 'parallel';
+    // (A locked line that ends on an edge or a guide is still drawn as the lock.)
+    if ((snap?.kind === 'axis' || snap?.kind === 'parallel' || snap?.kind === 'perpendicular' || snap?.locked) && snap.from) {
+      const color = snap.axis !== undefined ? (['axisX', 'axisY', 'axisZ'] as const)[snap.axis] : 'parallel';
       // A locked direction is drawn solid and thicker than a passing inference.
       previewLines.push({ points: [snap.from, snap.point], color, dashed: !snap.locked, width: snap.locked ? 3 : 2 });
     }

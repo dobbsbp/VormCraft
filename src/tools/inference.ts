@@ -99,11 +99,29 @@ export function infer(input: InferenceInput): Snap | null {
     const prev = found.get(snap.kind);
     if (!prev || d < prev.px) found.set(snap.kind, { snap, px: d });
   };
+  // With an arrow-key lock, where the locked line crosses an edge or a guide near where the cursor
+  // points on the line: the line can end exactly on it. Only the distance along the line counts
+  // (moving across it does not change where a locked line ends), so it takes no careful aiming.
+  const ref = input.hints?.reference;
+  const lock = ref ? input.hints?.lock : undefined;
+  const pointed = lock && ref ? closestRayLine(ray, ref, lock.dir) : null;
+  const pointedOnScreen = pointed ? projector.toScreen(pointed.point) : null;
+  const lockTol = pointTol;
+  let crossing: Candidate | null = null;
+  const offerCrossing = (snap: Snap) => {
+    if (!ref || !lock || distance(snap.point, ref) <= TOL || !visible(snap.point)) return;
+    const d = alongLinePx(projector, cursor, snap.point, lock.dir, distance(snap.point, ref));
+    if (d <= lockTol && (!crossing || d < crossing.px)) crossing = { snap: { ...snap, axis: lock.axis, from: ref, locked: true }, px: d };
+  };
 
   const reach = Math.max(pointTol, lineTol);
   for (const m of [model, ...(input.others ?? [])]) {
     const own = m === model;
-    if (!own && input.boundsOf && !nearOnScreen(input.boundsOf(m), projector, cursor, reach)) continue;
+    if (!own && input.boundsOf) {
+      const b = input.boundsOf(m);
+      // (Locked, a group near where the cursor points on the line counts too.)
+      if (!nearOnScreen(b, projector, cursor, reach) && !(pointedOnScreen && nearOnScreen(b, projector, pointedOnScreen, lockTol))) continue;
+    }
     for (const v of m.vertices.values()) {
       if (m.outgoing(v.id).size > 0) offer({ kind: 'endpoint', point: v.pos }, pointTol);
     }
@@ -114,6 +132,14 @@ export function infer(input: InferenceInput): Snap | null {
       offer({ kind: 'midpoint', point: scale(add(a, b), 0.5), ...(own ? { edge: e } : {}) }, pointTol);
       const on = closestRaySegment(ray, a, b);
       if (on) offer({ kind: 'onEdge', point: on, ...(own ? { edge: e } : {}) }, lineTol);
+      if (lock && ref) {
+        const x = intersectLines(ref, lock.dir, a, sub(b, a));
+        if (x && onSegment(x, a, b)) {
+          // Named for what it lands on: a corner, the edge's midpoint, or somewhere along it.
+          const kind: SnapKind = distance(x, a) <= TOL || distance(x, b) <= TOL ? 'endpoint' : distance(x, scale(add(a, b), 0.5)) <= TOL ? 'midpoint' : 'onEdge';
+          offerCrossing({ kind, point: x, ...(own ? { edge: e } : {}) });
+        }
+      }
     }
   }
 
@@ -123,6 +149,10 @@ export function infer(input: InferenceInput): Snap | null {
       const g = lines[i];
       const on = closestRayLine(ray, g.point, g.dir);
       if (on && on.t > 0) offer({ kind: 'onGuide', point: on.point, guide: g.id }, lineTol);
+      if (lock && ref) {
+        const x = intersectLines(ref, lock.dir, g.point, g.dir);
+        if (x) offerCrossing({ kind: 'onGuide', point: x, guide: g.id });
+      }
       for (let j = i + 1; j < lines.length; j++) {
         const x = intersectLines(g.point, g.dir, lines[j].point, lines[j].dir);
         if (x) offer({ kind: 'guideIntersection', point: x, guide: g.id }, pointTol);
@@ -143,7 +173,6 @@ export function infer(input: InferenceInput): Snap | null {
   const ORIGIN: Vec3 = [0, 0, 0];
   offer({ kind: 'origin', point: ORIGIN }, pointTol);
   for (const p of input.hints?.points ?? []) offer({ kind: 'endpoint', point: p }, pointTol);
-  const ref = input.hints?.reference;
   const axisFrom = ref ?? ORIGIN;
   AXES.forEach((axis, i) => {
     const on = closestRayLine(ray, axisFrom, axis);
@@ -165,8 +194,7 @@ export function infer(input: InferenceInput): Snap | null {
   const ground = rayPlane(ray, GROUND_PLANE);
   if (ground) found.set('ground', { snap: { kind: 'ground', point: ground }, px: 0 });
 
-  const lock = input.hints?.lock;
-  if (lock && ref) return lockedSnap(found, ray, ref, lock);
+  if (lock && ref) return lockedSnap(found, ray, ref, lock, crossing);
   const lockPlane = input.hints?.lockPlane;
   if (lockPlane && ref) return perpendicularSnap(found, ray, ref, lockPlane.normal);
 
@@ -208,14 +236,32 @@ function perpendicularSnap(found: Map<SnapKind, Candidate>, ray: Ray, ref: Vec3,
 
 const LINE_KINDS: readonly SnapKind[] = ['axis', 'onEdge', 'onGuide'];
 
+/**
+ * How far the cursor is from `p` along a line through it in direction `dir`, on screen: the part of
+ * the cursor's offset that runs along the line as drawn (moving across the line does not count).
+ * `size` sets the step used to find the line's direction on screen (in perspective it changes along
+ * the line, so it is taken at `p`).
+ */
+function alongLinePx(projector: InferenceInput['projector'], cursor: [number, number], p: Vec3, dir: Vec3, size: number): number {
+  const s = projector.toScreen(p);
+  const step = Math.max(size * 0.01, TOL * 10);
+  const t = projector.toScreen(add(p, scale(dir, step))) ?? projector.toScreen(sub(p, scale(dir, step)));
+  if (!s || !t) return Infinity;
+  const len = Math.hypot(t[0] - s[0], t[1] - s[1]);
+  if (len < 1e-9) return Math.hypot(cursor[0] - s[0], cursor[1] - s[1]); // the line points at the eye
+  return Math.abs(((cursor[0] - s[0]) * (t[0] - s[0]) + (cursor[1] - s[1]) * (t[1] - s[1])) / len);
+}
+
 const POINT_KINDS: readonly SnapKind[] = ['endpoint', 'origin', 'midpoint', 'centre', 'guideIntersection', 'guidePoint'];
 
 /**
  * Arrow-key lock: the point stays on the line through the reference in the locked direction.
  * Hovering a point (an endpoint, say) gives that point's position along the line, so you can
- * lock to red and then pick "as far as that corner".
+ * lock to red and then pick "as far as that corner". Where the line crosses an edge or a guide
+ * near the cursor (`crossing`), it stops on it (still locked); a point nearer the cursor wins, and
+ * a point right on the line (the midpoint of the edge it crosses) is given as itself.
  */
-function lockedSnap(found: Map<SnapKind, Candidate>, ray: Ray, ref: Vec3, lock: NonNullable<InferenceHints['lock']>): Snap | null {
+function lockedSnap(found: Map<SnapKind, Candidate>, ray: Ray, ref: Vec3, lock: NonNullable<InferenceHints['lock']>, crossing: Candidate | null): Snap | null {
   const kind: SnapKind = lock.axis === undefined ? 'parallel' : 'axis';
   const base = { kind, axis: lock.axis, from: ref, locked: true };
   for (const k of POINT_KINDS) {
@@ -223,8 +269,14 @@ function lockedSnap(found: Map<SnapKind, Candidate>, ray: Ray, ref: Vec3, lock: 
     if (!c) continue;
     const point = add(ref, scale(lock.dir, dot(sub(c.snap.point, ref), lock.dir)));
     // A point that projects onto the start itself says nothing about the distance: ignore it.
-    if (distance(point, ref) > TOL) return { ...base, point };
+    if (distance(point, ref) <= TOL) continue;
+    // A point right on the locked line (the midpoint of the edge it crosses, say) is that point.
+    if (distance(point, c.snap.point) <= TOL) return { ...c.snap, axis: lock.axis, from: ref, locked: true };
+    // The crossing when it is nearer, or the same place (it says more: the edge it lands on).
+    if (crossing && (crossing.px <= c.px || distance(point, crossing.snap.point) <= TOL)) return crossing.snap;
+    return { ...base, point };
   }
+  if (crossing) return crossing.snap;
   const on = closestRayLine(ray, ref, lock.dir);
   return on ? { ...base, point: on.point } : null;
 }
