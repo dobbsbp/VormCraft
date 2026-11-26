@@ -6,6 +6,7 @@ import { inheritMaterials, unpaintMaterial } from '../core/ops/materials';
 import type { Document, DocumentSnapshot } from '../doc/Document';
 import type { DisplayUnits } from '../doc/Units';
 import type { Group, GroupId } from '../doc/Groups';
+import type { TagId } from '../doc/Tags';
 import type { VersionKind } from '../doc/Versions';
 import { openVersion, recordVersion } from '../io/versions';
 import type { SkpImport, SkpPart } from '../io/skpImport';
@@ -598,7 +599,7 @@ export class ToolController {
   /** Select every face and edge. */
   selectAll(): void {
     const model = this.doc.model;
-    this.selection.set(model.faces.keys(), [...model.edges()].filter((e) => !model.he(e).hidden), [], this.doc.groups.children(this.doc.editing).filter((g) => !g.hidden).map((g) => g.id));
+    this.selection.set(model.faces.keys(), [...model.edges()].filter((e) => !model.he(e).hidden), [], this.doc.groups.children(this.doc.editing).filter((g) => !this.doc.groups.isHidden(g.id)).map((g) => g.id));
   }
 
   /** Each model's bounds for snapping, worked out again when the model changes. */
@@ -720,9 +721,10 @@ export class ToolController {
   goToScene(id: SceneId, seconds = this.doc.scenes.transition): void {
     const s = this.doc.scenes.get(id);
     if (!s) return;
-    const hiddenBefore = [...this.doc.groups.items.values()].map((g) => !!g.hidden).join() + this.doc.sections.active;
+    const hiddenNow = () => [...this.doc.groups.items.values()].map((g) => !!g.hidden).join() + this.doc.groups.tags.items.map((t) => !!t.hidden).join() + this.doc.sections.active;
+    const hiddenBefore = hiddenNow();
     applyScene(s, this.view(), this.doc.groups, this.doc.guides, seconds, this.doc.sections);
-    if ([...this.doc.groups.items.values()].map((g) => !!g.hidden).join() + this.doc.sections.active !== hiddenBefore) this.dirty = true;
+    if (hiddenNow() !== hiddenBefore) this.dirty = true;
     this.currentScene = id;
     this.notice = `Scene: ${s.name}`;
     this.afterDocumentChange();
@@ -772,18 +774,19 @@ export class ToolController {
     }
   }
 
-  /** How many groups and lines are hidden, in the whole design (counted once per change). */
-  hiddenCount(): { groups: number; lines: number } {
+  /** How many groups, lines and tags are hidden, in the whole design (counted once per change). */
+  hiddenCount(): { groups: number; lines: number; tags: number } {
     if (this.hidden?.revision !== this.revision || this.hidden.doc !== this.doc) {
       let lines = 0;
       for (const m of this.doc.allModels()) for (const e of m.edges()) if (m.he(e).hidden) lines++;
       const groups = [...this.doc.groups.items.values()].filter((g) => g.hidden).length;
-      this.hidden = { revision: this.revision, doc: this.doc, groups, lines };
+      const tags = this.doc.groups.tags.items.filter((t) => t.hidden).length;
+      this.hidden = { revision: this.revision, doc: this.doc, groups, lines, tags };
     }
-    return { groups: this.hidden.groups, lines: this.hidden.lines };
+    return { groups: this.hidden.groups, lines: this.hidden.lines, tags: this.hidden.tags };
   }
 
-  private hidden: { revision: number; doc: Document; groups: number; lines: number } | null = null;
+  private hidden: { revision: number; doc: Document; groups: number; lines: number; tags: number } | null = null;
 
   /** Selected lines that are hidden (they can be picked while hidden lines are shown). */
   private hiddenSelectedEdges(): HalfEdgeId[] {
@@ -810,15 +813,16 @@ export class ToolController {
     });
   }
 
-  /** Show every hidden group and line again, in the whole design. */
+  /** Show every hidden group, line and tag again, in the whole design. */
   unhideAll(): void {
-    const { groups, lines } = this.hiddenCount();
-    if (!groups && !lines) {
+    const { groups, lines, tags } = this.hiddenCount();
+    if (!groups && !lines && !tags) {
       this.notify('Nothing is hidden');
       return;
     }
     this.editDocument('Unhide all', () => {
       for (const g of this.doc.groups.items.values()) delete g.hidden;
+      for (const t of this.doc.groups.tags.items) this.doc.groups.tags.setHidden(t.id, false);
       for (const m of this.doc.allModels()) {
         for (const e of [...m.edges()]) if (m.he(e).hidden) m.setEdgeHidden(m.he(e).origin, m.dest(e), false);
       }
@@ -1127,7 +1131,8 @@ export class ToolController {
 
   /**
    * Add an imported SketchUp file as one undo step: its materials (renamed if a name is taken),
-   * the file as a group with its groups nested inside (paint and hidden state kept), and its
+   * its tags (a tag already in the design with the same name is used, and keeps its visibility),
+   * the file as a group with its groups nested inside (paint, tags and hidden state kept), and its
    * scenes and guides if they were imported. Selects the new group and zooms to it.
    */
   importSkp(r: SkpImport, label: string): GroupId | null {
@@ -1137,6 +1142,9 @@ export class ToolController {
         () => {
           const ids = new Map<string, MaterialId>();
           for (const [key, fields] of r.materials) ids.set(key, this.doc.materials.add({ ...fields, name: this.doc.materials.uniqueName(fields.name) }));
+          const tags = this.doc.groups.tags;
+          const tagIds = new Map<string, TagId>();
+          for (const t of r.tags) tagIds.set(t.name, tags.byName(t.name)?.id ?? tags.add(t.name, { hidden: t.hidden }));
           const place = (part: SkpPart, parent: GroupId | null): GroupId => {
             for (const f of part.model.faces.values()) {
               if (f.material === undefined) continue;
@@ -1144,13 +1152,18 @@ export class ToolController {
               if (id === undefined) delete f.material;
               else f.material = id;
             }
-            const g = this.doc.groups.add(part.model, parent, { name: part.name, material: part.material === undefined ? undefined : ids.get(part.material) });
+            const g = this.doc.groups.add(part.model, parent, { name: part.name, material: part.material === undefined ? undefined : ids.get(part.material), tag: part.tag === undefined ? undefined : tagIds.get(part.tag) });
             if (part.hidden) this.doc.groups.get(g)!.hidden = true;
             for (const c of part.children) place(c, g);
             return g;
           };
           top = place(r.root, this.doc.editing);
-          for (const s of r.scenes) this.doc.scenes.add(s);
+          // A scene that says which tags it hides also restores the hidden groups (as they are now).
+          const hiddenGroups = [...this.doc.groups.items.values()].filter((g) => g.hidden).map((g) => g.id);
+          for (const { hiddenTagNames, ...s } of r.scenes) {
+            const hiddenTags = hiddenTagNames?.map((n) => tagIds.get(n)).filter((id) => id !== undefined);
+            this.doc.scenes.add(hiddenTags ? { ...s, hidden: hiddenGroups, hiddenTags } : s);
+          }
           for (const l of r.guides.lines) this.doc.guides.addLine(l.point, l.dir);
           for (const p of r.guides.points) this.doc.guides.addPoint(p);
         },
@@ -1169,15 +1182,18 @@ export class ToolController {
 
   /**
    * Add an imported drawing (DXF) as one undo step: a group for the file with a group per layer
-   * inside, and its texts and dimensions as labels. Selects the new group and zooms to it.
+   * inside (tagged with the layer's name: a tag already in the design with that name is used),
+   * and its texts and dimensions as labels. Selects the new group and zooms to it.
    */
   importDrawing(root: DrawingPart, labels: readonly DrawingLabel[], label: string): GroupId | null {
     let top: GroupId | null = null;
     this.run(() =>
       this.apply(
         () => {
+          const tags = this.doc.groups.tags;
           const place = (part: DrawingPart, parent: GroupId | null): GroupId => {
-            const g = this.doc.groups.add(part.model, parent, { name: part.name });
+            const tag = part.tag === undefined ? undefined : (tags.byName(part.tag)?.id ?? tags.add(part.tag));
+            const g = this.doc.groups.add(part.model, parent, { name: part.name, tag });
             for (const c of part.children) place(c, g);
             return g;
           };
@@ -1408,6 +1424,65 @@ export class ToolController {
       if (g?.component) this.doc.groups.renameComponent(g.component.id, name.trim());
       else if (g) g.name = name.trim();
     });
+  }
+
+  /** Add a tag (named "Tag 1", "Tag 2"… unless a name is given); returns its id. */
+  addTag(name?: string): TagId | null {
+    const tags = this.doc.groups.tags;
+    const wanted = name?.trim() || tags.nextName();
+    const taken = tags.byName(wanted);
+    if (taken) return taken.id;
+    let id: TagId | null = null;
+    this.editDocument('Add tag', () => (id = tags.add(wanted)));
+    return id;
+  }
+
+  renameTag(id: TagId, name: string): void {
+    this.editDocument('Rename tag', () => this.doc.groups.tags.rename(id, name));
+  }
+
+  /** Delete a tag; the groups carrying it stay, untagged (and shown, unless hidden themselves). */
+  deleteTag(id: TagId): void {
+    this.editDocument('Delete tag', () => this.doc.groups.deleteTag(id));
+  }
+
+  /** Show or hide everything carrying a tag (an undo step, as hiding groups is). */
+  setTagHidden(id: TagId, hidden: boolean): void {
+    this.editDocument(hidden ? 'Hide tag' : 'Show tag', () => this.doc.groups.tags.setHidden(id, hidden));
+    // What was hidden cannot stay selected.
+    if (hidden && this.error === null) this.selection.prune(this.doc.model, this.doc.labels, this.doc.guides, (g) => !this.doc.groups.isHidden(g), this.doc.sections);
+    this.onUpdate();
+  }
+
+  /** How many groups carry each tag (component copies count once each). */
+  tagUse(): Map<TagId, number> {
+    const n = new Map<TagId, number>();
+    for (const g of this.doc.groups.items.values()) if (g.tag !== undefined) n.set(g.tag, (n.get(g.tag) ?? 0) + 1);
+    return n;
+  }
+
+  /** Give the selected groups a tag (undefined: untagged). */
+  tagSelection(tag: TagId | undefined): void {
+    const groups = [...this.selection.groups].filter((id) => this.doc.groups.has(id));
+    if (!groups.length) {
+      this.error = 'Select the groups to tag (geometry outside groups cannot have a tag)';
+      this.onUpdate();
+      return;
+    }
+    if (tag !== undefined && !this.doc.groups.tags.get(tag)) return;
+    this.editDocument(tag === undefined ? 'Untag' : 'Tag', () => {
+      for (const id of groups) {
+        const g = this.doc.groups.get(id)!;
+        if (tag === undefined) delete g.tag;
+        else g.tag = tag;
+      }
+    });
+    // Tagged with a hidden tag: the groups disappear, so they cannot stay selected.
+    if (tag !== undefined && this.doc.groups.tags.isHidden(tag)) {
+      this.selection.clear();
+      this.notify('Tagged; that tag is hidden, so the groups are hidden too');
+    }
+    this.onUpdate();
   }
 
   /**

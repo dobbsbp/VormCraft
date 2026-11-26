@@ -1019,6 +1019,20 @@ body {
   cursor: default;
 }
 
+/* The Tags panel reuses the scene list: a show box, the name, how many groups carry it. */
+.tag-row input[type='checkbox'] {
+  flex: none;
+  margin: 0 4px;
+}
+
+.tag-count {
+  flex: none;
+  min-width: 24px;
+  font-size: 11px;
+  text-align: right;
+  color: var(--text-muted);
+}
+
 .panel-check {
   display: flex;
   align-items: center;

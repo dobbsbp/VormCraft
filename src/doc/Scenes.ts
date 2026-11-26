@@ -3,6 +3,7 @@ import type { Backdrop } from './Backdrop';
 import type { GroupId, Groups } from './Groups';
 import type { Guides } from './Guides';
 import type { SectionId, Sections } from './Sections';
+import type { TagId } from './Tags';
 
 export type SceneId = number;
 
@@ -36,7 +37,7 @@ export interface DisplayStyle {
 /** The parts of the view a scene saves and restores (each can be switched off). */
 export interface SceneParts {
   camera: boolean;
-  /** Which groups are hidden. */
+  /** Which groups and tags are hidden. */
   hidden: boolean;
   style: boolean;
 }
@@ -48,6 +49,11 @@ export interface Scene {
   camera: CameraView;
   /** Hidden groups. */
   hidden: GroupId[];
+  /**
+   * Hidden tags, restored with the hidden groups. Missing in scenes saved before tags: those leave
+   * the tags as they are.
+   */
+  hiddenTags?: TagId[];
   style: DisplayStyle;
   /**
    * The section plane cutting the view (null: none), restored with the style. Missing in scenes
@@ -83,7 +89,7 @@ export class Scenes {
     const sid = id ?? this.nextId;
     if (this.get(sid)) throw new Error(`Scene id ${sid} is in use`);
     this.nextId = Math.max(this.nextId, sid + 1);
-    this.items.push({ ...fields, id: sid, parts: { ...fields.parts }, hidden: [...fields.hidden] });
+    this.items.push({ ...fields, id: sid, parts: { ...fields.parts }, hidden: [...fields.hidden], ...(fields.hiddenTags ? { hiddenTags: [...fields.hiddenTags] } : {}) });
     return sid;
   }
 
@@ -138,7 +144,7 @@ export class Scenes {
 }
 
 function cloneScene(s: Scene): Scene {
-  return { ...s, parts: { ...s.parts }, camera: { ...s.camera, position: [...s.camera.position], target: [...s.camera.target] }, hidden: [...s.hidden], style: { ...s.style } };
+  return { ...s, parts: { ...s.parts }, camera: { ...s.camera, position: [...s.camera.position], target: [...s.camera.target] }, hidden: [...s.hidden], ...(s.hiddenTags ? { hiddenTags: [...s.hiddenTags] } : {}), style: { ...s.style } };
 }
 
 /** The live state as scene fields (everything is captured; `parts` says what gets restored). */
@@ -146,13 +152,14 @@ export function captureScene(view: SceneView, groups: Groups, guides: Guides, se
   return {
     camera: view.cameraView(),
     hidden: [...groups.items.values()].filter((g) => g.hidden).map((g) => g.id),
+    hiddenTags: groups.tags.items.filter((t) => t.hidden).map((t) => t.id),
     style: { ...view.displayStyle(), guides: guides.visible },
     ...(sections ? { section: sections.active } : {}),
   };
 }
 
 /**
- * Show a scene: its style and hidden groups take effect at once, then the camera glides to the
+ * Show a scene: its style and hidden groups and tags take effect at once, then the camera glides to the
  * scene's view over `seconds`. Only the parts the scene saves are changed.
  */
 export function applyScene(scene: Scene, view: SceneView, groups: Groups, guides: Guides, seconds: number, sections?: Sections): void {
@@ -166,6 +173,10 @@ export function applyScene(scene: Scene, view: SceneView, groups: Groups, guides
     for (const g of groups.items.values()) {
       if (hidden.has(g.id)) g.hidden = true;
       else delete g.hidden;
+    }
+    if (scene.hiddenTags) {
+      const tags = new Set(scene.hiddenTags);
+      for (const t of groups.tags.items) groups.tags.setHidden(t.id, tags.has(t.id));
     }
   }
   if (scene.parts.camera) view.setCameraView(scene.camera, seconds);

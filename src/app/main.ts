@@ -16,6 +16,7 @@ import { bindingFor, KEY_BINDINGS, withShortcut } from './keymap';
 import { MaterialsPanel } from './materialsPanel';
 import { ScenePlayer } from './scenePlayer';
 import { ScenesPanel } from './scenesPanel';
+import { TagsPanel } from './tagsPanel';
 import { LibraryPanel } from './libraryPanel';
 import { showText3DDialog, text3dPlaceable } from './text3dDialog';
 import { ContextMenu } from './contextMenuView';
@@ -111,6 +112,7 @@ async function start(): Promise<void> {
   const scenes = new ScenesPanel(document.getElementById('scenes-panel')!, controller, player);
   player.onChange = () => update();
   const info = new EntityInfoPanel(document.getElementById('info-panel')!, controller);
+  const tags = new TagsPanel(document.getElementById('tags-panel')!, controller);
   const library = new LibraryPanel(document.getElementById('library-panel')!, controller, () => files.openDesignFile());
   const history = new HistoryPanel(
     document.getElementById('history-panel')!,
@@ -146,7 +148,7 @@ async function start(): Promise<void> {
   const hiddenBar = document.getElementById('status-hidden')!;
   const hiddenLabel = document.createElement('span');
   const showHiddenButton = Object.assign(document.createElement('button'), { type: 'button' });
-  const unhideButton = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Unhide all', title: 'Show every hidden line and group again (Ctrl+Shift+H)' });
+  const unhideButton = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Unhide all', title: 'Show every hidden line, group and tag again (Ctrl+Shift+H)' });
   hiddenBar.append(hiddenLabel, showHiddenButton, unhideButton);
   const hiddenLines = {
     get shown() {
@@ -241,6 +243,7 @@ async function start(): Promise<void> {
     setToolCursor(tool.id, tool.copying?.() ?? false);
     materials.render();
     scenes.render();
+    tags.render();
     info.render();
     history.render();
     const viewing = controller.previewing ? controller.doc.versions.get(controller.previewing.id) : undefined;
@@ -264,12 +267,13 @@ async function start(): Promise<void> {
       setIcon(viewButtons.projection, viewer.projection === 'parallel' ? ICONS.parallel : ICONS.perspective);
       viewButtons.projection.title = viewer.projection === 'parallel' ? 'Parallel projection (click for perspective)' : 'Perspective (click for parallel projection)';
       viewButtons.scenes.setAttribute('aria-pressed', String(scenes.isOpen));
+      viewButtons.tags.setAttribute('aria-pressed', String(tags.isOpen));
       viewButtons.library.setAttribute('aria-pressed', String(library.isOpen));
     }
     const editing = controller.editingName;
     contextBadge.hidden = editing === null;
     const hidden = controller.hiddenCount();
-    hiddenBar.hidden = hidden.groups + hidden.lines === 0;
+    hiddenBar.hidden = hidden.groups + hidden.lines + hidden.tags === 0;
     hiddenLabel.textContent = `${hiddenText(hidden)} hidden`;
     // Nothing left to show: switch it off, so lines hidden later are not drawn dashed.
     if (hidden.lines === 0 && viewer.showHiddenLines) viewer.showHiddenLines = false;
@@ -335,7 +339,7 @@ async function start(): Promise<void> {
   };
 
   // One side panel at a time.
-  const panels = { materials, scenes, info, history, library };
+  const panels = { materials, scenes, tags, info, history, library };
   const togglePanel = (which: keyof typeof panels, open = !panels[which].isOpen) => {
     // The Materials window floats, so it stays open beside the side panels.
     if (which !== 'materials') for (const [k, p] of Object.entries(panels)) if (k !== which && k !== 'materials' && open) p.toggle(false);
@@ -360,6 +364,7 @@ async function start(): Promise<void> {
   };
   const toggleMaterials = () => togglePanel('materials');
   const toggleScenes = () => togglePanel('scenes');
+  const toggleTags = () => togglePanel('tags');
   const toggleLibrary = () => togglePanel('library');
   const showEntityInfo = () => togglePanel('info', true);
   const keep: KeepActions = {
@@ -450,6 +455,7 @@ Keep shapes: leave every solid as it is and put them together in one group.${
       if (choice) rememberBackdrop(choice);
     },
     toggleScenes,
+    toggleTags,
     viewsMenu: (anchor) => {
       const r = anchor.getBoundingClientRect();
       menu.open(
@@ -697,10 +703,10 @@ function editSelectedGroup(controller: ToolController): void {
 }
 
 /** Back to the view before the last orbit, pan, zoom or standard view. */
-/** "3 lines, 1 group", for the Unhide all button. */
-function hiddenText({ groups, lines }: { groups: number; lines: number }): string {
+/** "3 lines, 1 group, 2 tags", for the Unhide all button. */
+function hiddenText({ groups, lines, tags }: { groups: number; lines: number; tags: number }): string {
   const count = (n: number, one: string) => (n ? `${n} ${one}${n === 1 ? '' : 's'}` : '');
-  return [count(lines, 'line'), count(groups, 'group')].filter(Boolean).join(', ');
+  return [count(lines, 'line'), count(groups, 'group'), count(tags, 'tag')].filter(Boolean).join(', ');
 }
 
 function previousView(viewer: Viewer, controller: ToolController): void {
@@ -721,6 +727,8 @@ interface ViewActions {
   /** Sky and ground (or a plain background colour): a window with presets, kept on this device. */
   chooseBackground(): Promise<void>;
   toggleScenes(): void;
+  /** The Tags panel: show and hide groups by tag (layers). */
+  toggleTags(): void;
   /** All the standard views (right-click on the Views button) and the face styles, as menus under their toolbar buttons. */
   viewsMenu(anchor: HTMLElement): void;
   styleMenu(anchor: HTMLElement): void;
@@ -747,6 +755,7 @@ interface ViewButtons {
   style: HTMLButtonElement;
   projection: HTMLButtonElement;
   scenes: HTMLButtonElement;
+  tags: HTMLButtonElement;
   history: HTMLButtonElement;
   library: HTMLButtonElement;
 }
@@ -875,6 +884,7 @@ function commandList(viewer: Viewer, controller: ToolController, files: FileComm
     { id: 'ai:import', name: 'Import AI Design…', keywords: ['ai', 'paste', 'json', 'design file', 'build file', 'generate', 'library', 'place'], run: keep.importAiDesign },
     { id: 'library:panel', name: 'Library', keywords: ['objects', 'furniture', 'components', 'models', 'catalogue', 'catalog', 'place', 'insert', 'kitchen', 'bathroom', 'sofa', 'bed', 'table', 'chair'], run: view.toggleLibrary },
     { id: 'scenes:panel', name: 'Scenes', keywords: ['scene', 'view', 'pages', 'tabs'], run: view.toggleScenes },
+    { id: 'tags:panel', name: 'Tags', keywords: ['tag', 'layer', 'layers', 'show', 'hide', 'visibility'], run: view.toggleTags },
     { id: 'scenes:add', name: 'Add Scene', keywords: ['scene', 'save view'], run: () => controller.addScene() },
     { id: 'scenes:update', name: 'Update Scene', keywords: ['scene', 'overwrite'], run: () => (controller.currentScene !== null ? controller.updateScene(controller.currentScene) : controller.notify('Go to a scene first, then update it')) },
     { id: 'scenes:next', name: 'Next Scene', keywords: ['scene'], shortcut: 'Page Down', run: () => controller.stepScene(1) },
@@ -1252,6 +1262,8 @@ function buildToolbar(viewer: Viewer, controller: ToolController, files: FileCom
   sep();
   const scenes = iconButton(ICONS.scenes, 'Scenes (saved views)', view.toggleScenes);
   bar.append(scenes);
+  const tags = iconButton(ICONS.tags, 'Tags (layers): show and hide groups together', view.toggleTags);
+  bar.append(tags);
   const history = iconButton(ICONS.history, 'History: earlier versions of this design', keep.toggleHistory);
   bar.append(history);
   sep();
@@ -1267,7 +1279,7 @@ function buildToolbar(viewer: Viewer, controller: ToolController, files: FileCom
   const showBar = iconButton(ICONS.expandDown, 'Show the top bar', view.toggleTopBar);
   showBar.classList.add('toolbar-show');
   bar.append(hide, showBar);
-  const viewButtons: ViewButtons = { views: viewsButton, style, projection, scenes, history, library: libraryButton };
+  const viewButtons: ViewButtons = { views: viewsButton, style, projection, scenes, tags, history, library: libraryButton };
   return { undoButton, redoButton, materialsButton, viewButtons, driveButton };
 }
 

@@ -5,6 +5,8 @@ export interface SkpChoice {
   guides: boolean;
   /** Groups and components not to bring in (`HeavyDefinition.id`). */
   leaveOut: number[];
+  /** Tags (by name) to bring in hidden. */
+  hiddenTags: string[];
 }
 
 /** Above this many faces (after every component copy is placed) VormCraft gets slow. */
@@ -21,6 +23,7 @@ const KEY = 'vormcraft.import.skp';
  * What a SketchUp file holds and what to bring in. Units need no question (SketchUp files are
  * exact); a very large model gets a warning, and the groups and components placed most often can
  * be left out (`suggested` ticked to start with). `count` gives the faces left with some left out.
+ * The file's tags are listed, shown or hidden as in the file, to change before importing.
  * Resolves to the choice, or null if cancelled.
  */
 export function showSkpDialog(fileName: string, stats: SkpStats, count: (leaveOut: number[]) => number, suggested: number[]): Promise<SkpChoice | null> {
@@ -43,9 +46,14 @@ export function showSkpDialog(fileName: string, stats: SkpStats, count: (leaveOu
         <p class="note total"></p>
       </div>
       <p class="check bad warning" hidden></p>
+      <div class="tags" hidden>
+        <p class="note">Tags (layers). Everything on every tag comes in; unticked tags start hidden (show them in the Tags panel):</p>
+        <div class="rows"></div>
+      </div>
+      <p class="check bad missing" hidden></p>
       <label class="row"><input type="checkbox" name="scenes"> Bring in its scenes (camera views)</label>
       <label class="row"><input type="checkbox" name="guides"> Bring in its guides</label>
-      <p class="note">The file comes in as a group, with its groups and components inside as groups of their own, with their paint. Layers/tags are not brought in.</p>
+      <p class="note">The file comes in as a group, with its groups and components inside as groups of their own, with their paint and tags.</p>
       <div class="buttons">
         <button type="button" value="cancel">Cancel</button>
         <button type="submit" value="ok" class="primary">Import</button>
@@ -63,6 +71,26 @@ export function showSkpDialog(fileName: string, stats: SkpStats, count: (leaveOu
   box('scenes').disabled = stats.scenes === 0;
   box('guides').checked = start.guides;
   box('guides').disabled = stats.guides === 0;
+  const tagBoxes: { name: string; box: HTMLInputElement }[] = [];
+  if (stats.tags.length) {
+    const panel = dlg.querySelector<HTMLElement>('.tags')!;
+    panel.hidden = false;
+    for (const t of stats.tags) {
+      const label = document.createElement('label');
+      label.className = 'row';
+      const box = document.createElement('input');
+      box.type = 'checkbox';
+      box.checked = !t.hidden;
+      label.append(box, ` ${t.name}: ${n(t.placements)} ${t.placements === 1 ? 'group' : 'groups'}${t.hidden ? ' (hidden in the file)' : ''}`);
+      panel.querySelector('.rows')!.append(label);
+      tagBoxes.push({ name: t.name, box });
+    }
+  }
+  if (stats.missing) {
+    const missing = dlg.querySelector<HTMLElement>('.missing')!;
+    missing.hidden = false;
+    missing.textContent = `${n(stats.missing)} placed ${stats.missing === 1 ? 'group or component refers' : 'groups or components refer'} to something missing from the file, so ${stats.missing === 1 ? 'it cannot' : 'they cannot'} be brought in.`;
+  }
   const ok = form.querySelector<HTMLButtonElement>('button[value="ok"]')!;
   const warning = dlg.querySelector<HTMLElement>('.warning')!;
   const heavyBoxes: { id: number; box: HTMLInputElement }[] = [];
@@ -114,7 +142,7 @@ export function showSkpDialog(fileName: string, stats: SkpStats, count: (leaveOu
       } catch {
         // Not remembered.
       }
-      finish({ ...choice, leaveOut: leaveOut() });
+      finish({ ...choice, leaveOut: leaveOut(), hiddenTags: tagBoxes.filter((t) => !t.box.checked).map((t) => t.name) });
     });
     dlg.showModal();
     // Keep the top where it opened, so ticking a part (which can show a warning) never moves the

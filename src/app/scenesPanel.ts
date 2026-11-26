@@ -10,7 +10,7 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLEl
 
 const PART_LABELS: [keyof SceneParts, string][] = [
   ['camera', 'Camera'],
-  ['hidden', 'Hidden groups'],
+  ['hidden', 'Hidden groups and tags'],
   ['style', 'Style'],
 ];
 

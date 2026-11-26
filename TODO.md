@@ -40,6 +40,36 @@ CHANGELOG.md when it ships.
 - Library preview pictures are kept in localStorage (about 10–20 KB each). Fine for 49 items;
   move them to IndexedDB if the library grows a lot.
 
+## For 1.0 (1 January 2027)
+- **Turn on compressed files:** `WRITE_ZIPPED = true` in `src/io/fileFormat.ts` (0.9.4 and 0.9.5
+  are the bridge). See "Smaller files" below for the checks and the README/CHANGELOG wording.
+- **Manifold in double precision (Mesh64), if it is released in time.** The maintainer will test it
+  on a separate copy of VormCraft first.
+  - Upstream: elalish/manifold pull request #2082, "Add Mesh64 to the JS bindings": `Mesh64`
+    (positions as `Float64Array`), `new Manifold(mesh64)` and `manifold.getMesh64()`. On 25
+    November 2026 it was open, not yet approved, with all checks passing and no conflicts. Not in
+    a release yet: the latest manifold-3d is 3.5.5 (13 November); VormCraft uses 3.5.4.
+  - Wait for it to be merged and published in a manifold-3d release, then update `package.json`
+    and THIRD_PARTY_NOTICES.md. (To try it before then, build the pull request's JS bindings
+    locally and install that build in the copy.)
+  - All Manifold calls are in `src/core/boolean/manifold.ts`:
+    - `toManifold`: build a `k.Mesh64` instead of `k.Mesh`. Its positions must come straight
+      from the model's vertices (`Float64Array`): today they come from `triangulateFaces`
+      (`tri.positions`, a `Float32Array` also used for display), which would throw the extra
+      precision away before Manifold sees it. The triangle indices and face ids stay as they are.
+    - `booleanInPlace`: `r.getMesh64()` instead of `r.getMesh()`; `rebuildFaces` reads
+      `vertProperties` the same way.
+    - Then see what the float32 workarounds still do: `refinePoint` (re-solving new points from
+      the exact planes) and snapping result points back to the original vertices. Keep the snap
+      (it keeps vertex ids); measure whether `refinePoint` still changes anything before removing
+      it.
+  - Tests: `npm test` (the boolean-heavy suites: push/pull, Follow Me, Merge Shapes, openings,
+    walls, the Library building every item), plus new ones far from the origin (100 m and more,
+    where float32 is only good to about 0.01 mm) checking cuts and unions land exactly and solids
+    stay closed. Compare speed on a large design, and the size of the .wasm. Try the desktop app
+    and the web app.
+  - If it is not released in time, it waits for a release after 1.0.
+
 ## Unfinished / planned
 - **After 1.0, from the code review of 0.9.0 (November 2026):**
   - Desktop file access is allowed everywhere (`"path": "**"` for every `fs:` permission in
@@ -145,10 +175,20 @@ CHANGELOG.md when it ships.
     faces: an option to join ends closer than a set gap.
   - Hatches, MLEADERs, ACIS solids (3DSOLID/BODY/REGION) and attribute values are left out.
   - STEP/IGES import (OpenCascade compiled for the web) for real 3D CAD models, to look at later.
+- **Tags, to come closer to SketchUp:** colour by tag (a colour per tag and a view style using
+  it), tag folders, dashed lines per tag, and a quicker way to tag (right-click Tag ▸, or a Tag
+  tool). Loose geometry stays untagged on purpose (tag the group around it).
+- **Beta web app:** publish betas to vormcraft.app/betatest (the release workflow leaves the web
+  app alone for betas now), so changes can be tried before a release.
 - **SketchUp import gaps:**
   - Some pre-2018 files cannot be read (OpenSKP).
-  - Layers/tags, texts, dimensions, section planes and positioned texture mapping are not
-    imported.
+  - Texts, dimensions, section planes and positioned texture mapping are not imported.
+  - Loose faces on a tag come in untagged: OpenSKP 1.4.0 gives each placement its tag but not
+    each face (its doc comments also say `Instance.layer` and `Layer.hidden` are empty for 2021+
+    files; the 1.4.0 code fills both). Check with real 2021+ files, and on the next OpenSKP review.
+  - A user reported tags missing after import (November 2026, file not seen). VormCraft never left
+    out geometry by tag; the import now lists the tags and counts placements missing from the
+    file. If it comes back, get the file.
   - Architecture models keep about 15 % of faces on edges of their own.
 - **Touch:** editing with touch (Viewer mode covers looking at models). A native Android app if the
   web app is not enough.

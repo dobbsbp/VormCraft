@@ -16,7 +16,7 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 /**
  * Entity Info: facts about the selection (a group's name, contents, size and paint; faces' area
  * and paint; volumes of solids and groups; whether shapes are proper solids; edges' length and
- * smoothing; a point's position), and renaming a group.
+ * smoothing; a point's position), and renaming and tagging a group.
  */
 export class EntityInfoPanel {
   private shown = '';
@@ -75,6 +75,21 @@ export class EntityInfoPanel {
     return [row, el('div', { className: 'panel-row' }, show)];
   }
 
+  /** The selected group's tag, to change (or a new tag to make for it). */
+  private tagRow(current: number | undefined): HTMLElement {
+    const c = this.controller;
+    const select = el('select', { title: 'The group’s tag: hide a tag in the Tags panel to hide every group carrying it' });
+    select.append(el('option', { value: '' }, 'Untagged'), ...c.doc.groups.tags.items.map((t) => el('option', { value: String(t.id), selected: t.id === current }, t.hidden ? `${t.name} (hidden)` : t.name)), el('option', { value: 'new' }, 'New tag…'));
+    if (current === undefined) select.value = '';
+    select.addEventListener('change', () => {
+      if (select.value === 'new') {
+        const id = c.addTag();
+        if (id !== null) c.tagSelection(id);
+      } else c.tagSelection(select.value === '' ? undefined : Number(select.value));
+    });
+    return el('label', { className: 'panel-field' }, el('span', {}, 'Tag'), select);
+  }
+
   private materialName(id: string | undefined): string {
     return id === undefined ? 'Default' : (this.controller.doc.materials.get(id)?.name ?? 'Default');
   }
@@ -115,6 +130,7 @@ export class EntityInfoPanel {
         this.row('Size', b ? formatLengths(b.max.map((x, i) => x - b.min[i]), ' × ') : 'empty'),
         ...this.volumeRows([{ name: g.name, volume: this.groupVolume(id) }]),
         this.row('Paint', this.materialName(g.material)),
+        this.tagRow(g.tag),
         ...this.solidRows(solidReport(g.model)),
         el('div', { className: 'panel-row' }, ...buttons),
       );

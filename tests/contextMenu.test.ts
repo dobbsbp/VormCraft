@@ -164,7 +164,7 @@ describe('menu commands', () => {
     expect(h.controller.selection.edges.size).toBe(11);
     const flat = { toScreen: (p: Vec3): [number, number] => [p[0], p[1]] };
     expect(boxSelect(m, flat, { from: [-10, -10], to: [110, 110] }, false).edges).toHaveLength(11);
-    expect(h.controller.hiddenCount()).toEqual({ groups: 0, lines: 1 });
+    expect(h.controller.hiddenCount()).toEqual({ groups: 0, lines: 1, tags: 0 });
     expect(menu(contextMenuItems(h.controller, host)).get('Unhide All')).toBe(true);
     // Saved with the design.
     const again = parseDocument(serializeDocument(h.doc));

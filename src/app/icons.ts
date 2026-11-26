@@ -17,6 +17,8 @@ export const ICONS = {
   perspective: svg('<path d="M3 5h18M3 19h18" /><path d="M3 5l9 7 9-7M3 19l9-7 9 7" stroke-width="1"/>'),
   parallel: svg('<path d="M3 6h18M3 12h18M3 18h18"/><path d="M7 4v16M17 4v16" stroke-width="1"/>'),
   scenes: svg('<rect x="3" y="7" width="18" height="13" rx="1.5"/><path d="M6 7V4h12v3M9 4V2.5h6V4"/><path d="m10 11 5 2.5-5 2.5Z" fill="currentColor"/>'),
+  // Three sheets stacked (tags: layers of the model).
+  tags: svg('<path d="m12 3 9 4.5-9 4.5-9-4.5Z"/><path d="m3 12 9 4.5 9-4.5"/><path d="m3 16.5 9 4.5 9-4.5"/>'),
   // A clock with an arrow running back round it.
   // An arrow dropping into an open box (a model coming in).
   importFile: svg('<path d="M12 2v9M9 8l3 3 3-3"/><path d="M4 13l8 4 8-4M4 13v5l8 4 8-4v-5"/>'),

@@ -2,6 +2,7 @@ import type { MaterialId } from '../core/model/Model';
 import { Model } from '../core/model/Model';
 import { modelBounds, transformModel } from '../core/ops/group';
 import { composeAffine, invertAffine, translation, type Affine } from '../core/ops/transform';
+import { Tags, type TagId } from './Tags';
 
 export type GroupId = number;
 export type ComponentId = number;
@@ -14,6 +15,7 @@ export interface ComponentPart {
   name: string;
   material?: MaterialId;
   hidden?: boolean;
+  tag?: TagId;
   model: Model;
 }
 
@@ -45,6 +47,8 @@ export interface Group {
   material?: MaterialId;
   /** Hidden groups (and everything inside them) are not drawn, picked or snapped to. */
   hidden?: boolean;
+  /** The group's tag (`Groups.tags`): hiding the tag hides the group and everything inside it. */
+  tag?: TagId;
   /** Set on a component instance: which component, and where its definition is placed. */
   component?: { id: ComponentId; place: Affine };
 }
@@ -55,12 +59,14 @@ export class Groups {
   private nextId = 1;
   readonly components = new Map<ComponentId, ComponentDef>();
   private nextComponentId = 1;
+  /** The document's tags (kept here so `isHidden` can see them, and undo and saving carry them). */
+  readonly tags = new Tags();
 
-  add(model: Model, parent: GroupId | null, opts: { name?: string; id?: GroupId; material?: MaterialId } = {}): GroupId {
+  add(model: Model, parent: GroupId | null, opts: { name?: string; id?: GroupId; material?: MaterialId; tag?: TagId } = {}): GroupId {
     const id = opts.id ?? this.nextId;
     if (this.items.has(id)) throw new Error(`Group id ${id} is in use`);
     this.nextId = Math.max(this.nextId, id + 1);
-    this.items.set(id, { id, name: opts.name ?? `Group ${id}`, parent, model, ...(opts.material !== undefined ? { material: opts.material } : {}) });
+    this.items.set(id, { id, name: opts.name ?? `Group ${id}`, parent, model, ...(opts.material !== undefined ? { material: opts.material } : {}), ...(opts.tag !== undefined ? { tag: opts.tag } : {}) });
     return id;
   }
 
@@ -108,10 +114,17 @@ export class Groups {
     return null;
   }
 
-  /** Whether the group, or a group around it, is hidden. */
+  /** Whether the group, or a group around it, is hidden, or carries a hidden tag. */
   isHidden(id: GroupId): boolean {
-    for (let g = this.items.get(id); g; g = g.parent === null ? undefined : this.items.get(g.parent)) if (g.hidden) return true;
+    for (let g = this.items.get(id); g; g = g.parent === null ? undefined : this.items.get(g.parent)) if (g.hidden || (g.tag !== undefined && this.tags.isHidden(g.tag))) return true;
     return false;
+  }
+
+  /** Delete a tag: the groups (and component parts) carrying it are left untagged. */
+  deleteTag(id: TagId): void {
+    this.tags.delete(id);
+    for (const g of this.items.values()) if (g.tag === id) delete g.tag;
+    for (const c of this.components.values()) for (const p of c.parts) if (p.tag === id) delete p.tag;
   }
 
   /** Paint shown on unpainted faces of the group: its own, else that of the nearest group around it. */
@@ -131,7 +144,7 @@ export class Groups {
   duplicate(id: GroupId, parent: GroupId | null): GroupId {
     const src = this.items.get(id);
     if (!src) throw new Error('That group no longer exists');
-    const copy = this.add(src.model.clone(), parent, { name: src.name, material: src.material });
+    const copy = this.add(src.model.clone(), parent, { name: src.name, material: src.material, tag: src.tag });
     if (src.component) this.items.get(copy)!.component = { ...src.component };
     for (const c of this.children(id)) this.duplicate(c.id, copy);
     return copy;
@@ -183,7 +196,7 @@ export class Groups {
     const def = this.components.get(cid);
     if (!def) throw new Error('That component no longer exists');
     // A new copy takes the paint the component's own geometry had (each copy can be painted apart).
-    const id = this.add(new Model(), parent, { name: def.name, material: def.parts[0].material });
+    const id = this.add(new Model(), parent, { name: def.name, material: def.parts[0].material, tag: def.parts[0].tag });
     this.items.get(id)!.component = { id: cid, place };
     this.rebuild(id);
     return id;
@@ -248,7 +261,7 @@ export class Groups {
       keys.set(x.id, i);
       const model = x.model.clone();
       transformModel(model, back);
-      return { key: i, parent: i === 0 ? null : keys.get(x.parent!)!, name: x.name, ...(x.material !== undefined ? { material: x.material } : {}), ...(x.hidden ? { hidden: true } : {}), model };
+      return { key: i, parent: i === 0 ? null : keys.get(x.parent!)!, name: x.name, ...(x.material !== undefined ? { material: x.material } : {}), ...(x.hidden ? { hidden: true } : {}), ...(x.tag !== undefined ? { tag: x.tag } : {}), model };
     });
   }
 
@@ -266,7 +279,7 @@ export class Groups {
     g.model = placed(def.parts[0].model);
     const ids = new Map<number, GroupId>([[0, id]]);
     for (const p of def.parts.slice(1)) {
-      const child = this.add(placed(p.model), ids.get(p.parent!)!, { name: p.name, material: p.material });
+      const child = this.add(placed(p.model), ids.get(p.parent!)!, { name: p.name, material: p.material, tag: p.tag });
       if (p.hidden) this.items.get(child)!.hidden = true;
       ids.set(p.key, child);
     }
@@ -277,6 +290,7 @@ export class Groups {
     const c = new Groups();
     c.nextId = this.nextId;
     c.nextComponentId = this.nextComponentId;
+    c.tags.copyFrom(this.tags);
     const copy = (m: Model) => (forSnapshot ? m.snapshotCopy() : m.clone());
     for (const [k, g] of this.items) c.items.set(k, { ...g, model: copy(g.model), ...(g.component ? { component: { ...g.component } } : {}) });
     for (const [k, d] of this.components) c.components.set(k, { ...d, parts: d.parts.map((p) => ({ ...p, model: copy(p.model) })) });
@@ -287,6 +301,7 @@ export class Groups {
     const c = other.clone();
     this.nextId = c.nextId;
     this.nextComponentId = c.nextComponentId;
+    this.tags.copyFrom(c.tags);
     this.items.clear();
     for (const [k, g] of c.items) this.items.set(k, g);
     this.components.clear();

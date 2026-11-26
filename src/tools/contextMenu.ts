@@ -33,7 +33,7 @@ export function contextMenuItems(c: ToolController, host: MenuHost): MenuEntry[]
     { label: 'Hide', run: () => c.hideSelection(), disabled: !c.canHide(), shortcut: 'Ctrl+H' },
   ];
   if (c.canUnhide()) entries.push({ label: 'Unhide', run: () => c.unhideSelection() });
-  if (hidden.groups + hidden.lines > 0) entries.push({ label: 'Unhide All', run: () => c.unhideAll(), shortcut: 'Ctrl+Shift+H' });
+  if (hidden.groups + hidden.lines + hidden.tags > 0) entries.push({ label: 'Unhide All', run: () => c.unhideAll(), shortcut: 'Ctrl+Shift+H' });
   const lines = host.hiddenLines;
   if (lines && hidden.lines > 0) entries.push({ label: lines.shown ? '✓ Show Hidden Lines' : 'Show Hidden Lines', run: () => lines.toggle() });
   entries.push('separator');

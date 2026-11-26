@@ -4,6 +4,14 @@ What changed in each version of VormCraft. The section for a version is also sho
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
+## 0.9.6
+
+- Tags (called layers in other programs): give groups a tag, then hide or show everything with that tag at once in the new Tags panel. Entity Info shows a group's tag and can change it.
+- Scenes remember which tags are hidden.
+- SketchUp files bring their tags with them. Everything on every tag comes in, and the import window lets you choose which tags start hidden; tags hidden in SketchUp start hidden.
+- The SketchUp import now says when a file refers to groups or components that are missing from it, instead of leaving them out without a word.
+- Each layer of a DXF drawing comes in tagged with the layer's name.
+
 ## 0.9.5
 
 - Drawing or moving locked to an axis with the arrow keys now stops on an edge or guide the line crosses, as it does without the lock.

@@ -12,7 +12,10 @@ import { DEFAULT_STYLE, type Scene } from '../doc/Scenes';
  *   position, rotation and scale applied. A file whose copies add up to more faces than
  *   VormCraft can hold can leave out the groups and components placed most often;
  * - faces keep their holes, paint, and soft/smooth edges; circles and arcs keep their true radius;
- * - materials (colours, transparency, textures at their real size), scenes (cameras) and guides.
+ * - tags (SketchUp's layers) on placed groups and components, shown or hidden as in the file;
+ *   loose faces come in untagged, as OpenSKP does not say which tag a face is on;
+ * - materials (colours, transparency, textures at their real size), scenes (cameras, and the tags
+ *   they hide) and guides.
  * SketchUp allows faces our solids do not (a face turned the other way from its neighbours, three
  * faces on one edge): such a face is turned round to fit, or else given its own edges.
  */
@@ -31,7 +34,18 @@ export interface SkpPart {
   /** Key into `SkpImport.materials` of the paint on the whole group, if any. */
   material?: string;
   hidden?: boolean;
+  /** The tag the placement carries itself (a name from `SkpImport.tags`), if any. */
+  tag?: string;
   children: SkpPart[];
+}
+
+/** A tag used in the file, as the import window lists it. */
+export interface SkpTag {
+  name: string;
+  /** Hidden in the file. */
+  hidden: boolean;
+  /** Placements carrying it. */
+  placements: number;
 }
 
 export interface SkpStats {
@@ -44,6 +58,10 @@ export interface SkpStats {
   materials: number;
   scenes: number;
   guides: number;
+  /** Tags carried by placed groups and components, in the file's order. */
+  tags: SkpTag[];
+  /** Placements whose group or component is missing from the file (they cannot be brought in). */
+  missing: number;
   /**
    * Groups and components whose copies add the most faces (their own faces × copies, biggest
    * first), which can be left out of a model too large to bring in whole.
@@ -71,11 +89,22 @@ export interface SkpImport {
   root: SkpPart;
   /** Materials used by the imported faces and groups, by key (faces' `material` holds the key). */
   materials: Map<string, MaterialFields>;
-  scenes: Omit<Scene, 'id'>[];
+  /** Scenes; `hiddenTagNames` (names from `tags`) is set when the file's scenes say which tags they hide. */
+  scenes: (Omit<Scene, 'id' | 'hiddenTags'> & { hiddenTagNames?: string[] })[];
   guides: { lines: { point: Vec3; dir: Vec3 }[]; points: Vec3[] };
+  /** The tags the imported groups carry, in the file's order, and whether each comes in hidden. */
+  tags: { name: string; hidden: boolean }[];
   /** How the faces went in. */
   faces: { total: number; turned: number; detached: number; skipped: number };
+  /** Placements left out because their group or component is missing from the file. */
+  missing: number;
 }
+
+/** SketchUp's default tag ("Untagged", stored as Layer0): a placement on it has no tag. */
+const isUntagged = (name: string) => !name.trim() || /^(layer ?0|untagged)$/i.test(name.trim());
+
+/** The tag a placement carries itself, or undefined. */
+const ownTag = (inst: Instance): string | undefined => (isUntagged(inst.layer ?? '') ? undefined : inst.layer.trim());
 
 /** A 4×4 row-major transform (inches). */
 type M4 = number[];
@@ -126,14 +155,19 @@ export function summarizeSkp(skp: SkpModel, leaveOut: readonly number[] = []): S
   const skip = new Set(leaveOut);
   let placedFaces = 0;
   let placements = 0;
+  let missing = 0;
+  const tagUse = new Map<string, number>();
   const copies = new Map<Definition, number>();
   const count = (def: Definition, depth: number) => {
     placedFaces += def.faces.length;
     if (depth >= MAX_DEPTH) return;
     for (const inst of def.instances) {
       const child = definitionOf(skp, inst);
+      if (!child) missing++;
       if (!child || skip.has(ids.get(child) ?? -1)) continue;
       placements++;
+      const tag = ownTag(inst);
+      if (tag !== undefined) tagUse.set(tag, (tagUse.get(tag) ?? 0) + 1);
       copies.set(child, (copies.get(child) ?? 0) + 1);
       count(child, depth + 1);
     }
@@ -155,8 +189,21 @@ export function summarizeSkp(skp: SkpModel, leaveOut: readonly number[] = []): S
     materials: skp.materials.length,
     scenes: skp.pages.length,
     guides: skp.root.constructionLines.length + skp.root.constructionPoints.length,
+    tags: orderTags(skp, [...tagUse.keys()]).map((name) => ({ name, hidden: fileHidesTag(skp, name), placements: tagUse.get(name)! })),
+    missing,
     heavy: heavy.slice(0, HEAVY_LISTED),
   };
+}
+
+/** Whether the file hides a tag. */
+function fileHidesTag(skp: SkpModel, name: string): boolean {
+  return !!skp.layers.find((l) => l.name.trim() === name)?.hidden;
+}
+
+/** Tag names in the order the file lists its tags (any it does not list come last, as found). */
+function orderTags(skp: SkpModel, names: readonly string[]): string[] {
+  const order = new Map(skp.layers.map((l, i) => [l.name.trim(), i]));
+  return [...names].sort((a, b) => (order.get(a) ?? Infinity) - (order.get(b) ?? Infinity));
 }
 
 /**
@@ -181,10 +228,14 @@ export interface SkpConvertOptions {
   guides?: boolean;
   /** Groups and components (`HeavyDefinition.id`) not to bring in, with everything inside them. */
   leaveOut?: readonly number[];
+  /** Tags (by name) that come in hidden; by default, those the file hides. */
+  hiddenTags?: readonly string[];
 }
 
 export function convertSkp(skp: SkpModel, opts: SkpConvertOptions): SkpImport {
   const faces = { total: 0, turned: 0, detached: 0, skipped: 0 };
+  let missing = 0;
+  const usedTags = new Set<string>();
   const ids = definitionIds(skp);
   const skip = new Set(opts.leaveOut ?? []);
   const usedMaterials = new Set<number>();
@@ -283,6 +334,7 @@ export function convertSkp(skp: SkpModel, opts: SkpConvertOptions): SkpImport {
     if (depth < MAX_DEPTH) {
       for (const child of def.instances) {
         const cdef = definitionOf(skp, child);
+        if (!cdef) missing++;
         if (!cdef || skip.has(ids.get(cdef) ?? -1)) continue;
         const part = visit(cdef, mul(m, placementMatrix(child.matrix)), child.name || cdef.name || (cdef.isGroup ? 'Group' : 'Component'), child, depth + 1);
         if (part) children.push(part);
@@ -290,7 +342,9 @@ export function convertSkp(skp: SkpModel, opts: SkpConvertOptions): SkpImport {
     }
     if (!model.faces.size && !model.halfEdges.size && !children.length) return null;
     const material = materialKey(inst?.materialId);
-    return { name, model, children, ...(material !== undefined ? { material } : {}), ...(inst?.hidden ? { hidden: true } : {}) };
+    const tag = inst ? ownTag(inst) : undefined;
+    if (tag !== undefined) usedTags.add(tag);
+    return { name, model, children, ...(material !== undefined ? { material } : {}), ...(inst?.hidden ? { hidden: true } : {}), ...(tag !== undefined ? { tag } : {}) };
   };
 
   const root = visit(skp.root, IDENTITY, opts.name, null, 0) ?? { name: opts.name, model: new Model(), children: [] };
@@ -301,7 +355,11 @@ export function convertSkp(skp: SkpModel, opts: SkpConvertOptions): SkpImport {
     if (mat) materials.set(`skp${id}`, materialFields(mat));
   }
 
-  const scenes: Omit<Scene, 'id'>[] = [];
+  const hiddenTags = new Set(opts.hiddenTags ?? [...usedTags].filter((t) => fileHidesTag(skp, t)));
+  const tags = orderTags(skp, [...usedTags]).map((name) => ({ name, hidden: hiddenTags.has(name) }));
+  // Scenes only say which tags they hide; when none of them hides any, they leave tags alone.
+  const scenesHideTags = skp.pages.some((p) => (p.hiddenLayers ?? []).some((l) => usedTags.has(l.trim())));
+  const scenes: SkpImport['scenes'] = [];
   if (opts.scenes) {
     for (const p of skp.pages) {
       if (!p.eye || !p.target) continue;
@@ -312,10 +370,11 @@ export function convertSkp(skp: SkpModel, opts: SkpConvertOptions): SkpImport {
       const height = p.parallel && p.orthoHeight > 0 ? p.orthoHeight * INCH : 2 * Math.max(dist, 1) * Math.tan((fov * Math.PI) / 360);
       scenes.push({
         name: p.name || `Scene ${scenes.length + 1}`,
-        parts: { camera: true, hidden: false, style: false },
+        parts: { camera: true, hidden: scenesHideTags, style: false },
         camera: { position: eye, target, fov, projection: p.parallel ? 'parallel' : 'perspective', height },
         hidden: [],
         style: { ...DEFAULT_STYLE },
+        ...(scenesHideTags ? { hiddenTagNames: (p.hiddenLayers ?? []).map((l) => l.trim()).filter((l) => usedTags.has(l)) } : {}),
       });
     }
   }
@@ -329,7 +388,7 @@ export function convertSkp(skp: SkpModel, opts: SkpConvertOptions): SkpImport {
     for (const p of skp.root.constructionPoints) guides.points.push(scale(p.position as Vec3, INCH));
   }
 
-  return { root, materials, scenes, guides, faces };
+  return { root, materials, scenes, guides, tags, faces, missing };
 }
 
 /**

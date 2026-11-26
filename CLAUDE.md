@@ -10,7 +10,7 @@ TypeScript, Three.js, Manifold, Tauri and Vitest.
 `README.md` is the public feature list; keep it current when adding features.
 Unfinished work and known bugs live in `TODO.md`.
 
-## Current state (0.9.5, November 2026)
+## Current state (0.9.6, November 2026)
 - Released for Windows (NSIS installer, auto-update) and the web (installable PWA, works offline).
   All are built by GitHub Actions from a version tag.
 - Linux (since 0.6.0): AppImages for x86_64 and ARM64 with auto-update, on WebKitGTK. About shows
@@ -28,6 +28,9 @@ Unfinished work and known bugs live in `TODO.md`.
   right-click menu.
 - **Section planes:** a cut through the view (one active), filled; saved, and remembered by scenes.
 - **Hiding:** groups and lines (Ctrl+H), Show Hidden Lines, Unhide / Unhide All.
+- **Tags (0.9.6):** layers on groups only (`src/doc/Tags.ts`, kept in `Groups.tags`; `Groups.isHidden`
+  counts them), a Tags panel and Entity Info's Tag list; scenes remember hidden tags; SketchUp tags
+  and DXF layers come in as tags. Saved as optional data (no format bump).
 - **Units:** per design (mm, cm, m, in, ft, feet and inches), chosen on New, changed in Design
   Properties (click the design's name).
 - **View and workspace:**

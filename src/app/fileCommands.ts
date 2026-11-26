@@ -322,14 +322,16 @@ export class FileCommands {
     progress = progressDialog('Importing', `Building ${faces.toLocaleString()} faces…`);
     try {
       await new Promise((r) => setTimeout(r, 30));
-      const result = convertSkp(skp, { name, scenes: choice.scenes, guides: choice.guides, leaveOut: choice.leaveOut });
+      const result = convertSkp(skp, { name, scenes: choice.scenes, guides: choice.guides, leaveOut: choice.leaveOut, hiddenTags: choice.hiddenTags });
       progress.set('Preparing textures…');
       for (const [key, m] of result.materials) if (m.texture) result.materials.set(key, { ...m, texture: { ...m.texture, image: await shrinkImage(m.texture.image) } });
       this.controller.importSkp(result, `Import ${name}.skp`);
       const f = result.faces;
       const notes = [f.turned ? `${n(f.turned)} turned round to fit` : '', f.detached ? `${n(f.detached)} kept on edges of their own` : '', f.skipped ? `${n(f.skipped)} broken faces left out` : ''].filter(Boolean);
       const leftOut = left.length ? ` Left out: ${left.map((h) => `${h.name} (${n(h.copies)} copies)`).join(', ')}.` : '';
-      this.controller.notify(`Imported ${name}.skp: ${n(f.total - f.skipped)} faces${notes.length ? ` (${notes.join(', ')})` : ''}${result.scenes.length ? `, ${result.scenes.length} scenes` : ''}.${leftOut}`);
+      const missing = result.missing ? ` ${n(result.missing)} placed ${result.missing === 1 ? 'group was' : 'groups were'} missing from the file.` : '';
+      const tags = result.tags.length ? `, ${result.tags.length} ${result.tags.length === 1 ? 'tag' : 'tags'}${result.tags.some((t) => t.hidden) ? ` (${result.tags.filter((t) => t.hidden).length} hidden: show them in the Tags panel)` : ''}` : '';
+      this.controller.notify(`Imported ${name}.skp: ${n(f.total - f.skipped)} faces${notes.length ? ` (${notes.join(', ')})` : ''}${tags}${result.scenes.length ? `, ${result.scenes.length} scenes` : ''}.${leftOut}${missing}`);
     } finally {
       progress.close();
     }

@@ -16,12 +16,16 @@ export interface DxfChoice {
   layers: readonly string[];
 }
 
-/** A group to add: the file, with a group per layer inside. */
+/** A group to add: the file, with a group per layer inside (tagged with the layer's name). */
 export interface DrawingPart {
   name: string;
+  /** The tag the group gets: its layer's name (layer 0, every drawing's default, gives none). */
+  tag?: string;
   model: Model;
   children: DrawingPart[];
 }
+
+const layerTag = (layer: string) => (layer.trim() && layer.trim() !== '0' ? { tag: layer.trim() } : {});
 
 /** A text or dimension, as a label (`Labels.add`): a dimension has an `end`. */
 export interface DrawingLabel {
@@ -143,12 +147,12 @@ export function convertDxf(d: DxfDrawing, choice: DxfChoice, name: string): DxfI
   circles += lines.circles;
   chosen.forEach((layer, i) => {
     const model = lines.models[i];
-    if (model.halfEdges.size) root.children.push({ name: layer, model, children: [] });
+    if (model.halfEdges.size) root.children.push({ name: layer, ...layerTag(layer), model, children: [] });
     const polys = d.faces.filter((f) => f.layer === layer).map((f) => f.points.map((p) => scale(p, k)));
     if (polys.length) {
       const m = importMesh(polys, { smoothAngle: 20 });
       faces += m.model.faces.size;
-      if (m.model.faces.size) root.children.push({ name: `${layer} (surfaces)`, model: m.model, children: [] });
+      if (m.model.faces.size) root.children.push({ name: `${layer} (surfaces)`, ...layerTag(layer), model: m.model, children: [] });
     }
   });
   const labels: DrawingLabel[] = [];

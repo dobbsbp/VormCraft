@@ -70,7 +70,8 @@ interface GeometryData {
  * version 6 the last undo steps (each stored as only what changed: see `encodeUndo`); version 7
  * hidden edges (a fifth entry per edge), the units lengths are shown in, and dimensions (labels with an `end`); version 8
  * components (each definition saved once; an instance is a group with only its placement) and section planes; version 9
- * `minReaderVersion` and positions rounded to 0.000001 mm, saved in a zip (`vormFile.ts`). Geometry is always in
+ * `minReaderVersion` and positions rounded to 0.000001 mm, saved in a zip (`vormFile.ts`); later, tags (optional data,
+ * also written in format 8 files: older apps leave them out and show everything). Geometry is always in
  * millimetres (`units`).
  * Older versions still open, and so do files from before the app was renamed (format tag 'benup').
  */
@@ -89,8 +90,10 @@ export interface FileV3 extends GeometryData {
   labels?: { anchor: Vec3; position: Vec3; text: string; end?: Vec3 }[];
   /** Materials (version 2); textures are embedded as data URLs. */
   materials?: Material[];
+  /** Tags in order (optional; see above), before the groups that carry them. */
+  tags?: { id: number; name: string; hidden?: boolean }[];
   /** Groups (version 3), parents before the groups inside them. */
-  groups?: ({ id: number; name: string; parent: number | null; material?: string; hidden?: boolean; component?: { id: number; place: Affine } } & GeometryData)[];
+  groups?: ({ id: number; name: string; parent: number | null; material?: string; hidden?: boolean; tag?: number; component?: { id: number; place: Affine } } & GeometryData)[];
   /**
    * Component definitions (version 8), in their own coordinates. Instances are groups with
    * `component` and no geometry of their own; the groups inside them are not saved either: they
@@ -98,7 +101,7 @@ export interface FileV3 extends GeometryData {
    */
   /** Section planes (version 8): which one cuts the view, and whether the planes are drawn. */
   sections?: { active: number | null; visible: boolean; items: { id: number; point: Vec3; normal: Vec3 }[] };
-  components?: { id: number; name: string; source?: string; parts: ({ key: number; parent: number | null; name: string; material?: string; hidden?: boolean } & GeometryData)[] }[];
+  components?: { id: number; name: string; source?: string; parts: ({ key: number; parent: number | null; name: string; material?: string; hidden?: boolean; tag?: number } & GeometryData)[] }[];
   /** Scenes in order, and the glide and slideshow timings (version 4). */
   scenes?: { transition: number; delay: number; items: Scene[] };
   /** The version history (version 5): compressed documents, and the texture images they use. */
@@ -167,12 +170,14 @@ function documentFile(doc: Document, version = WRITE_VERSION): FileV3 {
     },
     labels: [...doc.labels.items.values()].map((l) => ({ anchor: l.anchor, position: l.position, text: l.text, ...(l.end ? { end: l.end } : {}) })),
     materials: [...doc.materials.items.values()],
+    ...(doc.groups.tags.items.length ? { tags: doc.groups.tags.items.map((t) => ({ id: t.id, name: t.name, ...(t.hidden ? { hidden: true } : {}) })) } : {}),
     groups: ordered.map((g) => ({
       id: g.id,
       name: g.name,
       parent: g.parent,
       ...(g.material !== undefined ? { material: g.material } : {}),
       ...(g.hidden ? { hidden: true } : {}),
+      ...(g.tag !== undefined ? { tag: g.tag } : {}),
       ...(g.component ? { component: { id: g.component.id, place: { m: [...g.component.place.m] as unknown as Affine['m'], t: g.component.place.t } }, ...empty } : geometryData(g.model)),
     })),
     ...(doc.groups.components.size
@@ -181,7 +186,7 @@ function documentFile(doc: Document, version = WRITE_VERSION): FileV3 {
             id: c.id,
             name: c.name,
             ...(c.source ? { source: c.source } : {}),
-            parts: c.parts.map((p) => ({ key: p.key, parent: p.parent, name: p.name, ...(p.material !== undefined ? { material: p.material } : {}), ...(p.hidden ? { hidden: true } : {}), ...geometryData(p.model) })),
+            parts: c.parts.map((p) => ({ key: p.key, parent: p.parent, name: p.name, ...(p.material !== undefined ? { material: p.material } : {}), ...(p.hidden ? { hidden: true } : {}), ...(p.tag !== undefined ? { tag: p.tag } : {}), ...geometryData(p.model) })),
           })),
         }
       : {}),
@@ -414,11 +419,19 @@ export function parseFile(raw: unknown): Document {
       materials.add({ name, color, opacity, ...(texture ? { texture: { image: texture.image, width: texture.width, height: texture.height } } : {}) }, id);
     }
     model = readGeometry(f, materials);
+    // Tags are extra: one that cannot be read is left out (its groups come in untagged and shown).
+    for (const t of Array.isArray(f.tags) ? f.tags : []) {
+      if (!t || !Number.isInteger(t.id) || t.id <= 0 || groups.tags.get(t.id)) continue;
+      const name = typeof t.name === 'string' && t.name.trim() ? t.name : groups.tags.nextName();
+      groups.tags.add(name, { id: t.id, hidden: t.hidden === true });
+    }
+    // A tag that is not in the list is left off (the group is shown untagged).
+    const tag = (id: unknown) => (typeof id === 'number' && groups.tags.get(id) ? { tag: id } : {});
     for (const g of f.groups ?? []) {
       if (!Number.isInteger(g.id) || g.id <= 0) throw new Error('a group has a bad id');
       if (g.parent !== null && !groups.has(g.parent)) throw new Error(`group ${g.id} is inside missing group ${g.parent}`);
       if (g.material !== undefined && !materials.get(g.material)) throw new Error(`group ${g.id} uses missing material ${g.material}`);
-      groups.add(readGeometry(g, materials), g.parent, { id: g.id, name: typeof g.name === 'string' ? g.name : undefined, material: g.material });
+      groups.add(readGeometry(g, materials), g.parent, { id: g.id, name: typeof g.name === 'string' ? g.name : undefined, material: g.material, ...tag(g.tag) });
       if (g.hidden) groups.get(g.id)!.hidden = true;
       if (g.component) groups.get(g.id)!.component = { id: g.component.id, place: affine(g.component.place) };
     }
@@ -430,7 +443,7 @@ export function parseFile(raw: unknown): Document {
         if (p.parent !== null && !keys.has(p.parent)) throw new Error(`a part of component ${c.id} is inside a missing part`);
         if (p.material !== undefined && !materials.get(p.material)) throw new Error(`component ${c.id} uses missing material ${p.material}`);
         keys.add(p.key);
-        return { key: p.key, parent: p.parent, name: typeof p.name === 'string' ? p.name : 'Group', ...(p.material !== undefined ? { material: p.material } : {}), ...(p.hidden ? { hidden: true } : {}), model: readGeometry(p, materials) };
+        return { key: p.key, parent: p.parent, name: typeof p.name === 'string' ? p.name : 'Group', ...(p.material !== undefined ? { material: p.material } : {}), ...(p.hidden ? { hidden: true } : {}), ...tag(p.tag), model: readGeometry(p, materials) };
       });
       groups.components.set(c.id, { id: c.id, name: typeof c.name === 'string' ? c.name : `Component ${c.id}`, parts, ...(typeof c.source === 'string' ? { source: c.source } : {}) });
       groups.reserveComponentId(c.id);
@@ -448,6 +461,7 @@ export function parseFile(raw: unknown): Document {
             parts: { ...ALL_PARTS, ...s.parts },
             camera: { position: vec(c.position, 'scene camera'), target: vec(c.target, 'scene target'), fov: c.fov, projection: c.projection, height: c.height },
             hidden: (s.hidden ?? []).filter((id) => groups.has(id)),
+            ...(Array.isArray(s.hiddenTags) ? { hiddenTags: s.hiddenTags.filter((id) => groups.tags.get(id)) } : {}),
             style: { ...DEFAULT_STYLE, ...s.style, backdrop: validBackdrop(s.style?.backdrop) },
             ...(s.section === null || (typeof s.section === 'number' && Number.isInteger(s.section)) ? { section: s.section } : {}),
           },
