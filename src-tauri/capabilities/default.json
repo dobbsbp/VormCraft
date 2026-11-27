@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Main window: native dialogs, reading/writing model files and autosave backups (anywhere the user saves them), updates and relaunching.",
+  "description": "Main window: native dialogs, reading/writing model files and autosave backups (anywhere the user saves them), showing a saved file in its folder, updates and relaunching.",
   "windows": [
     "main"
   ],
@@ -14,6 +14,7 @@
     "dialog:allow-ask",
     "process:allow-restart",
     "updater:default",
+    "opener:allow-reveal-item-in-dir",
     {
       "identifier": "opener:allow-open-url",
       "allow": [

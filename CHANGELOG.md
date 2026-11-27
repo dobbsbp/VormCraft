@@ -4,6 +4,15 @@ What changed in each version of VormCraft. The section for a version is also sho
 update prompt, so it is written for people using the app: plain sentences and "- " bullets, no
 bold or other formatting (versions up to 0.2.0 show the notes as plain text).
 
+## 0.9.7
+
+- After saving, VormCraft says where the design was saved, with a button to show it in its folder (or open its folder in Google Drive).
+- The design's name next to the logo shows whether it is saved on this computer or in Google Drive; point at it to see the folder. Design Properties shows it too.
+- The new arrow beside Save opens a menu: Save As on this computer, Save to Google Drive, Save a Copy Without History, and Show in Folder.
+- With Google Drive connected, the first save of a new design asks whether it goes on this computer or in Google Drive.
+- Save As (Ctrl+Shift+S) on a design in Google Drive now saves a new file in Google Drive.
+- The Save window starts in the folder you last saved in, or in Documents.
+
 ## 0.9.6
 
 - Tags (called layers in other programs): give groups a tag, then hide or show everything with that tag at once in the new Tags panel. Entity Info shows a group's tag and can change it.

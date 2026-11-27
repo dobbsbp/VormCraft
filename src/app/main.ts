@@ -86,7 +86,7 @@ async function start(): Promise<void> {
   let lifecycle!: Lifecycle;
   const backups = await createBackupStore(() => lifecycle.settings.backupFolder);
   lifecycle = new Lifecycle(controller, viewer, backups);
-  const files = new FileCommands(await createFileHost(), controller, {
+  const files: FileCommands = new FileCommands(await createFileHost(), controller, {
     settings: () => lifecycle.settings,
     autosave: lifecycle.autosave,
     onNewerFile: () => void lifecycle.checkForUpdates(),
@@ -95,11 +95,50 @@ async function start(): Promise<void> {
       if (units) rememberDefaultUnits(units);
       return units;
     },
+    chooseSaveTarget: () => chooseSaveTarget(files.name, files.native),
   });
   /** Design Properties: the design's units (clicking its name, the units button, Search). */
   const designProperties = async () => {
-    const units = await showUnitsDialog('Design properties', doc.units, 'OK', 'Lengths are shown in these units, and a number typed without a unit means them. Changing them does not change the size of anything.');
+    const actions = savedActions().map((e) => ({ label: e.label, run: e.run }));
+    const units = await showUnitsDialog('Design properties', doc.units, 'OK', 'Lengths are shown in these units, and a number typed without a unit means them. Changing them does not change the size of anything.', { text: files.whereText(), actions });
     if (units) controller.setUnits(units);
+  };
+  /** Show where the design is saved: its folder (desktop), or its folder in Google Drive. */
+  const showSaved = () => {
+    const place = files.where().kind;
+    if (place === 'computer') void files.reveal();
+    else if (place === 'drive') drive?.showFolder();
+    else controller.notify(files.whereText());
+  };
+  /** What Show in folder is called for where the design is saved (null: nothing to show). */
+  const showSavedLabel = (): string | null => {
+    const place = files.where().kind;
+    if (place === 'computer') return 'Show in Folder';
+    if (place === 'drive' && drive?.session.connected) return 'Open Folder in Google Drive';
+    return null;
+  };
+  /** Saving it somewhere else (and showing where it is), for the Save menu and Design Properties. */
+  const savedActions = (): { label: string; run: () => void; shortcut?: string }[] => {
+    const inDrive = files.where().kind === 'drive';
+    const show = showSavedLabel();
+    return [
+      ...(show ? [{ label: show, run: showSaved }] : []),
+      { label: files.native ? 'Save As on This Computer…' : 'Download to This Device', shortcut: inDrive ? undefined : 'Ctrl+Shift+S', run: () => void files.save(true) },
+      ...(drive ? [{ label: inDrive ? 'Save as a New File in Google Drive…' : 'Save to Google Drive…', shortcut: inDrive ? 'Ctrl+Shift+S' : undefined, run: () => void drive?.saveAs() }] : []),
+    ];
+  };
+  /** The Save button's menu: where the design is, Save, saving it elsewhere, a copy to send. */
+  const saveMenu = (): MenuEntry[] => {
+    const place = files.where().kind;
+    const save = place === 'drive' ? 'Save to Google Drive' : place === 'computer' ? 'Save to This Computer' : place === 'device' ? 'Save (Downloads a New Copy)' : 'Save…';
+    return [
+      { label: files.whereText(), disabled: true },
+      'separator',
+      { label: save, shortcut: 'Ctrl+S', run: () => void files.save() },
+      ...savedActions(),
+      'separator',
+      { label: 'Save a Copy Without History…', run: () => void files.saveCopyWithoutHistory() },
+    ];
   };
   lifecycle.attach(files);
   // Google Drive (unless switched off: see DriveCommands.available). Switching it on or off in
@@ -143,6 +182,12 @@ async function start(): Promise<void> {
   const contextBadge = document.getElementById('context-badge')!;
   contextBadge.addEventListener('click', () => controller.exitGroup());
   const autosaved = document.getElementById('status-saved')!;
+  // Shown with "Saved to …" while that message is in the status bar: opens the folder.
+  const revealButton = document.getElementById('status-reveal') as HTMLButtonElement;
+  revealButton.addEventListener('click', () => {
+    showSaved();
+    revealButton.blur();
+  });
   // Shown only while something is hidden, so hidden lines and groups are never lost from sight:
   // how much is hidden, Show (hidden lines dashed, to pick and unhide one by one), Unhide all.
   const hiddenBar = document.getElementById('status-hidden')!;
@@ -208,17 +253,24 @@ async function start(): Promise<void> {
   };
 
   let shownTitle = '';
+  let shownName = '';
   const updateTitle = async () => {
     const viewing = controller.previewing ? controller.doc.versions.get(controller.previewing.id) : undefined;
     const title = files.title(viewing ? new Date(viewing.time).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : undefined);
+    // The name in the top bar, with where it is saved (a computer or a cloud, and the path in its tooltip).
+    const docName = document.querySelector<HTMLElement>('.toolbar .doc-name');
+    const place = files.where().kind;
+    const shown = `${place}|${files.whereText()}|${files.name}|${controller.dirty}`;
+    if (docName && shown !== shownName) {
+      shownName = shown;
+      const icon = place === 'drive' ? ICONS.cloud : place === 'nowhere' ? '' : ICONS.computer;
+      docName.innerHTML = icon ? `<span class="doc-where">${icon}</span>` : '';
+      docName.append(`${files.name}${controller.dirty ? ' •' : ''}`);
+      docName.title = `${controller.dirty ? `${files.name} (changes not saved)` : files.name}\n${place === 'nowhere' ? 'Not saved yet' : `Saved in ${files.whereText()}`}\nClick for Design Properties (units, where it is saved)`;
+    }
     if (title === shownTitle) return;
     shownTitle = title;
     document.title = title;
-    const docName = document.querySelector<HTMLElement>('.toolbar .doc-name');
-    if (docName) {
-      docName.textContent = `${files.name}${controller.dirty ? ' •' : ''}`;
-      docName.title = `${controller.dirty ? `${files.name} (changes not saved)` : files.name} · click for Design Properties (units)`;
-    }
     if (isTauri()) {
       const { getCurrentWindow } = await import('@tauri-apps/api/window');
       await getCurrentWindow().setTitle(title);
@@ -234,6 +286,9 @@ async function start(): Promise<void> {
     const tips = tool.tips?.();
     tipsButton.hidden = !tips;
     tipsButton.textContent = tips?.label ?? '';
+    const reveal = files.savedNotice !== null && controller.notice === files.savedNotice ? showSavedLabel() : null;
+    revealButton.hidden = !reveal;
+    revealButton.textContent = reveal ?? '';
     const unitChoice = UNIT_CHOICES.find((c) => c.unit === doc.units.unit)!;
     unitsButton.textContent = doc.units.unit === 'ftin' ? 'ft/in' : doc.units.unit;
     unitsButton.title = `Units: ${unitChoice.label} (click to change)`;
@@ -377,6 +432,11 @@ async function start(): Promise<void> {
     about: () => void lifecycle.about(),
     saveCopy: () => void files.saveCopyWithoutHistory(),
     saveCopyForOlder: () => void files.saveCopyForOlder(),
+    showSaved,
+    saveMenu: (anchor) => {
+      const r = anchor.getBoundingClientRect();
+      menu.open(saveMenu(), r.left - 2, r.bottom);
+    },
     exportMenu: (anchor) => {
       const r = anchor.getBoundingClientRect();
       menu.open(
@@ -582,7 +642,7 @@ Keep shapes: leave every solid as it is and put them together in one group.${
       const command: Record<string, () => void> = {
         z: () => (e.shiftKey ? controller.redo() : controller.undo()),
         y: () => controller.redo(),
-        s: () => void files.save(e.shiftKey),
+        s: () => void (e.shiftKey ? files.saveAsHere() : files.save()),
         o: () => void files.open(),
         n: () => void files.newDocument(),
         g: () => controller.makeGroup(),
@@ -798,6 +858,10 @@ interface KeepActions {
   saveCopyForOlder(): void;
   /** The Help menu, under its toolbar button. */
   help(anchor: HTMLElement): void;
+  /** Show the saved design in its folder (or its Google Drive folder). */
+  showSaved(): void;
+  /** The Save menu, under the arrow beside the Save button. */
+  saveMenu(anchor: HTMLElement): void;
   /** The Export menu (STL or OBJ), under its toolbar button. */
   exportMenu(anchor: HTMLElement): void;
   /** Google Drive (null while it is switched off). */
@@ -826,7 +890,9 @@ function commandList(viewer: Viewer, controller: ToolController, files: FileComm
     { id: 'file:new', name: 'New', keywords: ['file', 'document'], shortcut: 'Ctrl+N', run: () => void files.newDocument() },
     { id: 'file:open', name: 'Open…', keywords: ['file', 'load'], shortcut: 'Ctrl+O', run: () => void files.open() },
     { id: 'file:save', name: 'Save', keywords: ['file'], shortcut: 'Ctrl+S', run: () => void files.save() },
-    { id: 'file:saveas', name: 'Save As…', keywords: ['file'], shortcut: 'Ctrl+Shift+S', run: () => void files.save(true) },
+    { id: 'file:saveas', name: 'Save As…', keywords: ['file', 'new file', 'location'], shortcut: 'Ctrl+Shift+S', run: () => void files.saveAsHere() },
+    ...(files.native ? [{ id: 'file:saveas-computer', name: 'Save As on This Computer…', keywords: ['file', 'location', 'folder'], run: () => void files.save(true) }] : []),
+    { id: 'file:where', name: 'Show Where the Design Is Saved', keywords: ['file', 'folder', 'location', 'path', 'explorer', 'find', 'reveal'], run: keep.showSaved },
     ...(keep.drive
       ? [
           { id: 'drive:save', name: 'Save to Google Drive…', keywords: ['file', 'cloud', 'drive', 'google', 'upload'], run: () => void keep.drive!.saveAs() },
@@ -1214,8 +1280,17 @@ function buildToolbar(viewer: Viewer, controller: ToolController, files: FileCom
   bar.append(
     iconButton(ICONS.newDoc, 'New (Ctrl+N)', () => void files.newDocument()),
     iconButton(ICONS.open, 'Open (Ctrl+O)', () => void files.open()),
-    iconButton(ICONS.save, 'Save (Ctrl+S) · Save As (Ctrl+Shift+S)', () => void files.save()),
+    iconButton(ICONS.save, 'Save (Ctrl+S) · Save As (Ctrl+Shift+S) · right-click or the arrow beside it for more', () => void files.save()),
   );
+  // Beside Save: where the design is saved, and saving it somewhere else.
+  const saveButton = bar.lastElementChild as HTMLButtonElement;
+  const saveMore = iconButton(ICONS.caret, 'Where it is saved · Save As, Save to Google Drive…', () => keep.saveMenu(saveMore));
+  saveMore.classList.add('caret-button');
+  saveButton.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    keep.saveMenu(saveButton);
+  });
+  bar.append(saveMore);
   // Always made, hidden while Google Drive is switched off (it can be switched on in Settings).
   const driveButton = iconButton(ICONS.cloud, 'Google Drive: save, open, autosave a copy', () => keep.driveMenu(driveButton));
   if (!keep.drive) driveButton.style.display = 'none';
@@ -1281,6 +1356,34 @@ function buildToolbar(viewer: Viewer, controller: ToolController, files: FileCom
   bar.append(hide, showBar);
   const viewButtons: ViewButtons = { views: viewsButton, style, projection, scenes, tags, history, library: libraryButton };
   return { undoButton, redoButton, materialsButton, viewButtons, driveButton };
+}
+
+/** Where a design saved for the first time went last time on this device ('computer' or 'drive'). */
+const SAVE_TO_KEY = 'vormcraft.files.saveTo';
+
+/**
+ * The first Save of a new design, with Google Drive connected: this computer or Google Drive?
+ * The place chosen last time is the main button.
+ */
+async function chooseSaveTarget(name: string, native: boolean): Promise<'computer' | 'drive' | null> {
+  let last: string | null = null;
+  try {
+    last = localStorage.getItem(SAVE_TO_KEY);
+  } catch {
+    // Nothing remembered.
+  }
+  const computer = { label: native ? 'This computer' : 'This device (download)', value: 'computer' as const };
+  const drive = { label: 'Google Drive', value: 'drive' as const };
+  const design = name === 'Untitled' ? 'this design' : `“${name}”`;
+  const choice = await choiceDialog('Save', `Where should ${design} be saved?\n\nYou can see where a design is saved by pointing at its name next to the logo, and save it somewhere else from the arrow beside Save.`, last === 'drive' ? [computer, drive] : [drive, computer]);
+  if (choice) {
+    try {
+      localStorage.setItem(SAVE_TO_KEY, choice);
+    } catch {
+      // Not remembered.
+    }
+  }
+  return choice;
 }
 
 function iconButton(icon: string, title: string, onClick: () => void): HTMLButtonElement {

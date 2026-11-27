@@ -18,14 +18,17 @@ export interface FileHost {
   open(filter: FileFilter): Promise<OpenedFile | null>;
   /**
    * Write a file. With `path` (desktop) it is written there directly; otherwise the user picks a
-   * place (desktop) or it is downloaded (browser). Returns the name/path written, or null if
-   * the user cancelled.
+   * place (desktop) or it is downloaded (browser). A `suggestedName` that is a whole path starts
+   * the picker there; a bare name starts it in the folder last saved in on this device (else
+   * Documents). Returns the name/path written, or null if the user cancelled.
    */
   save(data: string | Uint8Array, suggestedName: string, filter: FileFilter, path?: string): Promise<{ name: string; path?: string } | null>;
   /** Pick a file and read it as bytes (importing binary formats such as STL). */
   openBinary(filter: FileFilter): Promise<{ name: string; path?: string; bytes: Uint8Array } | null>;
   /** Read a file by path as bytes (desktop only: a file opened from Explorer). */
   readPath?(path: string): Promise<{ name: string; path: string; bytes: Uint8Array }>;
+  /** Show a saved file in the system's file manager, selected (desktop only). */
+  reveal?(path: string): Promise<void>;
 }
 
 export const isTauri = (): boolean => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -36,9 +39,36 @@ export async function createFileHost(): Promise<FileHost> {
 
 const baseName = (path: string) => path.split(/[\\/]/).pop() ?? path;
 
+/** The folder a file was last saved in through the picker, on this device (desktop). */
+const LAST_FOLDER_KEY = 'vormcraft.files.lastFolder';
+
+function lastFolder(): string | null {
+  try {
+    return localStorage.getItem(LAST_FOLDER_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function rememberFolder(path: string): void {
+  const folder = path.slice(0, Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\')));
+  try {
+    if (folder) localStorage.setItem(LAST_FOLDER_KEY, folder);
+  } catch {
+    // Remembered for this session only.
+  }
+}
+
 async function tauriHost(): Promise<FileHost> {
   const dialog = await import('@tauri-apps/plugin-dialog');
   const fs = await import('@tauri-apps/plugin-fs');
+  const paths = await import('@tauri-apps/api/path');
+  /** Where the save picker starts: the given path, else the last folder used, else Documents. */
+  const startAt = async (suggestedName: string) => {
+    if (/[\\/]/.test(suggestedName)) return suggestedName;
+    const folder = lastFolder() ?? (await paths.documentDir().catch(() => null));
+    return folder ? paths.join(folder, suggestedName) : suggestedName;
+  };
   return {
     native: true,
     async open(filter) {
@@ -47,8 +77,9 @@ async function tauriHost(): Promise<FileHost> {
       return { name: baseName(path), path, text: await fs.readTextFile(path) };
     },
     async save(data, suggestedName, filter, path) {
-      const target = path ?? (await dialog.save({ defaultPath: suggestedName, filters: [filter] }));
+      const target = path ?? (await dialog.save({ defaultPath: await startAt(suggestedName), filters: [filter] }));
       if (!target) return null;
+      if (!path) rememberFolder(target);
       // Write beside, then replace (as backups do): running out of disk space or a crash mid-write
       // never leaves the saved file half-written.
       const temp = `${target}.tmp`;
@@ -69,6 +100,10 @@ async function tauriHost(): Promise<FileHost> {
     },
     async readPath(path) {
       return { name: baseName(path), path, bytes: await fs.readFile(path) };
+    },
+    async reveal(path) {
+      const { revealItemInDir } = await import('@tauri-apps/plugin-opener');
+      await revealItemInDir(path);
     },
   };
 }

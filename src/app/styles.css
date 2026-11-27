@@ -2152,13 +2152,62 @@ body.viewer-mode .scene-tab {
   opacity: 0.7;
 }
 
-/* The design's name next to the logo (opens Design Properties). */
+/* The design's name next to the logo (opens Design Properties), after where it is saved. */
 .toolbar .doc-name {
   cursor: pointer;
   max-width: 260px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.toolbar .doc-where svg {
+  width: 14px;
+  height: 14px;
+  margin-right: 4px;
+  vertical-align: -2px;
+  opacity: 0.6;
+}
+
+/* The arrow beside Save (its menu): narrow, so the two read as one button. */
+.icon-button.caret-button {
+  width: 16px;
+  margin-left: -4px;
+}
+
+.icon-button.caret-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Design Properties: where the design is saved, and what can be done there. */
+.modal .saved-in {
+  display: grid;
+  gap: 4px;
+  margin: 4px 0 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--chrome-border);
+}
+
+.modal .saved-in[hidden] {
+  display: none;
+}
+
+.modal .saved-label {
+  font-weight: 600;
+}
+
+.modal .saved-where {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.modal .saved-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
 }
 
 /* The tool palette on the right of the view (right-click the palette, or Search). */

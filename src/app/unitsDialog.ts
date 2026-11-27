@@ -20,12 +20,18 @@ export function rememberDefaultUnits(units: DisplayUnits): void {
   }
 }
 
+/** Where the design is saved, for Design Properties, with what can be done there (Show in folder, Save As…). */
+export interface SavedInfo {
+  text: string;
+  actions: { label: string; run: () => void }[];
+}
+
 /**
  * Ask for a design's units and precision, with an example of how lengths will look. Used for a
- * new design (`okLabel` "Create") and for Design Properties. Resolves to the choice, or null if
- * cancelled.
+ * new design (`okLabel` "Create") and for Design Properties (with `saved`: where the design is).
+ * Resolves to the choice, or null if cancelled.
  */
-export function showUnitsDialog(title: string, start: DisplayUnits, okLabel: string, note: string): Promise<DisplayUnits | null> {
+export function showUnitsDialog(title: string, start: DisplayUnits, okLabel: string, note: string, saved?: SavedInfo): Promise<DisplayUnits | null> {
   const dlg = document.createElement('dialog');
   dlg.className = 'modal';
   dlg.innerHTML = `
@@ -35,6 +41,7 @@ export function showUnitsDialog(title: string, start: DisplayUnits, okLabel: str
       <label class="row">Units <select name="unit">${UNIT_CHOICES.map((c) => `<option value="${c.unit}">${c.label}</option>`).join('')}</select></label>
       <label class="row">Show lengths to <select name="precision"></select></label>
       <p class="note example"></p>
+      <div class="saved-in" hidden><div class="saved-label">Saved in</div><div class="saved-where"></div><div class="saved-actions"></div></div>
       <div class="buttons">
         <button type="button" value="cancel">Cancel</button>
         <button type="submit" value="ok" class="primary" autofocus></button>
@@ -71,6 +78,22 @@ export function showUnitsDialog(title: string, start: DisplayUnits, okLabel: str
     };
     form.querySelector('button[value="cancel"]')!.addEventListener('click', () => finish(null));
     dlg.addEventListener('cancel', () => finish(null));
+    if (saved) {
+      const box = form.querySelector<HTMLElement>('.saved-in')!;
+      box.hidden = false;
+      const where = box.querySelector<HTMLElement>('.saved-where')!;
+      where.textContent = saved.text;
+      where.title = saved.text;
+      for (const a of saved.actions) {
+        const b = Object.assign(document.createElement('button'), { type: 'button', textContent: a.label });
+        // Keeps the units chosen, then acts once the window is closed (so a save has them).
+        b.addEventListener('click', () => {
+          finish(choice());
+          setTimeout(a.run, 0);
+        });
+        box.querySelector('.saved-actions')!.append(b);
+      }
+    }
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       finish(choice());

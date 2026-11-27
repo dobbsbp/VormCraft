@@ -32,6 +32,8 @@ export const PREFERENCES: readonly Preference[] = [
   { key: 'vormcraft.drive.autosave', synced: false },
   { key: 'vormcraft.drive.hidden', synced: false },
   { key: 'vormcraft.device', synced: false },
+  { key: 'vormcraft.files.lastFolder', synced: false },
+  { key: 'vormcraft.files.saveTo', synced: false },
   { key: 'vormcraft.ai.request', synced: false },
 ];
 

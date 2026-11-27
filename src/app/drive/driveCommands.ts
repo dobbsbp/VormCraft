@@ -3,11 +3,11 @@ import { encodeVorm } from '../../io/vormFile';
 import type { ToolController } from '../../tools/ToolController';
 import type { MenuEntry } from '../../tools/contextMenu';
 import { choiceDialog, confirmDialog, progressDialog, promptDialog } from '../dialogs';
-import type { FileCommands } from '../fileCommands';
+import type { DriveSaving, FileCommands } from '../fileCommands';
 import { isTauri } from '../files';
 import type { Settings } from '../settings';
 import { DriveAutosaveScheduler } from './driveAutosave';
-import { showDriveBrowser, type DriveBrowserMode, type DriveBrowserSource } from './driveDialog';
+import { folderLabel, showDriveBrowser, type DriveBrowserMode, type DriveBrowserSource } from './driveDialog';
 import { DriveClash, DriveSession, readSettingsFile, writeSettingsFile, type KeyValueStore } from './driveSession';
 import { showLoadSettingsDialog } from './settingsDialog';
 import { applyPreferences, collectPreferences, deviceIdentity, guessDeviceName, renameDevice, type DeviceIdentity } from '../preferences';
@@ -56,11 +56,17 @@ export class DriveCommands {
     this.auth = isTauri() ? new DesktopGoogleAuth(this.session.email || undefined) : new WebGoogleAuth(this.session.email || undefined);
     this.autosaveOn = store?.getItem(AUTOSAVE_KEY) === '1';
     this.scheduler = new DriveAutosaveScheduler((revision) => this.uploadCopy(revision));
-    files.saveToDrive = this.saveToDrive;
+    files.driveSaving = this.driveSaving;
     document.addEventListener('visibilitychange', this.onVisibility);
+    // A design opened from Drive before this (a recovered one keeps no Drive file) shows its folders.
+    void this.describeFolder();
   }
 
-  private readonly saveToDrive = () => this.save();
+  private readonly driveSaving: DriveSaving = {
+    connected: () => this.session.connected,
+    save: () => this.save(),
+    saveAs: () => this.saveAs(),
+  };
 
   /** Leaving the page (closing the tab, switching away): send a waiting copy now. */
   private readonly onVisibility = () => {
@@ -73,7 +79,7 @@ export class DriveCommands {
    */
   dispose(): void {
     this.scheduler.stop();
-    if (this.files.saveToDrive === this.saveToDrive) this.files.saveToDrive = null;
+    if (this.files.driveSaving === this.driveSaving) this.files.driveSaving = null;
     document.removeEventListener('visibilitychange', this.onVisibility);
   }
 
@@ -180,7 +186,9 @@ export class DriveCommands {
       trash: (item) => s.trash(item),
       link: (id) => s.folderLink(id),
       designChanged: (file, trashed) => {
-        if (!trashed) this.files.driveFileChanged(file.id, file.name, file.parents?.[0]);
+        if (trashed) return;
+        this.files.driveFileChanged(file.id, file.name, file.parents?.[0]);
+        void this.describeFolder();
       },
     };
   }
@@ -208,7 +216,7 @@ export class DriveCommands {
           ? await this.session.update({ fileId: picked.replace.id, revision: undefined, folderId: picked.folderId }, fileName, bytes, true)
           : await this.session.create(fileName, bytes, picked.folderId);
         await this.files.savedElsewhere(file.name, location);
-        this.afterSave(file.name);
+        await this.afterSave();
       } finally {
         progress.close();
       }
@@ -228,7 +236,7 @@ export class DriveCommands {
         const bytes = this.files.bytesForSave();
         const { file, location: next } = await this.session.update(location, `${this.files.name}.${FILE_EXTENSION}`, bytes, replace);
         await this.files.savedElsewhere(file.name, next);
-        this.afterSave(file.name);
+        await this.afterSave();
       } catch (err) {
         if (err instanceof DriveClash) clash = err;
         else throw err;
@@ -255,15 +263,38 @@ export class DriveCommands {
         const bytes = this.files.bytesForSave();
         const { file, location } = await this.session.create(`${this.files.name}.${FILE_EXTENSION}`, bytes, this.files.drive?.folderId);
         await this.files.savedElsewhere(file.name, location);
-        this.afterSave(file.name);
+        await this.afterSave();
       });
     }
   }
 
-  private afterSave(fileName: string): void {
+  private async afterSave(): Promise<void> {
     this.problem = null;
     this.scheduler.settled(this.controller.revision);
-    this.controller.notify(`Saved to Google Drive: ${fileName.replace(/\.(vorm|benup)$/i, '')}`);
+    await this.describeFolder();
+    this.files.announceSaved(`Saved to ${this.files.whereText()}`);
+  }
+
+  /** Look up the folders the open design's Drive file is in, to show where it is saved. */
+  private async describeFolder(): Promise<void> {
+    const location = this.files.drive;
+    // Looked up once per folder (FileCommands forgets it when the design moves to another).
+    if (!location || this.files.driveFolder !== undefined || !this.session.connected) return;
+    try {
+      const path = await this.session.pathTo(location.folderId ?? this.session.folderId);
+      if (this.files.drive?.fileId !== location.fileId) return;
+      this.files.driveFolder = folderLabel(path?.map((f) => f.name) ?? null);
+      this.files.onTitleChange();
+    } catch {
+      // Only for showing where it is: the design is saved all the same.
+    }
+  }
+
+  /** Open the folder the design is in, in Google Drive (in the browser). */
+  showFolder(): void {
+    const location = this.files.drive;
+    if (!location || !this.session.connected) return;
+    void openLink(this.session.folderLink(location.folderId ?? this.session.folderId));
   }
 
   async open(): Promise<void> {
@@ -279,6 +310,7 @@ export class DriveCommands {
         const { bytes, location } = await this.session.open(picked);
         await this.files.openFromDrive(picked.name, bytes, location);
         this.scheduler.settled(this.controller.revision);
+        void this.describeFolder();
       } finally {
         loading.close();
       }

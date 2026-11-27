@@ -34,9 +34,27 @@ export interface FileOptions {
   autosave?: AutoSaver;
   /** A file from a newer version of the app was opened: offer the update. */
   onNewerFile?: () => void;
+  /** A design saved nowhere yet, with Google Drive connected: save it here or there? (null: cancelled) */
+  chooseSaveTarget?: () => Promise<'computer' | 'drive' | null>;
   /** Ask which units a new design uses (null: cancelled); without it, new designs use millimetres. */
   chooseUnits?: () => Promise<DisplayUnits | null>;
 }
+
+/** What Google Drive offers Save (set by DriveCommands while Drive is switched on). */
+export interface DriveSaving {
+  /** Signed in (Save may then ask where a new design goes). */
+  connected(): boolean;
+  /** Save back to the design's Drive file. */
+  save(): Promise<void>;
+  /** Save as a new Drive file (pick the folder and name). */
+  saveAs(): Promise<void>;
+}
+
+/**
+ * Where the design is saved: a file on this computer (desktop), on this device without a path
+ * (the browser: opened from or downloaded to it), Google Drive, or nowhere yet.
+ */
+export type SavedPlace = { kind: 'nowhere' } | { kind: 'computer'; path: string } | { kind: 'device' } | { kind: 'drive'; folder?: string };
 
 /**
  * New / Open / Save / Save As / Export, with unsaved-changes protection. Saving records a version
@@ -48,20 +66,62 @@ export class FileCommands {
   path: string | undefined;
   /** The Google Drive file the design lives in (opened from or saved to Drive), if any. */
   drive: DriveLocation | undefined;
-  /** Save for a design that lives in Google Drive (set when Drive is available). */
-  saveToDrive: (() => Promise<void>) | null = null;
+  /** The Drive file's folders ("VormCraft › Kitchen"), once looked up. */
+  driveFolder: string | undefined;
+  /** Google Drive's Save (set when Drive is available). */
+  driveSaving: DriveSaving | null = null;
+  /** The message shown after the last save (the status bar offers Show in folder while it shows). */
+  savedNotice: string | null = null;
   onTitleChange: () => void = () => {};
   /** The opened file as it was, while it is in an older format and not yet backed up. */
   /** The file as opened, when in another format version: kept beside it on the first save over it. */
   private olderFormat: { bytes: Uint8Array; version: number } | null = null;
   /** Removes the recovery copy of changes the user agreed to discard, once they are replaced. */
   private discardedCopy: (() => Promise<void>) | null = null;
+  /** Opened from or saved to this device without a path (the browser): Save downloads again. */
+  private onDevice = false;
 
   constructor(
     private readonly host: FileHost,
     private readonly controller: ToolController,
     private readonly options: FileOptions = { settings: () => ({ history: false }) as Settings },
   ) {}
+
+  /** Real files with paths (desktop), rather than downloads (browser). */
+  get native(): boolean {
+    return this.host.native;
+  }
+
+  /** Where the design is saved now. */
+  where(): SavedPlace {
+    if (this.drive) return { kind: 'drive', folder: this.driveFolder };
+    if (this.path) return { kind: 'computer', path: this.path };
+    return this.onDevice ? { kind: 'device' } : { kind: 'nowhere' };
+  }
+
+  /** Where the design is saved, in words (its path, or "Google Drive › VormCraft › Shed.vorm"). */
+  whereText(): string {
+    const p = this.where();
+    if (p.kind === 'computer') return p.path;
+    if (p.kind === 'drive') {
+      const file = `${this.name}.${FILE_EXTENSION}`;
+      // The folder is "VormCraft › …", or a note for a file moved out of VormCraft's folders.
+      return p.folder && !p.folder.startsWith('VormCraft') ? `Google Drive › ${file} (${p.folder})` : `Google Drive › ${p.folder ?? 'VormCraft'} › ${file}`;
+    }
+    if (p.kind === 'device') return 'This device (each Save downloads a new copy to your downloads)';
+    return 'Not saved yet';
+  }
+
+  /** Show the saved file in its folder (desktop). */
+  async reveal(): Promise<void> {
+    if (this.path && this.host.reveal) await this.guard(() => this.host.reveal!(this.path!));
+  }
+
+  /** Say where the design was just saved (status bar). */
+  announceSaved(message: string): void {
+    this.savedNotice = message;
+    this.controller.notify(message);
+  }
 
   /** The window/tab title; `viewing` names the older version being previewed, if any. */
   title(viewing?: string): string {
@@ -105,6 +165,8 @@ export class FileCommands {
     this.name = 'Untitled';
     this.path = undefined;
     this.drive = undefined;
+    this.driveFolder = undefined;
+    this.onDevice = false;
     this.olderFormat = null;
     this.onTitleChange();
     await this.replaced();
@@ -141,6 +203,8 @@ export class FileCommands {
     await this.guard(async () => {
       await this.load({ name, bytes });
       this.drive = drive;
+      this.onDevice = false;
+      this.onTitleChange();
     });
   }
 
@@ -158,6 +222,8 @@ export class FileCommands {
     // A file from before the rename is saved as a new .vorm file, not over the old one.
     this.path = EXTENSION.exec(file.name)?.[1].toLowerCase() === FILE_EXTENSION ? file.path : undefined;
     this.drive = undefined;
+    this.driveFolder = undefined;
+    this.onDevice = true;
     this.olderFormat = version !== WRITE_VERSION && this.path ? { bytes: file.bytes, version } : null;
     // The design as opened is the first point to come back to.
     if (this.options.settings().history && doc.versions.items.length === 0) this.controller.recordVersion('opened');
@@ -177,6 +243,8 @@ export class FileCommands {
     this.name = name;
     this.path = path;
     this.drive = undefined;
+    this.driveFolder = undefined;
+    this.onDevice = false;
     this.olderFormat = null;
     this.onTitleChange();
   }
@@ -193,7 +261,9 @@ export class FileCommands {
     this.olderFormat = null;
     this.name = fileName.replace(EXTENSION, '');
     this.path = undefined;
+    if (this.drive?.fileId !== drive.fileId || this.drive.folderId !== drive.folderId) this.driveFolder = undefined;
     this.drive = drive;
+    this.onDevice = false;
     this.controller.markSaved();
     await this.options.autosave?.clear();
     this.onTitleChange();
@@ -202,33 +272,56 @@ export class FileCommands {
   /** The design's Google Drive file was renamed or moved (in the Drive browser): follow it. */
   driveFileChanged(fileId: string, fileName: string, folderId: string | undefined): void {
     if (this.drive?.fileId !== fileId) return;
+    if (folderId && folderId !== this.drive.folderId) this.driveFolder = undefined;
     this.drive = { ...this.drive, folderId: folderId ?? this.drive.folderId };
     this.name = fileName.replace(EXTENSION, '');
     this.onTitleChange();
   }
 
+  /**
+   * Save where the design is (its file here, or in Google Drive). `saveAs` always picks a new
+   * file on this computer (the browser downloads). A design saved nowhere yet asks whether it
+   * goes here or to Google Drive, when Drive is connected.
+   */
   async save(saveAs = false): Promise<void> {
-    if (!saveAs && this.drive && this.saveToDrive) return this.saveToDrive();
+    const drive = this.driveSaving;
+    if (!saveAs && this.drive && drive) return drive.save();
+    if (!saveAs && this.where().kind === 'nowhere' && drive?.connected() && this.options.chooseSaveTarget) {
+      const to = await this.options.chooseSaveTarget();
+      if (!to) return;
+      if (to === 'drive') return drive.saveAs();
+    }
     this.controller.endPreview();
     await this.guard(async () => {
       const bytes = this.bytesForSave();
       const target = saveAs ? undefined : this.path;
+      // Save As starts beside the design's own file.
+      const suggested = `${this.name}.${FILE_EXTENSION}`;
+      const start = saveAs && this.path ? this.path.replace(/[^\\/]*$/, suggested) : suggested;
       // First save over a file from another format version: keep the original beside it.
       if (target && this.olderFormat && target === this.path) {
         const backup = target.replace(EXTENSION, '') + ` (format ${this.olderFormat.version} backup).${FILE_EXTENSION}`;
         await this.host.save(this.olderFormat.bytes, backup, MODEL_FILTER, backup);
       }
-      const written = await this.host.save(bytes, `${this.name}.${FILE_EXTENSION}`, MODEL_FILTER, target);
+      const written = await this.host.save(bytes, start, MODEL_FILTER, target);
       if (!written) return;
       this.olderFormat = null;
       this.name = written.name.replace(EXTENSION, '');
       this.path = written.path;
       this.drive = undefined;
+      this.driveFolder = undefined;
+      this.onDevice = true;
       this.controller.markSaved();
       await this.options.autosave?.clear();
-      this.controller.notify(this.host.native ? `Saved ${written.name}` : `Downloaded ${written.name}`);
+      this.announceSaved(written.path ? `Saved to ${written.path}` : `Downloaded ${written.name} to this device (your browser’s downloads)`);
       this.onTitleChange();
     });
+  }
+
+  /** Save As where the design is: a new Drive file for a design in Google Drive, else a new file here (Ctrl+Shift+S). */
+  async saveAsHere(): Promise<void> {
+    if (this.drive && this.driveSaving) return this.driveSaving.saveAs();
+    return this.save(true);
   }
 
   /**

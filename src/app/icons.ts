@@ -83,6 +83,9 @@ export const ICONS = {
   eye: svg('<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3.25"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/>'),
   eyeOff: svg('<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3.25"/><path d="M4 20 20 4" stroke-width="2"/>'),
   cloud: svg('<path d="M7 18.5h10a4.25 4.25 0 0 0 .55-8.46A6 6 0 0 0 6.2 9.3 4.6 4.6 0 0 0 7 18.5Z"/>'),
+  // A screen on a stand (saved on this computer), and a small arrow down (more choices).
+  computer: svg('<rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M9 20h6M12 16v4"/>'),
+  caret: svg('<path d="m8 10 4 4 4-4"/>'),
   save: svg('<path d="M4 4h13l3 3v13H4Z"/><path d="M8 4v5h8V4M8 20v-6h8v6"/>'),
   undo: svg('<path d="M9 7 4 12l5 5"/><path d="M4 12h11a5 5 0 0 1 0 10h-3"/>'),
   redo: svg('<path d="m15 7 5 5-5 5"/><path d="M20 12H9a5 5 0 0 0 0 10h3"/>'),
